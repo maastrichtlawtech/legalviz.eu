@@ -9,6 +9,7 @@ const fs = require('fs');
 const path = require('path');
 const { JSDOM } = require('jsdom');
 const { getSharedPlaywrightPage, loadPlaywrightModule, closeSharedPlaywrightBrowser } = require('./eurlex-html-parser');
+const { createScrapeQueue, isWafOrNetworkError } = require('./scrape-queue');
 
 const EURLEX_COOKIE_MAX_AGE_MS = parseInt(process.env.EURLEX_COOKIE_MAX_AGE_MS) || 12 * 60 * 60 * 1000; // 12h
 const PARTIAL_RETRY_COOLDOWN_MS = 6 * 60 * 60 * 1000; // 6h
@@ -77,7 +78,7 @@ SELECT DISTINCT ?type ?sourceCelex ?date WHERE {
   OPTIONAL { ?sourceWork cdm:work_date_document ?date }
 }
 ORDER BY ?date
-LIMIT 50`;
+LIMIT 200`;
 
   const data = await runSparqlQuery(query);
   const amendments = (data.results?.bindings || []).map((b) => {
@@ -112,7 +113,7 @@ SELECT DISTINCT ?actCelex ?date ?title WHERE {
   }
 }
 ORDER BY ?date
-LIMIT 100`;
+LIMIT 500`;
 
   const data = await runSparqlQuery(query);
   const acts = (data.results?.bindings || []).map((b) => {
@@ -204,7 +205,10 @@ async function warmEurlexCookies({ cacheDir } = {}) {
   }
 }
 
-const CASE_LAW_ENRICH_BUDGET_MS = 1_500;
+// Raised from main's 1.5s default to give Playwright-based WAF bypass (and the
+// shared scrape queue's own backoff) enough headroom to complete at least one
+// case-detail fetch before the route responds with unenriched cases.
+const CASE_LAW_ENRICH_BUDGET_MS = 15_000;
 
 function wait(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -224,6 +228,7 @@ async function fetchCaseLaw(celex, runSparqlQuery, {
   detailsFetcher = fetchCaseDetails,
   enrichBudgetMs = CASE_LAW_ENRICH_BUDGET_MS,
   enrichConcurrency = 3,
+  scrapeQueue = null,
 } = {}) {
   if (cacheDir && warmCookieHeader === null && cookieWarmPromise === null) {
     loadCookiesFromDisk(cacheDir);
@@ -242,7 +247,7 @@ SELECT DISTINCT ?caseCelex ?ecli ?date WHERE {
   OPTIONAL { ?caseWork cdm:work_date_document ?date }
 }
 ORDER BY ?date
-LIMIT 200`;
+LIMIT 500`;
 
   const data = await runSparqlQuery(query);
   const cases = (data.results?.bindings || []).map((b) => {
@@ -275,6 +280,7 @@ LIMIT 200`;
         detailsFetcher,
         cacheDir,
         logLabel: celex,
+        scrapeQueue,
       })
         .then(() => {
           if (cacheDir) saveCaseLawCache(cacheDir, cache);
@@ -715,10 +721,25 @@ function formatArticlePill(citation) {
 
 /**
  * Fetch full HTML for a case and extract decision + article citations.
- * Uses warm EUR-Lex session cookies to bypass WAF challenge.
+ * Uses warm EUR-Lex session cookies to bypass WAF challenge. When a challenge
+ * is still encountered and `fetchWithPlaywright` is provided, Playwright is
+ * used to bypass it immediately instead of waiting on a cookie re-warm
+ * (plain fetch retries alone will never get past an active WAF challenge).
+ *
+ * @param {string} caseCelex
+ * @param {object} [opts]
+ * @param {string}   [opts.cacheDir]            Directory for persisted session cookies.
+ * @param {object}   [opts.stats]               Optional stats accumulator (tracks WAF challenges).
+ * @param {Function} [opts.fetchWithPlaywright] Playwright-based fetcher (from eurlex-html-parser).
+ * @param {string}   [opts.eurlexBase]          EUR-Lex base URL.
  */
-async function fetchCaseDetails(caseCelex, { cacheDir, stats } = {}) {
-  const url = `https://eur-lex.europa.eu/legal-content/EN/TXT/HTML/?uri=CELEX:${caseCelex}`;
+async function fetchCaseDetails(caseCelex, {
+  cacheDir,
+  stats,
+  fetchWithPlaywright = null,
+  eurlexBase = 'https://eur-lex.europa.eu',
+} = {}) {
+  const url = `${eurlexBase}/legal-content/EN/TXT/HTML/?uri=CELEX:${caseCelex}`;
 
   if (warmCookieHeader === null && cookieWarmPromise === null) {
     loadCookiesFromDisk(cacheDir);
@@ -727,11 +748,12 @@ async function fetchCaseDetails(caseCelex, { cacheDir, stats } = {}) {
     await warmEurlexCookies({ cacheDir });
   }
 
-  for (let attempt = 0; attempt < 3; attempt++) {
+  for (let attempt = 0; attempt < 4; attempt++) {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 30_000);
+    const timeout = setTimeout(() => controller.abort(), 45_000);
 
     try {
+      let html = null;
       const headers = {
         'accept-language': 'en',
       };
@@ -746,17 +768,28 @@ async function fetchCaseDetails(caseCelex, { cacheDir, stats } = {}) {
         clearTimeout(timeout);
         if (stats) stats.challenges++;
         invalidateCookies(cacheDir);
-        if (attempt === 0) {
+        if (fetchWithPlaywright) {
+          // Bypass the challenge immediately via a Playwright-rendered fetch
+          // instead of waiting on a cookie re-warm.
+          console.log(`[case-law] WAF challenge for ${caseCelex}, using Playwright`);
+          html = await fetchWithPlaywright({
+            url,
+            timeoutMs: 45_000,
+            closeBrowserAfterFetch: false,
+          });
+        } else if (attempt === 0) {
           await warmEurlexCookies({ cacheDir });
+          continue;
         } else {
           await new Promise((r) => setTimeout(r, 2000 * (2 ** attempt)));
+          continue;
         }
-        continue;
+      } else if (!res.ok) {
+        return null;
+      } else {
+        html = await res.text();
       }
 
-      if (!res.ok) return null;
-
-      const html = await res.text();
       if (!html || html.length < 200) return null;
 
       const dom = new JSDOM(html);
@@ -816,6 +849,11 @@ async function fetchCaseDetails(caseCelex, { cacheDir, stats } = {}) {
         articlesCited,
         articleRefs: parseCitationsToRefs(articlesCited),
       };
+    } catch (err) {
+      // Let the scrape queue handle retries for transient errors
+      if (attempt >= 3) throw err;
+      const delay = 2000 * (2 ** attempt);
+      await new Promise((r) => setTimeout(r, delay));
     } finally {
       clearTimeout(timeout);
     }
@@ -825,50 +863,64 @@ async function fetchCaseDetails(caseCelex, { cacheDir, stats } = {}) {
 }
 
 /**
- * Enrich cases with full details (decisions + articles). Lower concurrency
- * than party-name enrichment since we fetch full pages.
+ * Enrich cases with full details (decisions + articles). Tracks per-run stats
+ * and trips a circuit breaker after repeated consecutive failures so a bad
+ * run doesn't hammer EUR-Lex. When a `scrapeQueue` is supplied, dispatch goes
+ * through it instead of a manual concurrency pool, so fetches share the same
+ * global concurrency limit / rate limiting as other scrape traffic (retries
+ * for transient/WAF errors are already handled inside `detailsFetcher`, so
+ * the queue here mainly contributes shared concurrency + pacing).
  */
 async function enrichWithCaseDetails(cases, detailsCache, {
   concurrency = 3,
   detailsFetcher = fetchCaseDetails,
   cacheDir,
   logLabel = '',
+  scrapeQueue = null,
 } = {}) {
   const stats = { enriched: 0, partial: 0, errors: 0, challenges: 0 };
   let consecutiveFails = 0;
   let blocked = false;
-  let i = 0;
 
-  async function next() {
-    while (i < cases.length && !blocked) {
-      const c = cases[i++];
-      try {
-        const details = await detailsFetcher(c.celex, { cacheDir, stats });
-        if (details && !isPartialEntry(details)) {
-          const articleRefs = details.articleRefs || parseCitationsToRefs(details.articlesCited);
-          detailsCache[c.celex] = { ...details, articleRefs };
-          c.declarations = details.declarations;
-          c.articlesCited = details.articlesCited;
-          c.articleRefs = articleRefs;
-          if (details.name && !c.name) c.name = details.name;
-          stats.enriched++;
-        } else {
-          const existing = detailsCache[c.celex] || {};
-          detailsCache[c.celex] = { ...existing, lastFailedAt: Date.now() };
-          stats.partial++;
-        }
-        consecutiveFails = 0;
-      } catch (err) {
-        stats.errors++;
-        consecutiveFails++;
-        if (consecutiveFails >= 5) {
-          blocked = true;
-          console.warn(`[case-law] Stopping details enrichment after ${consecutiveFails} consecutive failures: ${err.message}`);
-        }
+  async function processOne(c) {
+    if (blocked) return;
+    try {
+      const details = await detailsFetcher(c.celex, { cacheDir, stats });
+      if (details && !isPartialEntry(details)) {
+        const articleRefs = details.articleRefs || parseCitationsToRefs(details.articlesCited);
+        detailsCache[c.celex] = { ...details, articleRefs };
+        c.declarations = details.declarations;
+        c.articlesCited = details.articlesCited;
+        c.articleRefs = articleRefs;
+        if (details.name && !c.name) c.name = details.name;
+        stats.enriched++;
+      } else {
+        const existing = detailsCache[c.celex] || {};
+        detailsCache[c.celex] = { ...existing, lastFailedAt: Date.now() };
+        stats.partial++;
+      }
+      consecutiveFails = 0;
+    } catch (err) {
+      stats.errors++;
+      consecutiveFails++;
+      if (consecutiveFails >= 5) {
+        blocked = true;
+        console.warn(`[case-law] Stopping details enrichment after ${consecutiveFails} consecutive failures: ${err.message}`);
       }
     }
   }
-  await Promise.all(Array.from({ length: Math.min(concurrency, cases.length) }, next));
+
+  if (scrapeQueue) {
+    await scrapeQueue.enqueueAll(cases.map((c) => () => processOne(c)));
+  } else {
+    let i = 0;
+    async function next() {
+      while (i < cases.length && !blocked) {
+        await processOne(cases[i++]);
+      }
+    }
+    await Promise.all(Array.from({ length: Math.min(concurrency, cases.length) }, next));
+  }
 
   const suffix = logLabel ? ` for ${logLabel}` : '';
   console.log(
@@ -883,5 +935,6 @@ module.exports = {
   fetchAmendments,
   fetchImplementing,
   fetchCaseLaw,
+  fetchCaseDetails,
   parseCitationsToRefs,
 };

@@ -2,7 +2,7 @@ const fs = require("fs");
 
 const { ClientError } = require("../shared/api-utils");
 const { createSearchHandler } = require("../search/search-route");
-const { fetchMetadata, fetchAmendments, fetchImplementing, fetchCaseLaw } = require("../shared/law-queries");
+const { fetchMetadata, fetchAmendments, fetchImplementing, fetchCaseLaw, fetchCaseDetails } = require("../shared/law-queries");
 const { ChatProviderError } = require("../shared/openrouter-chat");
 const { ensureRecitalTitles } = require("../shared/recital-title-service");
 const { ensureLawSummary } = require("../shared/law-summary-service");
@@ -62,7 +62,7 @@ function mapChatError(err) {
   };
 }
 
-const CASE_LAW_ROUTE_CACHE_MS = 5 * 60 * 1000;
+const CASE_LAW_ROUTE_CACHE_MS = 60 * 60 * 1000; // 1 hour
 
 function registerApiRoutes(app, deps) {
   const {
@@ -76,6 +76,8 @@ function registerApiRoutes(app, deps) {
     cacheSet,
     findDownloadUrls,
     findFmx4Uri,
+    fetchWithPlaywright,
+    scrapeQueue,
     parseReferenceText,
     parseStructuredReference,
     prepareLawPayload,
@@ -325,7 +327,19 @@ function registerApiRoutes(app, deps) {
         return res.json(cached);
       }
 
-      const payload = await fetchCaseLaw(celex, runSparqlQuery, { cacheDir: FMX_DIR });
+      // Build a details fetcher that passes through Playwright for WAF bypass.
+      // enrichWithCaseDetails calls this with (celex, { cacheDir, stats }) — forward
+      // those through so cookie persistence and challenge-stat tracking still work.
+      const detailsFetcher = (caseCelex, extra = {}) => fetchCaseDetails(caseCelex, {
+        ...extra,
+        fetchWithPlaywright: fetchWithPlaywright || null,
+        eurlexBase: EURLEX_BASE,
+      });
+      const payload = await fetchCaseLaw(celex, runSparqlQuery, {
+        cacheDir: FMX_DIR,
+        detailsFetcher,
+        scrapeQueue: scrapeQueue || null,
+      });
       cacheSet(resolutionCache, cacheKey, payload, Math.min(RESOLUTION_CACHE_MS, CASE_LAW_ROUTE_CACHE_MS));
       res.json(payload);
     } catch (err) {

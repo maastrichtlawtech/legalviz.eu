@@ -7,8 +7,15 @@ const { registerApiRoutes } = require('./routes/api-routes');
 const { registerMcpEndpoint } = require('./mcp/mcp-http');
 const { createParsedLawResolver } = require('./shared/parsed-law-service');
 const { createFmxService } = require('./shared/fmx-service');
-const { fetchEurlexHtmlLaw, parseEurlexHtmlToCombined, closeSharedPlaywrightBrowser } = require('./shared/eurlex-html-parser');
+const {
+  fetchEurlexHtmlLaw,
+  fetchEurlexHtmlWithPlaywright,
+  parseEurlexHtmlToCombined,
+  closeSharedPlaywrightBrowser,
+} = require('./shared/eurlex-html-parser');
 const { createHtmlCacheService } = require('./shared/html-cache-service');
+const { createS3CacheService } = require('./shared/s3-cache-service');
+const { createScrapeQueue, isWafOrNetworkError } = require('./shared/scrape-queue');
 const { createRateLimitMiddleware } = require('./shared/rate-limit');
 const {
   createReferenceResolver,
@@ -69,9 +76,24 @@ const { findDownloadUrls, findFmx4Uri, prepareLawPayload, sendLawResponse } = cr
   TIMEOUT_MS,
 });
 
-const htmlCache = createHtmlCacheService({
-  CACHE_DIR,
-  STORAGE_LIMIT_MB: HTML_CACHE_LIMIT_MB,
+// HTML cache: use S3 when configured, otherwise fall back to file-based cache
+const htmlCache = process.env.S3_BUCKET
+  ? createS3CacheService().asHtmlCacheService()
+  : createHtmlCacheService({
+      CACHE_DIR,
+      STORAGE_LIMIT_MB: HTML_CACHE_LIMIT_MB,
+    });
+
+// Shared scrape queue for EUR-Lex fetches (case law enrichment, etc.)
+const scrapeQueue = createScrapeQueue({
+  concurrency: parseInt(process.env.SCRAPE_CONCURRENCY) || 4,
+  minDelayMs: parseInt(process.env.SCRAPE_MIN_DELAY_MS) || 500,
+  maxRetries: 4,
+  baseBackoffMs: 2_000,
+  maxBackoffMs: 30_000,
+  timeoutMs: 60_000,
+  isRetriable: isWafOrNetworkError,
+  name: 'eurlex-scrape',
 });
 
 const { resolveEurlexUrl, resolveReference, resolveReferenceViaCellar, runSparqlQuery } = createReferenceResolver({
@@ -187,6 +209,8 @@ registerApiRoutes(app, {
   cacheSet,
   findDownloadUrls,
   findFmx4Uri,
+  fetchWithPlaywright: fetchEurlexHtmlWithPlaywright,
+  scrapeQueue,
   legalCacheStore,
   parseReferenceText,
   parseStructuredReference,

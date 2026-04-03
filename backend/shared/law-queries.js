@@ -290,6 +290,8 @@ LIMIT 500`;
         })
         .finally(() => {
           enrichInFlight.delete(celex);
+          // Free Playwright browser RAM as soon as the enrichment batch is done
+          closeSharedPlaywrightBrowser().catch(() => {});
         });
       enrichInFlight.set(celex, enrichPromise);
     }

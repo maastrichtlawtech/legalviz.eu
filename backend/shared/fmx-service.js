@@ -299,13 +299,11 @@ function createFmxService({
       }
 
       return { type, files: downloaded };
-    })();
+    })().finally(() => {
+      inFlightDownloads.delete(lockKey);
+    });
 
     inFlightDownloads.set(lockKey, promise);
-    promise.then(
-      () => inFlightDownloads.delete(lockKey),
-      () => inFlightDownloads.delete(lockKey),
-    );
     return promise;
   }
 

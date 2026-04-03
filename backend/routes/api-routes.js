@@ -1,5 +1,4 @@
 const fs = require("fs");
-const fsp = require("fs/promises");
 
 const { ClientError } = require("../shared/api-utils");
 const { createSearchHandler } = require("../search/search-route");
@@ -105,9 +104,9 @@ function registerApiRoutes(app, deps) {
     res.json(analytics.getStats());
   });
 
-  app.get('/api/laws', rateLimitMiddleware, async (req, res) => {
+  app.get('/api/laws', rateLimitMiddleware, (req, res) => {
     try {
-      const files = await fsp.readdir(FMX_DIR);
+      const files = fs.readdirSync(FMX_DIR);
       const laws = files.filter((filename) => filename.endsWith('.xml') || filename.endsWith('.zip'));
       res.json({ laws });
     } catch (err) {

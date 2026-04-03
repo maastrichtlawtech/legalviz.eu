@@ -395,8 +395,7 @@ function simpleSearchDocs(query, docs) {
 
 /**
  * Simple search function using TF-IDF and cosine similarity.
- * Prefer using buildSearchIndex() once and reusing the index with searchIndex()
- * for repeated queries — this wrapper rebuilds the index on every call.
+ * Now a wrapper around buildSearchIndex and searchIndex.
  */
 export function searchContent(query, data) {
   const index = buildSearchIndex(data);

@@ -16,6 +16,12 @@
 import { getLangConfig, buildMeansRegex, buildFallbackDefRegex } from "./languages.mjs";
 import { buildEurlexSearchUrl } from "./url.mjs";
 
+/**
+ * Bump this whenever the parser output changes (new fields, bug fixes, etc.)
+ * so that cached parsed results are automatically re-parsed from raw XML.
+ */
+export const PARSER_VERSION = 1;
+
 // ---------------------------------------------------------------------------
 // FMX → HTML conversion helpers
 // ---------------------------------------------------------------------------
@@ -1122,5 +1128,5 @@ export function parseFmxToCombined(xmlText) {
     }
   }
 
-  return { title, articles, recitals, annexes, definitions, langCode, crossReferences };
+  return { title, articles, recitals, annexes, definitions, langCode, crossReferences, parserVersion: PARSER_VERSION };
 }

@@ -5,6 +5,8 @@
  * caches responses locally so repeated loads are instant.
  */
 
+import { PARSER_VERSION } from "./fmxParser.js";
+
 export const API_BASE = (() => {
   if (typeof import.meta !== "undefined" && import.meta.env?.VITE_FORMEX_API_BASE) {
     return import.meta.env.VITE_FORMEX_API_BASE;
@@ -125,6 +127,7 @@ function isCombinedLawEnvelope(value) {
 function createCombinedLawEnvelope(payload) {
   return {
     format: "combined-v1",
+    parserVersion: PARSER_VERSION,
     payload,
   };
 }
@@ -628,8 +631,15 @@ export async function hasCachedFormex(celex, lang = "EN") {
 export async function getCachedLawPayload(celex, lang = "EN") {
   if (!celex) return null;
   const cached = await cacheGet(makeCacheKey(celex, lang));
+  // Raw XML — always returned as-is (will be re-parsed by caller)
   if (typeof cached === "string") return cached;
-  if (isCombinedLawEnvelope(cached)) return cached;
+  // Parsed envelope — check if parser version is current
+  if (isCombinedLawEnvelope(cached)) {
+    if (cached.parserVersion === PARSER_VERSION) return cached;
+    // Stale envelope: discard so caller re-fetches and re-parses
+    console.log(`[FormexAPI] Stale cache (parser v${cached.parserVersion ?? "?"} → v${PARSER_VERSION}): ${celex}`);
+    return null;
+  }
   return null;
 }
 
@@ -780,7 +790,7 @@ export async function fetchParsedLaw(celex, lang = "EN") {
   const cacheKey = makeCacheKey(celex, lang);
   return getInFlightRequest(`parsed:${cacheKey}`, async () => {
     const cached = await cacheGet(cacheKey);
-    if (isCombinedLawEnvelope(cached)) {
+    if (isCombinedLawEnvelope(cached) && cached.parserVersion === PARSER_VERSION) {
       console.log(`[FormexAPI] Cache hit: ${cacheKey}`);
       return cached.payload;
     }

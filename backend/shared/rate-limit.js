@@ -25,13 +25,15 @@ function createRateLimitMiddleware(options = {}) {
     next();
   }
 
-  setInterval(() => {
+  const cleanupInterval = setInterval(() => {
     const now = Date.now();
     for (const [ip, record] of ipRequests) {
       if (now > record.resetAt) ipRequests.delete(ip);
     }
   }, 5 * 60 * 1000);
+  cleanupInterval.unref();
 
+  middleware.close = () => clearInterval(cleanupInterval);
   return middleware;
 }
 

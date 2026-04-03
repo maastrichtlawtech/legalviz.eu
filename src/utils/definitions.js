@@ -82,24 +82,24 @@ export function injectDefinitionTooltips(html, definitions, options = {}) {
         // Split by tags, process text nodes only
         const parts = result.split(/(<[^>]+>)/);
 
+        // Track nesting depth of defined-term spans
+        let definedTermDepth = 0;
+
         for (let i = 0; i < parts.length; i++) {
             const part = parts[i];
 
-            // Skip HTML tags
-            if (part.startsWith('<')) continue;
-
-            // Skip if we're inside a defined-term span (check previous parts)
-            let insideDefinedTerm = false;
-            for (let j = i - 1; j >= 0; j--) {
-                if (parts[j].includes('class="defined-term"')) {
-                    insideDefinedTerm = true;
-                    break;
+            // Update nesting depth when we encounter defined-term tags
+            if (part.startsWith('<')) {
+                if (part.includes('class="defined-term"')) {
+                    definedTermDepth++;
+                } else if (part === '</span>' && definedTermDepth > 0) {
+                    definedTermDepth--;
                 }
-                if (parts[j].includes('</span>')) {
-                    break;
-                }
+                continue;
             }
-            if (insideDefinedTerm) continue;
+
+            // Skip text nodes inside a defined-term span
+            if (definedTermDepth > 0) continue;
 
             // Replace occurrences in text nodes
             parts[i] = part.replace(termPattern, (match) => {

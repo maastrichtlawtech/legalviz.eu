@@ -178,6 +178,10 @@ function buildEurlexSearchFallbackUrl(reference, lang, toSearchLang, EURLEX_BASE
   return `${EURLEX_BASE}/search.html?${params.toString()}`;
 }
 
+function sanitizeSparqlValue(value) {
+  return String(value).replace(/[<>"'\\{}|^`\x00-\x1f]/g, '');
+}
+
 function buildEliCandidates(reference) {
   if (!reference.actType || !reference.year || !reference.number) {
     throw new ClientError(
@@ -192,6 +196,15 @@ function buildEliCandidates(reference) {
   if (!/^\d+$/.test(number)) {
     throw new ClientError(
       'Reference number must be numeric',
+      400,
+      'invalid_reference',
+      { parsed: reference }
+    );
+  }
+
+  if (!/^\d{4}$/.test(reference.year)) {
+    throw new ClientError(
+      'Reference year must be a 4-digit year',
       400,
       'invalid_reference',
       { parsed: reference }
@@ -289,10 +302,11 @@ function createReferenceResolver({
 
     const results = [];
     for (const eli of eliCandidates) {
+      const safeEli = sanitizeSparqlValue(eli);
       const query = `
 PREFIX owl: <http://www.w3.org/2002/07/owl#>
 SELECT ?celex WHERE {
-  ?cellar ?p <${eli}> .
+  ?cellar ?p <${safeEli}> .
   ?cellar owl:sameAs ?celex .
   FILTER(STRSTARTS(STR(?celex), "http://publications.europa.eu/resource/celex/"))
 }

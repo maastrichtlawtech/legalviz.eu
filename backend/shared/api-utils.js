@@ -9,9 +9,19 @@ function validateLang(lang) {
   return VALID_LANGS.has(upper) ? upper : null;
 }
 
+const LANG_3_TO_2 = {
+  BUL: 'bg', CES: 'cs', DAN: 'da', DEU: 'de', ELL: 'el', ENG: 'en',
+  EST: 'et', FIN: 'fi', FRA: 'fr', GLE: 'ga', HRV: 'hr', HUN: 'hu',
+  ITA: 'it', LAV: 'lv', LIT: 'lt', MLT: 'mt', NLD: 'nl', POL: 'pl',
+  POR: 'pt', RON: 'ro', SLK: 'sk', SLV: 'sl', SPA: 'es', SWE: 'sv',
+};
+
 function toSearchLang(lang) {
-  return (lang || 'ENG').slice(0, 2).toLowerCase();
+  const upper = (lang || 'ENG').toUpperCase();
+  return LANG_3_TO_2[upper] || upper.slice(0, 2).toLowerCase();
 }
+
+const DEFAULT_CACHE_MAX_ENTRIES = 10_000;
 
 function cacheGet(cache, key) {
   const entry = cache.get(key);
@@ -23,7 +33,12 @@ function cacheGet(cache, key) {
   return entry.value;
 }
 
-function cacheSet(cache, key, value, ttlMs) {
+function cacheSet(cache, key, value, ttlMs, maxEntries = DEFAULT_CACHE_MAX_ENTRIES) {
+  if (cache.size >= maxEntries) {
+    // Evict oldest entry (first inserted key in Map iteration order)
+    const oldestKey = cache.keys().next().value;
+    cache.delete(oldestKey);
+  }
   cache.set(key, { value, expiresAt: Date.now() + ttlMs });
 }
 

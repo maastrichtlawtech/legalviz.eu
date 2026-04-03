@@ -5,7 +5,7 @@
  * caches responses locally so repeated loads are instant.
  */
 
-import { PARSER_VERSION } from "./fmxParser.js";
+import { PARSER_VERSION, parseFmxToCombined, isFmxDocument } from "./fmxParser.js";
 
 export const API_BASE = (() => {
   if (typeof import.meta !== "undefined" && import.meta.env?.VITE_FORMEX_API_BASE) {
@@ -124,12 +124,14 @@ function isCombinedLawEnvelope(value) {
     && value.payload != null;
 }
 
-function createCombinedLawEnvelope(payload) {
-  return {
+function createCombinedLawEnvelope(payload, rawXml = null) {
+  const envelope = {
     format: "combined-v1",
     parserVersion: PARSER_VERSION,
     payload,
   };
+  if (rawXml) envelope.rawXml = rawXml;
+  return envelope;
 }
 
 // Bump whenever the shape of a cached API payload changes (e.g. renaming a
@@ -566,11 +568,15 @@ export async function fetchFormex(celex, lang = "EN") {
   const apiLang = toApiLang(lang);
   const cacheKey = makeCacheKey(celex, lang);
   return getInFlightRequest(`formex:${cacheKey}`, async () => {
-    // 1. Try cache first
+    // 1. Try cache first — raw XML string (legacy) or envelope with rawXml
     const cached = await cacheGet(cacheKey);
     if (typeof cached === "string") {
-      console.log(`[FormexAPI] Cache hit: ${cacheKey}`);
+      console.log(`[FormexAPI] Cache hit (raw): ${cacheKey}`);
       return cached;
+    }
+    if (isCombinedLawEnvelope(cached) && cached.rawXml) {
+      console.log(`[FormexAPI] Cache hit (envelope rawXml): ${cacheKey}`);
+      return cached.rawXml;
     }
 
     // 2. Fetch from API
@@ -621,7 +627,9 @@ export async function fetchFormex(celex, lang = "EN") {
 export async function getCachedFormex(celex, lang = "EN") {
   if (!celex) return null;
   const cached = await cacheGet(makeCacheKey(celex, lang));
-  return typeof cached === "string" ? cached : null;
+  if (typeof cached === "string") return cached;
+  if (isCombinedLawEnvelope(cached) && cached.rawXml) return cached.rawXml;
+  return null;
 }
 
 export async function hasCachedFormex(celex, lang = "EN") {
@@ -630,17 +638,43 @@ export async function hasCachedFormex(celex, lang = "EN") {
 
 export async function getCachedLawPayload(celex, lang = "EN") {
   if (!celex) return null;
-  const cached = await cacheGet(makeCacheKey(celex, lang));
-  // Raw XML — always returned as-is (will be re-parsed by caller)
-  if (typeof cached === "string") return cached;
-  // Parsed envelope — check if parser version is current
+  const cacheKey = makeCacheKey(celex, lang);
+  const cached = await cacheGet(cacheKey);
+
+  // Raw XML string (legacy cache entry) — parse, upgrade to envelope, return
+  if (typeof cached === "string" && isFmxDocument(cached)) {
+    console.log(`[FormexAPI] Upgrading raw XML cache to envelope: ${cacheKey}`);
+    const payload = parseFmxToCombined(cached);
+    await cacheSet(cacheKey, createCombinedLawEnvelope(payload, cached));
+    return createCombinedLawEnvelope(payload);
+  }
+
   if (isCombinedLawEnvelope(cached)) {
+    // Current version — serve directly
     if (cached.parserVersion === PARSER_VERSION) return cached;
-    // Stale envelope: discard so caller re-fetches and re-parses
-    console.log(`[FormexAPI] Stale cache (parser v${cached.parserVersion ?? "?"} → v${PARSER_VERSION}): ${celex}`);
+    // Stale envelope with raw XML — re-parse locally
+    if (cached.rawXml) {
+      console.log(`[FormexAPI] Re-parsing stale cache (parser v${cached.parserVersion ?? "?"} → v${PARSER_VERSION}): ${cacheKey}`);
+      const payload = parseFmxToCombined(cached.rawXml);
+      const envelope = createCombinedLawEnvelope(payload, cached.rawXml);
+      await cacheSet(cacheKey, envelope);
+      return envelope;
+    }
+    // Stale envelope without raw XML (from /parsed fallback) — discard
+    console.log(`[FormexAPI] Stale cache, no raw XML available: ${cacheKey}`);
     return null;
   }
+
   return null;
+}
+
+/**
+ * Cache a locally-parsed law result alongside its raw XML so subsequent
+ * loads skip parsing and parser upgrades can re-parse from the stored XML.
+ */
+export function cacheParsedLaw(celex, lang, payload, rawXml) {
+  const cacheKey = makeCacheKey(celex, lang);
+  cacheSet(cacheKey, createCombinedLawEnvelope(payload, rawXml));
 }
 
 export async function resolveOfficialReference(reference, lang = "EN") {

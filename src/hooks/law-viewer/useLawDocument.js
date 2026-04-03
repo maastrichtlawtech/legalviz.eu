@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { fetchFormex, fetchParsedLaw, fetchRecitalTitles, getCachedLawPayload } from "../../utils/formexApi.js";
+import {
+  fetchFormex,
+  fetchParsedLaw,
+  fetchRecitalTitles,
+  getCachedLawPayload,
+  cacheParsedLaw,
+} from "../../utils/formexApi.js";
 import { parseLawPayloadToCombined } from "../../utils/parsers.js";
 import { EMPTY_LAW_DATA } from "../../utils/law-viewer/constants.js";
 import { getLoadErrorDetails, isMissingStructuredLawText } from "../../utils/law-viewer/errors.js";
@@ -46,8 +52,9 @@ export function useLawDocument({ celex, lang, t, enabled = true }) {
         nextData = parseLawPayloadToCombined(cached);
       } else {
         try {
-          const text = await fetchFormex(celex, lang);
-          nextData = parseLawPayloadToCombined(text);
+          const xmlText = await fetchFormex(celex, lang);
+          nextData = parseLawPayloadToCombined(xmlText);
+          cacheParsedLaw(celex, lang, nextData, xmlText);
         } catch (error) {
           if (!isMissingStructuredLawText(error)) {
             throw error;

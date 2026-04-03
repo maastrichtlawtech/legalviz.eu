@@ -652,9 +652,17 @@ export async function getCachedLawPayload(celex, lang = "EN") {
   if (isCombinedLawEnvelope(cached)) {
     // Current version — serve directly
     if (cached.parserVersion === PARSER_VERSION) return cached;
+    // Pre-versioning envelope (no parserVersion field) — accept as current
+    // and stamp it so we don't re-check every load.
+    if (cached.parserVersion == null) {
+      console.log(`[FormexAPI] Stamping pre-versioning cache entry: ${cacheKey}`);
+      cached.parserVersion = PARSER_VERSION;
+      await cacheSet(cacheKey, cached);
+      return cached;
+    }
     // Stale envelope with raw XML — re-parse locally
     if (cached.rawXml) {
-      console.log(`[FormexAPI] Re-parsing stale cache (parser v${cached.parserVersion ?? "?"} → v${PARSER_VERSION}): ${cacheKey}`);
+      console.log(`[FormexAPI] Re-parsing stale cache (parser v${cached.parserVersion} → v${PARSER_VERSION}): ${cacheKey}`);
       const payload = parseFmxToCombined(cached.rawXml);
       const envelope = createCombinedLawEnvelope(payload, cached.rawXml);
       await cacheSet(cacheKey, envelope);

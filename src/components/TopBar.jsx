@@ -1007,6 +1007,7 @@ export function TopBar({
               {t("app.name")}
             </button>
             <span className="text-[10px] text-gray-500 leading-tight mt-0.5">
+              {"By "}
               <a
                 href="https://kollnig.net"
                 target="_blank"

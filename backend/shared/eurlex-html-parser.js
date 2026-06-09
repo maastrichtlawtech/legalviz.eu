@@ -669,6 +669,154 @@ function parseLegacyXhtmlToCombined(document, langCode, langConfig, injectCrossR
   };
 }
 
+// Commission / preparatory documents (proposals, communications) are published
+// in EUR-Lex using the LegisWrite "manifestation" markup rather than the OJ
+// `oj-*` classes. Articles are `<p class="Titrearticle">`, recitals are
+// `<p class="li ManualConsidrant">`, divisions are `<p class="SectionTitle">`,
+// and annexes start with `<p class="Annexetitre">`.
+function parseLegisWriteToCombined(document, langCode, langConfig, injectCrossRefLinks) {
+  const getText = (element) => normalizeText(element?.textContent);
+  const hasClass = (element, name) => element.classList && element.classList.contains(name);
+
+  const titleParts = ["Statut", "Typedudocument", "Titreobjet"]
+    .map((cls) => getText(document.querySelector(`p.${cls}`)))
+    .filter(Boolean);
+  const title = normalizeText(titleParts.join(" "));
+
+  const recitals = [];
+  for (const element of document.querySelectorAll("p.li.ManualConsidrant")) {
+    const numText = getText(element.querySelector(".num"));
+    const numberMatch = numText.match(/(\d+)/);
+    const recital_number = numberMatch ? numberMatch[1] : String(recitals.length + 1);
+    const text = stripLeadingMarker(getText(element), /^\(\d+\)\s*/);
+    recitals.push(buildRecital(recital_number, text, `<p>${escapeHtml(text)}</p>`));
+  }
+
+  const articles = [];
+  const annexes = [];
+  let currentChapter = { number: "", title: "" };
+  let currentSection = { number: "", title: "" };
+  let pendingDivision = null;
+  let currentArticle = null;
+  let currentAnnex = null;
+  let inEnactingTerms = false;
+
+  const finalizeArticle = () => {
+    if (!currentArticle) return;
+    const html = paragraphsToHtml(currentArticle.bodyParagraphs, { title: currentArticle.article_title });
+    articles.push({
+      article_number: currentArticle.article_number,
+      article_title: currentArticle.article_title,
+      division: currentArticle.division,
+      article_html: injectCrossRefLinks(html, langConfig),
+      bodyParagraphs: currentArticle.bodyParagraphs.filter(Boolean),
+    });
+    currentArticle = null;
+  };
+
+  const finalizeAnnex = () => {
+    if (!currentAnnex) return;
+    annexes.push({
+      annex_id: currentAnnex.annex_id,
+      annex_title: currentAnnex.annex_title,
+      annex_html: injectCrossRefLinks(paragraphsToHtml(currentAnnex.bodyParagraphs), langConfig),
+    });
+    currentAnnex = null;
+  };
+
+  for (const element of document.body.querySelectorAll("p")) {
+    const text = getText(element);
+    if (!text) continue;
+
+    if (hasClass(element, "Formuledadoption")) {
+      inEnactingTerms = true;
+      continue;
+    }
+
+    if (hasClass(element, "Annexetitre")) {
+      finalizeArticle();
+      finalizeAnnex();
+      inEnactingTerms = true;
+      pendingDivision = null;
+      const annexMatch = text.match(/^ANNEX\s*([IVXLCDM]+|\d+)?/i);
+      currentAnnex = {
+        annex_id: normalizeText(annexMatch?.[1] || "") || text,
+        annex_title: text,
+        bodyParagraphs: [],
+      };
+      continue;
+    }
+
+    if (hasClass(element, "Titrearticle")) {
+      finalizeAnnex();
+      finalizeArticle();
+      inEnactingTerms = true;
+      pendingDivision = null;
+      const numberMatch = text.match(/^Article\s+(\d+[A-Za-z]*)\s*(.*)$/i);
+      currentArticle = {
+        article_number: numberMatch ? numberMatch[1] : String(articles.length + 1),
+        article_title: numberMatch ? normalizeText(numberMatch[2]) : "",
+        division: {
+          chapter: { ...currentChapter },
+          section: currentSection.number ? { ...currentSection } : null,
+        },
+        bodyParagraphs: [],
+      };
+      continue;
+    }
+
+    if (hasClass(element, "SectionTitle")) {
+      if (!inEnactingTerms) continue;
+      const divisionMarker = parseDivisionMarker(text);
+      if (divisionMarker) {
+        finalizeArticle();
+        if (divisionMarker.kind === "section") {
+          currentSection = { number: divisionMarker.number, title: divisionMarker.title };
+          pendingDivision = currentSection;
+        } else {
+          currentChapter = { number: divisionMarker.number, title: divisionMarker.title };
+          currentSection = { number: "", title: "" };
+          pendingDivision = currentChapter;
+        }
+      } else if (pendingDivision && !pendingDivision.title) {
+        pendingDivision.title = text;
+        pendingDivision = null;
+      }
+      continue;
+    }
+
+    if (currentAnnex) {
+      currentAnnex.bodyParagraphs.push(text);
+      continue;
+    }
+
+    if (currentArticle) {
+      currentArticle.bodyParagraphs.push(text);
+    }
+  }
+
+  finalizeArticle();
+  finalizeAnnex();
+
+  const definitions = articles.flatMap((article) => parseDefinitions(article));
+
+  recitals.sort((left, right) => {
+    const leftNum = Number.parseInt(String(left.recital_number).replace(/\D+/g, ""), 10) || 0;
+    const rightNum = Number.parseInt(String(right.recital_number).replace(/\D+/g, ""), 10) || 0;
+    return leftNum - rightNum;
+  });
+
+  return {
+    title,
+    articles: articles.map(({ bodyParagraphs, ...article }) => article),
+    recitals,
+    annexes,
+    definitions,
+    langCode,
+    crossReferences: {},
+  };
+}
+
 async function loadHelpers() {
   if (!helperPromise) {
     helperPromise = (async () => {
@@ -718,6 +866,16 @@ async function parseEurlexHtmlToCombined(htmlText, lang = "ENG") {
     const parsedLegacyXhtml = parseLegacyXhtmlToCombined(document, langCode, langConfig, injectCrossRefLinks);
     if (parsedLegacyXhtml.articles.length || parsedLegacyXhtml.recitals.length || parsedLegacyXhtml.annexes.length) {
       return parsedLegacyXhtml;
+    }
+  }
+
+  const hasLegisWriteLayout = Boolean(
+    document.querySelector("p.Titrearticle, p.li.ManualConsidrant")
+  );
+  if (hasLegisWriteLayout) {
+    const parsedLegisWrite = parseLegisWriteToCombined(document, langCode, langConfig, injectCrossRefLinks);
+    if (parsedLegisWrite.articles.length || parsedLegisWrite.recitals.length || parsedLegisWrite.annexes.length) {
+      return parsedLegisWrite;
     }
   }
 

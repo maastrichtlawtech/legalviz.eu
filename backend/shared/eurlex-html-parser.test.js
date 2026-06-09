@@ -107,6 +107,50 @@ const FLAT_DIVISION_HTML = `<!DOCTYPE html>
 </body>
 </html>`;
 
+const LEGISWRITE_COM_HTML = `<!DOCTYPE html>
+<html lang="EN">
+<body>
+  <div class="content">
+    <p class="Statut"><span>Proposal for a</span></p>
+    <p class="Typedudocument"><span>REGULATION OF THE EUROPEAN PARLIAMENT AND OF THE COUNCIL</span></p>
+    <p class="Titreobjet"><span>ON A SAMPLE MATTER</span></p>
+    <p class="li ManualHeading1"><span>1.</span><span>EXPLANATORY MEMORANDUM</span></p>
+    <p class="Normal"><span>Some explanatory prose that must not become a recital.</span></p>
+    <p class="li ManualConsidrant"><span class="num"><span>(1)</span></span><span>First recital text.</span></p>
+    <p class="li ManualConsidrant"><span class="num"><span>(2)</span></span><span>Second recital mentioning Article 2.</span></p>
+    <p class="Formuledadoption"><span>HAVE ADOPTED THIS REGULATION:</span></p>
+    <p class="SectionTitle"><span>TITLE I</span></p>
+    <p class="SectionTitle"><span>GENERAL PROVISIONS</span></p>
+    <p class="Titrearticle"><span>Article 1</span><span> <br>Subject matter</span></p>
+    <p class="Normal"><span>This Regulation lays down rules.</span></p>
+    <p class="Titrearticle"><span>Article 2</span><span> <br>Definitions</span></p>
+    <p class="Normal"><span>For the purposes of this Regulation, the following definitions apply.</span></p>
+    <p class="Annexetitre"><span>ANNEX </span><span>I</span><br><span>SAMPLE ANNEX</span></p>
+    <p class="Normal"><span>Annex body content.</span></p>
+  </div>
+</body>
+</html>`;
+
+test("parseEurlexHtmlToCombined parses LegisWrite Commission-proposal layout", async () => {
+  const parsed = await parseEurlexHtmlToCombined(LEGISWRITE_COM_HTML, "ENG");
+
+  assert.match(parsed.title, /^Proposal for a REGULATION OF THE EUROPEAN PARLIAMENT/);
+  assert.equal(parsed.recitals.length, 2);
+  assert.equal(parsed.recitals[0].recital_number, "1");
+  assert.match(parsed.recitals[0].recital_text, /First recital text/);
+  assert.equal(parsed.articles.length, 2);
+  assert.equal(parsed.articles[0].article_number, "1");
+  assert.equal(parsed.articles[0].article_title, "Subject matter");
+  assert.equal(parsed.articles[0].division.chapter.number, "TITLE I");
+  assert.equal(parsed.articles[0].division.chapter.title, "GENERAL PROVISIONS");
+  assert.match(parsed.articles[0].article_html, /This Regulation lays down rules/);
+  // Explanatory-memorandum prose before the recitals must not leak into the body.
+  assert.ok(parsed.articles.every((a) => !/explanatory prose/i.test(a.article_html)));
+  assert.equal(parsed.annexes.length, 1);
+  assert.equal(parsed.annexes[0].annex_id, "I");
+  assert.match(parsed.annexes[0].annex_html, /Annex body content/);
+});
+
 test("parseEurlexHtmlToCombined keeps flat chapter and section headings out of article bodies", async () => {
   const parsed = await parseEurlexHtmlToCombined(FLAT_DIVISION_HTML, "ENG");
 

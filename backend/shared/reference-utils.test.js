@@ -78,6 +78,21 @@ test('validateCelex accepts canonical CELEX format', () => {
   assert.equal(validateCelex('GDPR'), false);
 });
 
+test('validateCelex accepts two-letter descriptors for preparatory documents', () => {
+  assert.equal(validateCelex('52021PC0206'), true);
+  assert.equal(validateCelex('52026PC0502'), true);
+  assert.equal(validateCelex('52021DC0118'), true);
+});
+
+test('parseEurlexUrl recognizes Commission-document (COM) URLs', () => {
+  const parsed = parseEurlexUrl('https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=COM:2026:502:FIN');
+  assert.equal(parsed.type, 'com');
+  assert.equal(parsed.com.docType, 'COM');
+  assert.equal(parsed.com.year, '2026');
+  assert.equal(parsed.com.number, '502');
+  assert.equal(parsed.com.suffix, 'FIN');
+});
+
 function createResolver({ store, fetchImpl }) {
   const originalFetch = global.fetch;
   if (fetchImpl) {
@@ -266,6 +281,37 @@ test('resolveEurlexUrl keeps OJ fallback path when cache cannot resolve determin
     assert.equal(result.resolved, null);
     assert.equal(result.fallback?.type, 'open-source-url');
     assert.equal(fetchCalls.length, 4);
+  } finally {
+    restore();
+  }
+});
+
+test('resolveEurlexUrl resolves a Commission-document URL via the COMNAT identifier', async () => {
+  const store = new JsonLegalCacheStore(fixturePath);
+  store.load();
+
+  const fetchCalls = [];
+  const { resolver, restore } = createResolver({
+    store,
+    fetchImpl: async (url) => {
+      fetchCalls.push(String(url));
+      return {
+        ok: true,
+        status: 200,
+        async json() {
+          return { results: { bindings: [{ celex: { value: '52026PC0502' } }] } };
+        },
+      };
+    },
+  });
+
+  try {
+    const result = await resolver.resolveEurlexUrl('https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=COM:2026:502:FIN', 'ENG');
+    assert.equal(result.parsed.type, 'com');
+    assert.equal(result.resolved?.celex, '52026PC0502');
+    assert.equal(result.resolved?.source, 'cellar-com');
+    assert.equal(fetchCalls.length, 1);
+    assert.match(decodeURIComponent(fetchCalls[0]), /comnat:COM_2026_0502_FIN/);
   } finally {
     restore();
   }

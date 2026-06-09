@@ -1,53 +1,33 @@
-FROM node:24-slim
+# Official Playwright image: bundles Node.js (22 LTS), the browser binaries,
+# and all of Chromium's system dependencies, so the build needs neither an
+# apt-get step nor a browser download from cdn.playwright.dev.
+#
+# The image tag MUST match the playwright-core version pinned in
+# package-lock.json (1.58.2). The baked-in browser revision (chromium v1208)
+# then matches exactly what playwright-core looks for at runtime.
+FROM mcr.microsoft.com/playwright:v1.58.2-noble
 
-# Install Playwright's Chromium system dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    libnss3 \
-    libnspr4 \
-    libdbus-1-3 \
-    libatk1.0-0 \
-    libatk-bridge2.0-0 \
-    libcups2 \
-    libdrm2 \
-    libxkbcommon0 \
-    libatspi2.0-0 \
-    libxcomposite1 \
-    libxdamage1 \
-    libxfixes3 \
-    libxrandr2 \
-    libgbm1 \
-    libpango-1.0-0 \
-    libcairo2 \
-    libasound2 \
-    libx11-xcb1 \
-    fonts-liberation \
-    fonts-noto-color-emoji \
-    unzip \
-    && rm -rf /var/lib/apt/lists/*
+# The official image installs its browsers here; point playwright-core at them.
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 
 WORKDIR /app
 
 COPY package.json package-lock.json* ./
 RUN npm ci --omit=dev
 
-# Install Playwright Chromium browser binaries.
-# IMPORTANT: pin the npx version to match the installed playwright-core in
-# package.json. Bare `npx playwright install` does NOT find the local
-# playwright-core package (only the full `playwright` package registers the
-# `playwright` bin), so npx silently downloads the LATEST playwright from
-# the registry and installs browser binaries for that version. At runtime,
-# playwright-core@1.58.x looks for browser revision 1208 and crashes when
-# only the newer revision is on disk.
-#
-# In Playwright 1.49+, headless: true defaults to the chromium-headless-shell
-# variant (smaller, faster), which must be installed alongside full chromium.
+# Safety net: confirm the browsers our exact playwright-core version needs are
+# present. With the matching base image this is a fast no-op ("is already
+# installed"); if anything were missing it would be fetched, so the files are
+# guaranteed to exist at runtime. Uses the local playwright-core CLI (the
+# version pinned in node_modules) rather than `npx playwright`, which would
+# fetch the latest playwright package from the registry on every build.
 RUN PW_VERSION=$(node -p "require('playwright-core/package.json').version") \
-    && echo "Installing Playwright browsers for version $PW_VERSION" \
-    && npx -y playwright@$PW_VERSION install chromium chromium-headless-shell
+    && echo "Verifying Playwright browsers for version $PW_VERSION" \
+    && node node_modules/playwright-core/cli.js install chromium chromium-headless-shell
 
-# Show what actually landed in the browser cache so future build logs reveal
-# any path/variant changes without failing the build.
-RUN ls -1 /root/.cache/ms-playwright/ || true
+# Surface what actually landed in the browser cache so build logs reveal any
+# path/variant changes without failing the build.
+RUN ls -1 /ms-playwright/ || true
 
 COPY . .
 

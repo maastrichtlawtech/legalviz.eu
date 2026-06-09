@@ -51,6 +51,7 @@ export function isSupportedUiLocale(value) {
 
 export function getPathSegments(pathname) {
   return String(pathname || "/")
+    .replace(/[?#].*$/, "")
     .replace(/^\/+|\/+$/g, "")
     .split("/")
     .filter(Boolean);

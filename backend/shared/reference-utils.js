@@ -69,13 +69,15 @@ function parseStructuredReference(input = {}) {
   };
 }
 
+// Descriptor may be 1 letter (e.g. R/L/D for adopted acts) or 2 letters
+// (e.g. PC/DC for preparatory documents like Commission proposals).
 function validateCelex(celex) {
-  return /^\d{5}[A-Z]\d{4}(?:\([0-9]+\))?$/.test(celex);
+  return /^\d{5}[A-Z]{1,2}\d{4}(?:\([0-9]+\))?$/.test(celex);
 }
 
 function extractCelexFromText(text = '') {
-  const match = String(text).match(/CELEX[:%]3A(\d{5}[A-Z]\d{4}(?:\([0-9]+\))?)/i)
-    || String(text).match(/CELEX:(\d{5}[A-Z]\d{4}(?:\([0-9]+\))?)/i);
+  const match = String(text).match(/CELEX[:%]3A(\d{5}[A-Z]{1,2}\d{4}(?:\([0-9]+\))?)/i)
+    || String(text).match(/CELEX:(\d{5}[A-Z]{1,2}\d{4}(?:\([0-9]+\))?)/i);
   return match ? match[1].toUpperCase() : null;
 }
 
@@ -129,7 +131,37 @@ function parseEurlexUrl(inputUrl) {
     };
   }
 
+  // Commission / preparatory documents, e.g. COM:2026:502:FIN, JOIN:2023:1:FIN.
+  const comMatch = uri.match(/^(COM|JOIN|SEC|SWD):(\d{4}):(\d{1,4}):(\w+)$/i);
+  if (comMatch) {
+    return {
+      type: 'com',
+      com: {
+        docType: comMatch[1].toUpperCase(),
+        year: comMatch[2],
+        number: String(parseInt(comMatch[3], 10)),
+        suffix: comMatch[4].toUpperCase(),
+      },
+      url,
+    };
+  }
+
   return { type: 'html', url };
+}
+
+// Builds the COMNAT-style document identifier Cellar uses for Commission /
+// preparatory documents, e.g. { COM, 2026, 502, FIN } -> "comnat:COM_2026_0502_FIN".
+function buildComnatId(com) {
+  if (!com?.docType || !com?.year || !com?.number || !com?.suffix) return null;
+  const number = String(parseInt(com.number, 10));
+  if (!/^\d+$/.test(number)) return null;
+  return `comnat:${com.docType}_${com.year}_${number.padStart(4, '0')}_${com.suffix}`;
+}
+
+function buildEurlexComFallbackUrl(com, lang, toSearchLang, EURLEX_BASE) {
+  const langCode = toSearchLang(lang).toUpperCase();
+  if (!com?.docType || !com?.year || !com?.number || !com?.suffix) return null;
+  return `${EURLEX_BASE}/legal-content/${langCode}/TXT/?uri=${com.docType}:${com.year}:${com.number}:${com.suffix}`;
 }
 
 function buildEurlexSearchFallbackUrl(reference, lang, toSearchLang, EURLEX_BASE) {
@@ -457,6 +489,46 @@ LIMIT 5`;
     return resolveOfficialJournalViaCellar(oj, lang);
   }
 
+  async function resolveCommissionDocument(com, lang = 'ENG') {
+    const comnatId = buildComnatId(com);
+    if (!comnatId) {
+      throw new ClientError('Commission document reference requires docType, year, number and suffix', 400, 'invalid_com_reference');
+    }
+
+    const cacheKey = JSON.stringify({ type: 'com-resolve', com, lang });
+    const cached = cacheGet(resolutionCache, cacheKey);
+    if (cached) return cached;
+
+    const fallback = {
+      type: 'open-source-url',
+      url: buildEurlexComFallbackUrl(com, lang, toSearchLang, EURLEX_BASE),
+    };
+
+    const query = `
+PREFIX cdm: <http://publications.europa.eu/ontology/cdm#>
+SELECT DISTINCT ?celex WHERE {
+  ?work cdm:work_id_document ?id .
+  ?work cdm:resource_legal_id_celex ?celex .
+  FILTER(STR(?id) = "${comnatId}")
+}
+LIMIT 5`;
+
+    const data = await runSparqlQuery(query);
+    const celexValues = (data.results?.bindings || [])
+      .map((binding) => binding.celex?.value)
+      .filter(Boolean);
+
+    const payload = {
+      resolved: celexValues.length > 0
+        ? { celex: celexValues[0].toUpperCase(), source: 'cellar-com' }
+        : null,
+      tried: [{ source: 'cellar-com', comnatId, celex: celexValues }],
+      fallback,
+    };
+    cacheSet(resolutionCache, cacheKey, payload, RESOLUTION_CACHE_MS);
+    return payload;
+  }
+
   async function resolveEurlexUrl(inputUrl, lang = 'ENG') {
     const parsed = parseEurlexUrl(inputUrl);
     const cacheKey = JSON.stringify({ type: 'resolve-url', inputUrl, lang });
@@ -538,6 +610,25 @@ LIMIT 5`;
       return payload;
     }
 
+    if (parsed.type === 'com') {
+      const resolution = await resolveCommissionDocument(parsed.com, lang);
+      const payload = {
+        sourceUrl: parsed.url.toString(),
+        parsed: {
+          type: parsed.type,
+          com: parsed.com,
+        },
+        resolved: resolution.resolved,
+        tried: resolution.tried,
+        fallback: resolution.fallback || {
+          type: 'open-source-url',
+          url: parsed.url.toString(),
+        },
+      };
+      cacheSet(resolutionCache, cacheKey, payload, RESOLUTION_CACHE_MS);
+      return payload;
+    }
+
     const payload = {
       sourceUrl: parsed.url.toString(),
       parsed: {
@@ -554,6 +645,7 @@ LIMIT 5`;
   }
 
   return {
+    resolveCommissionDocument,
     resolveReference,
     resolveEurlexUrl,
     resolveOfficialJournal,
@@ -564,6 +656,7 @@ LIMIT 5`;
 }
 
 module.exports = {
+  buildComnatId,
   buildEliCandidates,
   createReferenceResolver,
   extractCelexFromText,

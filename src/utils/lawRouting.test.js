@@ -122,8 +122,18 @@ describe("getCanonicalLawRoute", () => {
     expect(route).toBe("/gdpr/article/5a");
   });
 
-  it("returns / for law without slug", () => {
+  it("returns / for law without slug or celex", () => {
     expect(getCanonicalLawRoute({})).toBe("/");
+  });
+
+  it("falls back to the import route for slugless laws with a celex (e.g. COM proposals)", () => {
+    const route = getCanonicalLawRoute({ celex: "52026PC0502" });
+    expect(route).toBe("/import?celex=52026PC0502");
+  });
+
+  it("keeps kind/id on the import fallback route", () => {
+    const route = getCanonicalLawRoute({ celex: "52026PC0502" }, "article", "5");
+    expect(route).toBe("/import/article/5?celex=52026PC0502");
   });
 
   it("includes locale prefix for non-English", () => {

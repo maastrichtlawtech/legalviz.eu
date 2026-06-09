@@ -124,7 +124,15 @@ export function findBundledLawBySlug(slug) {
 
 export function getCanonicalLawRoute(law, kind = null, id = null, locale = "en") {
   const slug = getLawSlug(law);
-  if (!slug) return "/";
+  if (!slug) {
+    // Laws without an official-reference slug (e.g. Commission proposals, COM
+    // documents) are opened through the celex-based import route.
+    const celex = String(law?.celex || "").trim().toUpperCase();
+    if (!celex) return "/";
+    const query = `?celex=${encodeURIComponent(celex)}`;
+    if (kind && id != null) return `/import/${kind}/${encodeURIComponent(String(id))}${query}`;
+    return `/import${query}`;
+  }
   const base = normalizeUiLocale(locale) === "en" ? `/${slug}` : `/${normalizeUiLocale(locale)}/${slug}`;
   if (kind && id != null) return `${base}/${kind}/${encodeURIComponent(String(id))}`;
   return base;

@@ -180,6 +180,12 @@ export function LawViewer() {
 
   useEffect(() => {
     if (!source.effectiveCelex || !derived.hasLoadedContent) return;
+    // Only persist metadata once the loaded document actually corresponds to
+    // the current law.  When navigating to a linked law, `effectiveCelex`
+    // changes a render before the document refetches, so `primaryDocument.data`
+    // still holds the previous law's title — saving here would overwrite the
+    // new law's name with the old one.
+    if (primaryDocument.data.celex !== source.effectiveCelex) return;
     const rawReference = searchParams.get("raw");
     const officialReference = source.currentLaw?.officialReference || parseOfficialReference(rawReference || "");
     saveLawMeta({
@@ -195,6 +201,7 @@ export function LawViewer() {
   }, [
     derived.hasLoadedContent,
     preferences.formexLang,
+    primaryDocument.data.celex,
     primaryDocument.data.langCode,
     primaryDocument.data.title,
     searchParams,

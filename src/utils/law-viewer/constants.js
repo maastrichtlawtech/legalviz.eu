@@ -1,4 +1,5 @@
 export const EMPTY_LAW_DATA = {
+  celex: null,
   title: "",
   articles: [],
   recitals: [],

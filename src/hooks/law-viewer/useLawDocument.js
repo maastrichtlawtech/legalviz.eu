@@ -57,7 +57,11 @@ export function useLawDocument({ celex, lang, t, enabled = true }) {
       }
 
       if (requestRef.current !== requestId) return;
-      setData(nextData);
+      // Tag the loaded document with the celex it belongs to so consumers can
+      // tell whether `data` matches the currently requested law.  Without this,
+      // a stale document (from the previously viewed law) can be mistaken for
+      // the newly requested one during the render before the refetch lands.
+      setData({ ...nextData, celex });
 
       if (nextData.recitals?.length > 0) {
         setRecitalTitlesLoading(true);

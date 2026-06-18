@@ -763,6 +763,11 @@ export function SearchBox({
                   <Search size={48} className="opacity-10 mb-4" />
                   <p className="max-w-sm text-center text-sm">{lawSearchError}</p>
                 </div>
+              ) : isBusy ? (
+                <div className="flex flex-col items-center justify-center py-16 text-gray-400">
+                  <Loader2 className="animate-spin text-blue-600 mb-4" size={32} />
+                  <p className="text-sm text-center max-w-sm">{modeSummary}</p>
+                </div>
               ) : results.length > 0 ? (
                 <div className="flex flex-col gap-2 p-2 w-full" ref={resultsRef}>
                   {results.map((item, idx) => (

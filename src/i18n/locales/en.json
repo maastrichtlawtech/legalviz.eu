@@ -1,7 +1,7 @@
 {
   "app": {
     "name": "LegalViz.EU",
-    "tagline": "EU Law Visualizer",
+    "tagline": "Read EU law beautifully",
     "home": "Go to homepage"
   },
   "common": {
@@ -24,9 +24,9 @@
     "noSelection": "No selection"
   },
   "seo": {
-    "defaultDescription": "Interactive visualisation of EU laws. Navigate articles, recitals, and annexes with ease.",
-    "defaultKeywords": "EU law, GDPR, AI Act, DMA, DSA, Data Act, visualisation, legal tech, interactive law",
-    "landingDescription": "Read and navigate EU laws efficiently with interactive visualisations. View articles and related recitals side by side."
+    "defaultDescription": "Read EU laws like the GDPR, AI Act, DMA, DSA and Data Act with ease. Navigate articles, recitals, annexes and cross-references, side by side.",
+    "defaultKeywords": "EU law, GDPR, AI Act, DMA, DSA, Data Act, read EU law, EU regulation reader, legal tech",
+    "landingDescription": "Read EU laws like the GDPR, AI Act, DMA, DSA and Data Act with ease. Navigate articles, recitals, annexes and cross-references, side by side."
   },
   "error": {
     "somethingWentWrong": "Something went wrong",

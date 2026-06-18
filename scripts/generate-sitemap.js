@@ -48,9 +48,16 @@ function generateSitemap() {
 
   sitemap += '</urlset>';
 
-  const outputPath = path.join(__dirname, '../public/sitemap.xml');
-  fs.writeFileSync(outputPath, sitemap);
-  console.log(`Sitemap generated at ${outputPath}.`);
+  // Write to sitemap.xml and a duplicate sitemap_copy.xml. The copy exists
+  // because Google Search Console applies a long fetch back-off to a sitemap
+  // URL once it has failed, and our sitemap.xml entry got stuck in that state.
+  // The sitemap_copy.xml URL has a healthy fetch history in GSC, so we keep it
+  // populated with identical content as a working fallback.
+  for (const fileName of ['sitemap.xml', 'sitemap_copy.xml']) {
+    const outputPath = path.join(__dirname, '../public', fileName);
+    fs.writeFileSync(outputPath, sitemap);
+    console.log(`Sitemap generated at ${outputPath}.`);
+  }
 }
 
 generateSitemap();

@@ -765,7 +765,7 @@ export function SearchBox({
                 </div>
               ) : isBusy ? (
                 <div className="flex flex-col items-center justify-center py-16 text-gray-400">
-                  <Loader2 className="animate-spin text-blue-600 mb-4" size={32} />
+                  <Search size={48} className="opacity-20 mb-4 animate-pulse" />
                   <p className="text-sm text-center max-w-sm">{modeSummary}</p>
                 </div>
               ) : results.length > 0 ? (

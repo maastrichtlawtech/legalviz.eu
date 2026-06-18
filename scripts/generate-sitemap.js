@@ -53,10 +53,18 @@ function generateSitemap() {
   // URL once it has failed, and our sitemap.xml entry got stuck in that state.
   // The sitemap_copy.xml URL has a healthy fetch history in GSC, so we keep it
   // populated with identical content as a working fallback.
+  //
+  // Write into both public/ (repo source of truth) and dist/ (the build output
+  // that gets deployed). This script runs after `vite build`, which has already
+  // copied public/ into dist/, so writing only to public/ would never reach the
+  // deployed site.
+  const outputDirs = [path.join(__dirname, '../public'), distDir];
   for (const fileName of ['sitemap.xml', 'sitemap_copy.xml']) {
-    const outputPath = path.join(__dirname, '../public', fileName);
-    fs.writeFileSync(outputPath, sitemap);
-    console.log(`Sitemap generated at ${outputPath}.`);
+    for (const dir of outputDirs) {
+      const outputPath = path.join(dir, fileName);
+      fs.writeFileSync(outputPath, sitemap);
+      console.log(`Sitemap generated at ${outputPath}.`);
+    }
   }
 }
 

@@ -43,7 +43,11 @@ function generateSitemap() {
   sitemap += '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n';
 
   for (const route of routes) {
-    sitemap += `<url><loc>${DOMAIN}${route}</loc></url>\n`;
+    // Use the trailing-slash form, which is the URL the host serves directly
+    // (requests without the slash 301-redirect to it). Keeping the sitemap and
+    // page canonicals on the same form avoids redirect hops and split signals.
+    const loc = route === '/' ? route : `${route}/`;
+    sitemap += `<url><loc>${DOMAIN}${loc}</loc></url>\n`;
   }
 
   sitemap += '</urlset>';

@@ -277,21 +277,21 @@ function buildAnnexBody(law, data, annexId) {
   `;
 }
 
-function buildSeoPayload({ title, description, canonical, type = "article" }) {
+function buildSeoPayload({ title, description, canonical, type = "article", schemaType = "WebPage", ogTitle = title }) {
   return `
     <title>${escapeHtml(title)}</title>
     <meta name="description" content="${escapeHtml(description)}" />
     <link rel="canonical" href="${escapeHtml(canonical)}" />
     <meta property="og:type" content="${escapeHtml(type)}" />
-    <meta property="og:title" content="${escapeHtml(title)}" />
+    <meta property="og:title" content="${escapeHtml(ogTitle)}" />
     <meta property="og:description" content="${escapeHtml(description)}" />
     <meta property="og:url" content="${escapeHtml(canonical)}" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="${escapeHtml(title)}" />
+    <meta name="twitter:title" content="${escapeHtml(ogTitle)}" />
     <meta name="twitter:description" content="${escapeHtml(description)}" />
     <script type="application/ld+json">${JSON.stringify({
       "@context": "https://schema.org",
-      "@type": "WebPage",
+      "@type": schemaType,
       name: title,
       description,
       url: canonical,
@@ -299,8 +299,8 @@ function buildSeoPayload({ title, description, canonical, type = "article" }) {
   `;
 }
 
-function buildPageHtml(template, { title, description, canonical, bodyHtml }) {
-  const seoPayload = buildSeoPayload({ title, description, canonical });
+function buildPageHtml(template, { title, description, canonical, bodyHtml, type, schemaType, ogTitle }) {
+  const seoPayload = buildSeoPayload({ title, description, canonical, type, schemaType, ogTitle });
   const rootHtml = `
     <div id="root">${bodyHtml}</div>
     <style>
@@ -360,7 +360,7 @@ async function buildLawPages(template, law) {
   writePage(`/${law.slug}`, buildPageHtml(template, {
     title: `Read ${lawTitle} more easily | LegalViz.EU`,
     description: overviewDescription,
-    canonical: `${siteUrl}/${law.slug}`,
+    canonical: `${siteUrl}/${law.slug}/`,
     bodyHtml: buildLawBody(law, data),
   }));
 
@@ -377,7 +377,7 @@ async function buildLawPages(template, law) {
     writePage(`/${law.slug}/article/${index}`, buildPageHtml(template, {
       title: articleTitle,
       description: articleDescription,
-      canonical: `${siteUrl}/${law.slug}/article/${index}`,
+      canonical: `${siteUrl}/${law.slug}/article/${index}/`,
       bodyHtml: buildArticleBody(law, data, index),
     }));
   }
@@ -390,7 +390,7 @@ async function buildLawPages(template, law) {
     writePage(`/${law.slug}/recital/${index}`, buildPageHtml(template, {
       title: recitalTitle,
       description: recitalDescription,
-      canonical: `${siteUrl}/${law.slug}/recital/${index}`,
+      canonical: `${siteUrl}/${law.slug}/recital/${index}/`,
       bodyHtml: buildRecitalBody(law, data, index),
     }));
   }
@@ -404,10 +404,49 @@ async function buildLawPages(template, law) {
     writePage(`/${law.slug}/annex/${encodeURIComponent(annex.annex_id)}`, buildPageHtml(template, {
       title: annexTitle,
       description: annexDescription,
-      canonical: `${siteUrl}/${law.slug}/annex/${encodeURIComponent(annex.annex_id)}`,
+      canonical: `${siteUrl}/${law.slug}/annex/${encodeURIComponent(annex.annex_id)}/`,
       bodyHtml: buildAnnexBody(law, data, annex.annex_id),
     }));
   }
+}
+
+function buildHomeBody(laws) {
+  const lawLinks = laws
+    .filter((law) => law.slug)
+    .map((law) => `<li><a href="/${law.slug}/">${escapeHtml(law.label)}</a></li>`)
+    .join("");
+
+  return `
+    <main class="lv-prerender">
+      <header>
+        <p class="lv-kicker">EU law reading tool</p>
+        <h1>Read EU law beautifully, and with ease.</h1>
+        <p>LegalViz.EU is a free reader for EU legislation. Search primary EU acts by title, reference, or CELEX, then move quickly between articles, recitals, annexes, and cross-references — all in one clean, readable view.</p>
+      </header>
+      <section class="lv-callout">
+        <p><strong>What LegalViz.EU helps with:</strong> faster reading of EU laws like the GDPR, AI Act, DMA, DSA and Data Act, quick jumps between articles and recitals, side-by-side reading, and print/PDF export.</p>
+      </section>
+      <section>
+        <h2>Popular EU laws</h2>
+        <ul>${lawLinks}</ul>
+      </section>
+    </main>
+  `;
+}
+
+function buildHomePage(template, laws) {
+  const description = "Read EU laws like the GDPR, AI Act, DMA, DSA and Data Act with ease. Navigate articles, recitals, annexes and cross-references, side by side.";
+  const html = buildPageHtml(template, {
+    title: "LegalViz.EU — Read EU law: GDPR, AI Act, DMA, DSA & more",
+    ogTitle: "LegalViz.EU — Read EU law beautifully",
+    description,
+    canonical: `${siteUrl}/`,
+    bodyHtml: buildHomeBody(laws),
+    type: "website",
+    schemaType: "WebSite",
+  });
+  fs.writeFileSync(path.join(distDir, "index.html"), html);
+  console.log("[prerender] Generated static homepage");
 }
 
 async function main() {
@@ -421,6 +460,8 @@ async function main() {
   for (const law of FEATURED_LAWS) {
     await buildLawPages(template, law);
   }
+
+  buildHomePage(template, FEATURED_LAWS);
 
   console.log(`[prerender] Generated static pages for ${FEATURED_LAWS.length} flagship laws`);
 }

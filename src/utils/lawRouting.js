@@ -27,7 +27,7 @@ const FEATURED_LAWS = [
     officialReference: { actType: "regulation", year: "2024", number: "1689" },
   },
   {
-    slug: "da",
+    slug: "data-act",
     celex: "32023R2854",
     label: "Data Act",
     officialReference: { actType: "regulation", year: "2023", number: "2854" },

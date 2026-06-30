@@ -11,6 +11,7 @@ import {
   getActTypeChoices,
   parseOfficialReferenceSlug,
 } from "./lawRouting.js";
+import { SUPPORTED_UI_LOCALES } from "../i18n/localeMeta.js";
 
 describe("getLawSlug", () => {
   it("returns shortname when available", () => {
@@ -83,6 +84,16 @@ describe("getBundledLaws", () => {
     expect(laws.length).toBeGreaterThanOrEqual(4);
     expect(laws.some((law) => law.slug === "gdpr")).toBe(true);
     expect(laws.some((law) => law.slug === "dma")).toBe(true);
+  });
+
+  it("has no slug that collides with a UI locale code", () => {
+    // A bundled slug equal to a 2-letter locale code (e.g. "da" for the Data
+    // Act vs. Danish) makes the single-segment route "/<slug>" resolve to the
+    // localized homepage instead of the law. Keep law slugs locale-disjoint.
+    const laws = getBundledLaws();
+    laws.forEach((law) => {
+      expect(SUPPORTED_UI_LOCALES.includes(law.slug)).toBe(false);
+    });
   });
 });
 

@@ -18,6 +18,27 @@ async function readErrorBody(res) {
   try { return await res.json(); } catch { return {}; }
 }
 
+function normalizeMessageText(value) {
+  if (!value) return '';
+  if (typeof value === 'string') return value.trim();
+  if (Array.isArray(value)) {
+    return value
+      .map((part) => {
+        if (!part) return '';
+        if (typeof part === 'string') return part;
+        if (typeof part.text === 'string') return part.text;
+        if (typeof part.content === 'string') return part.content;
+        if (typeof part.value === 'string') return part.value;
+        return '';
+      })
+      .join('')
+      .trim();
+  }
+  if (typeof value.text === 'string') return value.text.trim();
+  if (typeof value.content === 'string') return value.content.trim();
+  return '';
+}
+
 async function chatComplete({
   model,
   messages,
@@ -25,12 +46,23 @@ async function chatComplete({
   baseUrl = DEFAULT_BASE_URL,
   temperature = 0.2,
   maxTokens = 1500,
+  responseFormat = null,
+  reasoning = null,
   signal,
 }) {
   if (!apiKey) {
     throw new ChatProviderError('OPENROUTER_API_KEY is required', { status: 503, code: 'missing_api_key' });
   }
   const url = `${String(baseUrl).replace(/\/+$/, '')}/chat/completions`;
+  const body = { model, messages, temperature, max_tokens: maxTokens };
+  if (responseFormat) {
+    body.response_format = typeof responseFormat === 'string'
+      ? { type: responseFormat }
+      : responseFormat;
+  }
+  if (reasoning) {
+    body.reasoning = reasoning;
+  }
   const res = await fetch(url, {
     method: 'POST',
     signal,
@@ -40,7 +72,7 @@ async function chatComplete({
       'HTTP-Referer': 'https://legalviz.local',
       'X-Title': 'EUR-Lex Visualiser',
     },
-    body: JSON.stringify({ model, messages, temperature, max_tokens: maxTokens }),
+    body: JSON.stringify(body),
   });
   if (!res.ok) {
     const body = await readErrorBody(res);
@@ -53,7 +85,7 @@ async function chatComplete({
   const msg = data?.choices?.[0]?.message || {};
   // Some reasoning models (e.g. gpt-oss) put the final answer in `content`
   // but burn tokens on `reasoning` first; if content is empty, fall back to reasoning.
-  const text = (msg.content && String(msg.content).trim()) || msg.reasoning || '';
+  const text = normalizeMessageText(msg.content) || normalizeMessageText(msg.reasoning) || '';
   return {
     text,
     usage: data?.usage || null,
@@ -149,4 +181,4 @@ async function* chatStream({
   yield { type: 'done', usage: finalUsage, model: finalModel };
 }
 
-module.exports = { chatComplete, chatStream, ChatProviderError };
+module.exports = { chatComplete, chatStream, ChatProviderError, normalizeMessageText };

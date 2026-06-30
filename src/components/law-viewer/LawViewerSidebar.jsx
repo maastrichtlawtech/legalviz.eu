@@ -2,7 +2,7 @@ import { Loader2, Menu, X } from "lucide-react";
 import { NavigationControls } from "../NavigationControls.jsx";
 import { Accordion } from "../Accordion.jsx";
 import { MetadataPanel, CaseLawButton } from "../MetadataPanel.jsx";
-import { LawAskButton } from "../LawAskPanel.jsx";
+import { LawSummary } from "../LawSummary.jsx";
 import { LawViewerQuickNavigation } from "./LawViewerQuickNavigation.jsx";
 import { LawViewerToc } from "./LawViewerToc.jsx";
 
@@ -21,8 +21,7 @@ export function LawViewerSidebar({
   isExternalReferencePending,
   effectiveCelex,
   formexLang,
-  lawTitle,
-  onAskArticleClick,
+  onSummaryArticleClick,
   t,
 }) {
   return (
@@ -61,13 +60,13 @@ export function LawViewerSidebar({
         />
 
         <div className="space-y-2">
-          <LawAskButton
-            celex={effectiveCelex}
-            lawTitle={lawTitle}
-            lang={formexLang}
-            onArticleClick={onAskArticleClick}
-          />
           <CaseLawButton celex={effectiveCelex} currentLang={formexLang} />
+          <LawSummary
+            celex={effectiveCelex}
+            lang={formexLang}
+            onArticleClick={onSummaryArticleClick}
+            className="rounded-xl border border-blue-100 bg-white/80 px-3 py-3 shadow-sm dark:border-blue-950/70 dark:bg-gray-900/80"
+          />
         </div>
 
         <div className="pt-2">

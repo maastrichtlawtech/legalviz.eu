@@ -22,7 +22,7 @@ export const API_BASE = (() => {
 
 // Cache version — bump to invalidate all cached entries
 const CACHE_VERSION = 2;
-const RECITAL_TITLE_CACHE_VERSION = 1;
+const RECITAL_TITLE_CACHE_VERSION = 2;
 const DB_NAME = "formex-cache";
 const STORE_NAME = "laws";
 const META_STORE_NAME = "lawMeta";
@@ -117,7 +117,10 @@ function isRecitalTitleEnvelope(value) {
     && value.format === "recital-titles-v1"
     && value.version === RECITAL_TITLE_CACHE_VERSION
     && value.payload
-    && typeof value.payload === "object";
+    && typeof value.payload === "object"
+    && value.payload.titles
+    && typeof value.payload.titles === "object"
+    && Object.keys(value.payload.titles).length > 0;
 }
 
 function createRecitalTitleEnvelope(payload) {
@@ -626,66 +629,34 @@ export async function fetchRecitalTitles(celex, lang = "EN", { signal } = {}) {
   });
 }
 
-/**
- * Streams a whole-law Q&A response via SSE. Dispatches named events through
- * the `handlers` object as they arrive:
- *   onStage({ stage })        — lifecycle hint ('loading_law' | 'planning' | 'assembling_bundle' | 'answering')
- *   onPlan({ articles, rationale, model, usage })
- *   onBundle({ meta, articles, counts })
- *   onDelta({ text })         — a chunk of answer markdown
- *   onDone({ model, usage })  — final, after last delta
- *   onError({ code, message, detail, status })
- * Resolves when the stream ends; rejects only for transport-level failures.
- */
-export async function askLawQuestionStream(celex, question, { lang = "EN", signal, handlers = {} } = {}) {
+export async function fetchLawSummary(celex, lang = "EN", { signal } = {}) {
   const apiLang = toApiLang(lang);
-  const url = `${API_BASE}/api/laws/${encodeURIComponent(celex)}/ask?lang=${apiLang}`;
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
-    body: JSON.stringify({ question }),
-    signal,
+  const key = `${celex}_${apiLang}`;
+  return getInFlightRequest(`law-summary:${key}`, async () => {
+    const url = `${API_BASE}/api/laws/${encodeURIComponent(celex)}/summary?lang=${apiLang}`;
+    const res = await fetch(url, { signal });
+
+    if (!res.ok) {
+      await readApiError(res, `Law summary fetch failed (${res.status})`);
+    }
+
+    return res.json();
   });
-  if (!res.ok) {
-    // Non-stream error (e.g. validation, 503 missing key) — read JSON and throw
-    await readApiError(res, `Law Q&A failed (${res.status})`);
-  }
-  const reader = res.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
+}
 
-  const dispatch = (event, data) => {
-    switch (event) {
-      case "stage":  handlers.onStage?.(data); break;
-      case "plan":   handlers.onPlan?.(data); break;
-      case "bundle": handlers.onBundle?.(data); break;
-      case "delta":  handlers.onDelta?.(data); break;
-      case "done":   handlers.onDone?.(data); break;
-      case "error":  handlers.onError?.(data); break;
-      default: break;
-    }
-  };
+export async function fetchArticleCaseLawDigest(celex, articleNumber, lang = "EN", { signal } = {}) {
+  const apiLang = toApiLang(lang);
+  const key = `${celex}_${articleNumber}_${apiLang}`;
+  return getInFlightRequest(`article-case-law-digest:${key}`, async () => {
+    const url = `${API_BASE}/api/laws/${encodeURIComponent(celex)}/articles/${encodeURIComponent(articleNumber)}/case-law-digest?lang=${apiLang}`;
+    const res = await fetch(url, { signal });
 
-  while (true) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    let sep;
-    while ((sep = buffer.indexOf("\n\n")) !== -1) {
-      const frame = buffer.slice(0, sep);
-      buffer = buffer.slice(sep + 2);
-      let event = "message";
-      let dataStr = "";
-      for (const line of frame.split("\n")) {
-        if (line.startsWith("event:")) event = line.slice(6).trim();
-        else if (line.startsWith("data:")) dataStr += line.slice(5).trim();
-      }
-      if (!dataStr) continue;
-      let data;
-      try { data = JSON.parse(dataStr); } catch { continue; }
-      dispatch(event, data);
+    if (!res.ok) {
+      await readApiError(res, `Article case-law digest fetch failed (${res.status})`);
     }
-  }
+
+    return res.json();
+  });
 }
 
 export async function fetchImplementingActs(celex) {

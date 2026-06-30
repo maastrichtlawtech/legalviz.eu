@@ -62,7 +62,6 @@ npx eurlex <command> [options]
 | `eurlex implementing <celex>` | List implementing/delegated acts |
 | `eurlex case-law <celex>` | List CJEU judgments that cite the law |
 | `eurlex recital-titles <celex>` | Generate or read cached AI titles for recitals |
-| `eurlex ask <celex> <question>` | Ask a grounded AI question about the law |
 | `eurlex search <query>` | Search the local law metadata cache |
 | `eurlex resolve <text>` | Resolve a legal reference to a CELEX number |
 | `eurlex resolve-url <url>` | Resolve a EUR-Lex URL to a CELEX number |
@@ -93,7 +92,6 @@ eurlex case-law 32016R0679
 
 # Optional AI features (requires OPENROUTER_API_KEY or feature-specific keys)
 eurlex recital-titles 32016R0679
-eurlex ask 32016R0679 "What rights does this law grant to individuals?"
 
 # Search & resolve
 eurlex search "artificial intelligence" --limit 5
@@ -179,7 +177,8 @@ cat input.xml | parse-fmx > output.json
 | `GET` | `/api/laws/:celex/implementing` | Implementing and delegated acts |
 | `GET` | `/api/laws/:celex/case-law?lang=ENG` | CJEU judgments citing this act, with operative parts and structured `articleRefs` |
 | `GET` | `/api/laws/:celex/recital-titles?lang=ENG` | Cached AI-generated short titles for recitals. Requires `RECITAL_TITLE_OPENROUTER_API_KEY` or `OPENROUTER_API_KEY` on cache miss. |
-| `POST` | `/api/laws/:celex/ask?lang=ENG` | Whole-law Q&A — body `{question}`. Streams a grounded markdown answer over Server-Sent Events: `stage` (lifecycle), `plan` (articles the planner picked), `bundle` (counts), `delta` (answer chunks), `done` (final usage), or `error`. Requires `ARTICLE_QA_OPENROUTER_API_KEY` or `OPENROUTER_API_KEY`. |
+| `GET` | `/api/laws/:celex/summary?lang=ENG` | Cached static law overview with article citations. Requires `LAW_SUMMARY_OPENROUTER_API_KEY`, `ARTICLE_QA_OPENROUTER_API_KEY`, or `OPENROUTER_API_KEY` on cache miss. |
+| `GET` | `/api/laws/:celex/articles/:n/case-law-digest?lang=ENG` | Cached static digest of CJEU case law interpreting one article. Zero-case results are cached without an LLM call. |
 | `GET` | `/api/laws/by-reference?actType=...&year=...&number=...` | Fetch law by official reference |
 | `GET` | `/api/search?q=keyword&limit=10` | Search law metadata |
 | `GET` | `/api/resolve-reference?actType=...&year=...&number=...` | Resolve legal reference to CELEX |
@@ -218,7 +217,7 @@ The parser handles post-2004 EUR-Lex Formex, pre-2004 OJ HTML, and older Curia H
 {
   "celex": "32016R0679",
   "lang": "ENG",
-  "model": "google/gemini-2.5-flash-lite",
+  "model": "google/gemini-2.5-pro",
   "cached": true,
   "titles": {
     "1": "Protection of natural persons",
@@ -229,33 +228,52 @@ The parser handles post-2004 EUR-Lex Formex, pre-2004 OJ HTML, and older Curia H
 
 The backend stores titles in `recital-title-cache-v1.json` with a cache `version`, source-content hash, model, and generation timestamp. The web app also keeps a versioned IndexedDB copy so repeated browser visits do not call the endpoint again.
 
-### Q&A endpoint
+### Static summary endpoints
 
-`POST /api/laws/:celex/ask` body: `{ "question": "..." }`. Streams Server-Sent Events:
+`GET /api/laws/:celex/summary?lang=ENG` returns a cached overview:
 
+```json
+{
+  "celex": "32016R0679",
+  "lang": "ENG",
+  "cached": true,
+  "summary": {
+    "purpose": { "text": "…", "citations": ["1"] },
+    "scope": { "text": "…", "citations": ["2", "3"] },
+    "keyObligations": [
+      { "text": "…", "citations": ["5"] }
+    ],
+    "structure": "…",
+    "relatedInstruments": [
+      { "label": "Directive 95/46/EC", "celex": "31995L0046", "relationship": "…" }
+    ]
+  }
+}
 ```
-event: stage
-data: {"stage":"planning"}
 
-event: plan
-data: {"articles":["15","17","21"],"rationale":"…","model":"…","usage":{…}}
+`GET /api/laws/:celex/articles/:n/case-law-digest?lang=ENG` returns a cached article-level digest:
 
-event: bundle
-data: {"meta":{…},"articles":[…],"counts":{"articles":3,"definitions":8,"recitals":11,"caseLaw":14}}
-
-event: delta
-data: {"text":"Under the GDPR the controller "}
-
-event: delta
-data: {"text":"must…"}
-
-event: done
-data: {"model":"google/gemini-2.5-flash","usage":{…}}
+```json
+{
+  "celex": "32016R0679",
+  "articleNumber": "6",
+  "lang": "ENG",
+  "caseLawCacheVersion": "case-law-cache-v4",
+  "digest": {
+    "summary": "…",
+    "themes": [
+      {
+        "name": "Legal basis",
+        "description": "…",
+        "cites": [{ "ecli": "ECLI:EU:C:2020:559", "celex": "62018CJ0311", "declarationNumber": "1" }]
+      }
+    ],
+    "noCaseLaw": false
+  }
+}
 ```
 
-On failure (incl. 402 insufficient credits, 429 rate-limit, or 401/403 auth errors) an `error` event is emitted instead of `done`, with a user-safe message and a stable `code` (`ai_service_unavailable`, `ai_rate_limited`, `ai_auth_failed`, `planner_empty`, `internal_error`). The upstream raw message is in `detail` for debugging.
-
-Requires `ARTICLE_QA_OPENROUTER_API_KEY` or the fallback `OPENROUTER_API_KEY`. Models are selectable via `ARTICLE_QA_PLANNER_MODEL` (default `google/gemini-2.5-flash-lite`) and `ARTICLE_QA_ANSWER_MODEL` (default `google/gemini-2.5-flash`). `ARTICLE_QA_MODEL` remains available as a single override for both stages. Stage 1 sends only the article skeleton + defined-terms list to a planner that picks up to 10 relevant articles; stage 2 assembles their full text, related recitals, used definitions, and all CJEU cases that cite any of them (deduped by CELEX), then streams the answer back with self-contained citations.
+Both endpoints validate generated JSON and citations before writing cache files. The backend stores summaries in `law-summary-cache-v1.json` and digests in `article-digest-cache-v1.json`, with cache version, prompt/schema version, source hash, model, and generation timestamp.
 
 ## Using from Python (and other languages)
 
@@ -430,8 +448,10 @@ backend/
    ├─ fmx-service.js
    ├─ law-queries.js             # Shared SPARQL queries (metadata, amendments, implementing, case-law)
    ├─ case-law-parser.js         # Parses CJEU judgments (FMX + pre-2004 OJ HTML + Curia HTML)
-   ├─ article-bundle.js          # Assembles law bundles for grounded Q&A
-   ├─ article-qa-service.js      # Planner + answerer prompts, legal-reasoning primer
+   ├─ article-bundle.js          # Preserved bundle assembler for future cross-corpus Ask work
+   ├─ article-qa-service.js      # Preserved planner + prompt logic for future Ask work
+   ├─ article-digest-service.js  # Cached static article case-law digests
+   ├─ law-summary-service.js     # Cached static law overviews
    ├─ openrouter-chat.js         # OpenRouter chat-completions wrapper
    ├─ recital-title-service.js   # Cached AI-generated short titles for recitals
    ├─ rate-limit.js
@@ -484,14 +504,16 @@ Current test coverage includes:
 | `TIMEOUT_MS` | HTTP request timeout in ms. Default `30000`. |
 | `SEARCH_CACHE_PATH` | Optional override for the search cache JSON path. |
 | `ANALYTICS_TOKEN` | Optional Plausible/analytics token for the `/api/_stats` endpoint. |
-| `OPENROUTER_API_KEY` | Fallback OpenRouter key used by Q&A and recital titles when the feature-specific key is not set. |
+| `OPENROUTER_API_KEY` | Fallback OpenRouter key used by static summaries and recital titles when the feature-specific key is not set. |
 | `OPENROUTER_BASE_URL` | Override (default `https://openrouter.ai/api/v1`). |
-| `ARTICLE_QA_OPENROUTER_API_KEY` | Optional OpenRouter key used only for `/api/laws/:celex/ask` and `eurlex ask`. Falls back to `OPENROUTER_API_KEY`. |
+| `LAW_SUMMARY_OPENROUTER_API_KEY` | Optional OpenRouter key used for law summaries and article case-law digests. Falls back to `ARTICLE_QA_OPENROUTER_API_KEY`, then `OPENROUTER_API_KEY`. |
+| `ARTICLE_QA_OPENROUTER_API_KEY` | Legacy fallback key still accepted for static summary generation. |
 | `RECITAL_TITLE_OPENROUTER_API_KEY` | Optional OpenRouter key used only for recital-title generation and `eurlex recital-titles`. Falls back to `OPENROUTER_API_KEY`. |
-| `ARTICLE_QA_MODEL` | Optional single chat model override for both Q&A stages. |
-| `ARTICLE_QA_PLANNER_MODEL` | Planner model for article selection. Default `google/gemini-2.5-flash-lite`. |
-| `ARTICLE_QA_ANSWER_MODEL` | Answer model for legal analysis. Default `google/gemini-2.5-flash`. |
-| `RECITAL_TITLE_MODEL` | Model for cached AI-generated recital titles. Default `google/gemini-2.5-flash-lite`. |
+| `LAW_SUMMARY_MODEL` | Model for cached law summaries. Default falls back through `ARTICLE_QA_ANSWER_MODEL`, `ARTICLE_QA_MODEL`, then `google/gemini-2.5-pro`. |
+| `ARTICLE_DIGEST_MODEL` | Model for cached article case-law digests. Default falls back through `LAW_SUMMARY_MODEL`, `ARTICLE_QA_ANSWER_MODEL`, `ARTICLE_QA_MODEL`, then `google/gemini-2.5-pro`. |
+| `ARTICLE_QA_MODEL` / `ARTICLE_QA_ANSWER_MODEL` | Legacy model fallbacks still accepted for static summary generation. |
+| `ARTICLE_QA_PLANNER_MODEL` | Legacy model fallback used only by recital-title defaults. |
+| `RECITAL_TITLE_MODEL` | Model for cached AI-generated recital titles. Default `google/gemini-2.5-pro`. |
 | `EURLEX_COOKIE_MAX_AGE_MS` | How long to reuse an EUR-Lex session cookie. |
 | `PLAYWRIGHT_HEADLESS` / `PLAYWRIGHT_BROWSERS_PATH` / `PLAYWRIGHT_MODULE_PATH` / `LEGALVIZ_PLAYWRIGHT_MODULE_PATH` | Playwright configuration for fetching laws that require rendering. |
 

@@ -1,5 +1,7 @@
 # LLM-Assisted Article Q&A — Design Plan
 
+> Per-article free-form Q&A is paused; see the static law-summary and article case-law digest migration.
+
 Captures the design for a v1 question-answering panel that helps a user
 understand a single article of an EU law, grounded in the law's own
 structure and in CJEU case law interpreting it.

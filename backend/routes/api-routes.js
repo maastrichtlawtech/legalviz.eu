@@ -4,18 +4,19 @@ const { ClientError } = require("../shared/api-utils");
 const { createSearchHandler } = require("../search/search-route");
 const { parseFmxXml } = require("../shared/fmx-parser-node");
 const { fetchMetadata, fetchAmendments, fetchImplementing, fetchCaseLaw } = require("../shared/law-queries");
-const { buildLawBundle } = require("../shared/article-bundle");
-const { planArticles, streamLawAnswer } = require("../shared/article-qa-service");
 const { ChatProviderError } = require("../shared/openrouter-chat");
 const { ensureRecitalTitles } = require("../shared/recital-title-service");
+const { ensureLawSummary } = require("../shared/law-summary-service");
+const { ensureArticleDigest } = require("../shared/article-digest-service");
 
-const DEFAULT_QA_PLANNER_MODEL = process.env.ARTICLE_QA_PLANNER_MODEL || process.env.ARTICLE_QA_MODEL || 'google/gemini-2.5-flash-lite';
-const DEFAULT_QA_ANSWER_MODEL = process.env.ARTICLE_QA_ANSWER_MODEL || process.env.ARTICLE_QA_MODEL || 'google/gemini-2.5-flash';
-const DEFAULT_RECITAL_TITLE_MODEL = process.env.RECITAL_TITLE_MODEL || process.env.ARTICLE_QA_PLANNER_MODEL || process.env.ARTICLE_QA_MODEL || 'google/gemini-2.5-flash-lite';
-const MAX_QUESTION_CHARS = 800;
+const DEFAULT_STATIC_SUMMARY_MODEL = process.env.LAW_SUMMARY_MODEL || process.env.ARTICLE_QA_ANSWER_MODEL || process.env.ARTICLE_QA_MODEL || 'google/gemini-2.5-pro';
+const DEFAULT_ARTICLE_DIGEST_MODEL = process.env.ARTICLE_DIGEST_MODEL || process.env.LAW_SUMMARY_MODEL || process.env.ARTICLE_QA_ANSWER_MODEL || process.env.ARTICLE_QA_MODEL || 'google/gemini-2.5-pro';
+const DEFAULT_RECITAL_TITLE_MODEL = process.env.RECITAL_TITLE_MODEL || process.env.ARTICLE_QA_PLANNER_MODEL || process.env.ARTICLE_QA_MODEL || 'google/gemini-2.5-pro';
 
-function getQaApiKey() {
-  return process.env.ARTICLE_QA_OPENROUTER_API_KEY || process.env.OPENROUTER_API_KEY;
+function getStaticSummaryApiKey() {
+  return process.env.LAW_SUMMARY_OPENROUTER_API_KEY
+    || process.env.ARTICLE_QA_OPENROUTER_API_KEY
+    || process.env.OPENROUTER_API_KEY;
 }
 
 function getRecitalTitleApiKey() {
@@ -412,120 +413,95 @@ function registerApiRoutes(app, deps) {
     }
   });
 
-  app.post('/api/laws/:celex/ask', rateLimitMiddleware, async (req, res) => {
-    // Validate up-front so we can still return a JSON error pre-stream.
-    const { celex } = req.params;
-    const rawLang = req.query.lang || 'ENG';
-
-    if (!validateCelex(celex)) {
-      return res.status(400).json({ error: 'Invalid CELEX format' });
-    }
-    const lang = validateLang(rawLang);
-    if (!lang) {
-      return res.status(400).json({ error: `Invalid language code: ${rawLang}` });
-    }
-
-    const question = String(req.body?.question || '').trim();
-    if (!question) {
-      return res.status(400).json({ error: 'Body must include a non-empty "question" string' });
-    }
-    if (question.length > MAX_QUESTION_CHARS) {
-      return res.status(400).json({ error: `Question too long (max ${MAX_QUESTION_CHARS} chars)` });
-    }
-
-    const apiKey = getQaApiKey();
-    if (!apiKey) {
-      return res.status(503).json({ error: 'OpenRouter API key is not configured for Q&A', code: 'openrouter_unconfigured' });
-    }
-
-    // Start SSE stream.
-    res.status(200).set({
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache, no-transform',
-      Connection: 'keep-alive',
-      'X-Accel-Buffering': 'no',
-    });
-    res.flushHeaders?.();
-
-    const send = (event, data) => {
-      res.write(`event: ${event}\n`);
-      res.write(`data: ${JSON.stringify(data)}\n\n`);
-    };
-
-    // If the client disconnects mid-stream, abort upstream work.
-    // Use res.on('close') — fires on the response's underlying socket. If
-    // res.end() has already been called, writableEnded is true so we skip.
-    const abort = new AbortController();
-    res.on('close', () => { if (!res.writableEnded) abort.abort(); });
-
+  app.get('/api/laws/:celex/summary', rateLimitMiddleware, async (req, res) => {
     try {
-      send('stage', { stage: 'loading_law' });
-      const parsed = await resolveParsedLaw(celex, lang);
+      const { celex } = req.params;
+      const rawLang = req.query.lang || 'ENG';
 
-      send('stage', { stage: 'planning' });
-      const plan = await planArticles({ parsedLaw: parsed, question, apiKey, model: DEFAULT_QA_PLANNER_MODEL });
-      if (plan.articles.length === 0) {
-        send('error', {
-          code: 'planner_empty',
-          message: 'Could not identify any relevant article for this question.',
-          detail: plan.rawText,
-        });
-        return res.end();
+      if (!validateCelex(celex)) {
+        return res.status(400).json({ error: 'Invalid CELEX format' });
       }
-      send('plan', {
-        articles: plan.articles,
-        rationale: plan.rationale,
-        model: plan.model,
-        usage: plan.usage,
+      const lang = validateLang(rawLang);
+      if (!lang) {
+        return res.status(400).json({ error: `Invalid language code: ${rawLang}` });
+      }
+
+      const parsed = await resolveParsedLaw(celex, lang, { skipFmxProbe: req.query.skipFmxProbe === '1' });
+      const result = await ensureLawSummary({
+        celex,
+        lang,
+        parsedLaw: parsed,
+        cacheDir: FMX_DIR,
+        apiKey: getStaticSummaryApiKey(),
+        model: DEFAULT_STATIC_SUMMARY_MODEL,
       });
 
-      send('stage', { stage: 'assembling_bundle' });
-      let cases = [];
-      try {
-        const caseLawPayload = await fetchCaseLaw(celex, runSparqlQuery, { cacheDir: FMX_DIR });
-        cases = caseLawPayload?.cases || [];
-      } catch {
-        cases = [];
-      }
-
-      const bundle = buildLawBundle(parsed, null, cases, plan.articles);
-      if (!bundle) {
-        send('error', { code: 'bundle_empty', message: 'Selected articles not found in law' });
-        return res.end();
-      }
-      send('bundle', {
-        meta: bundle.meta,
-        articles: bundle.articles.map((a) => ({ number: a.number, title: a.title })),
-        counts: {
-          articles: bundle.articles.length,
-          definitions: bundle.definitions.length,
-          recitals: bundle.recitals.length,
-          caseLaw: bundle.caseLaw.length,
-        },
+      res.json({
+        celex,
+        lang,
+        model: result.model,
+        cached: result.cached,
+        generatedAt: result.generatedAt,
+        summary: result.summary,
       });
-
-      send('stage', { stage: 'answering' });
-      const stream = streamLawAnswer({ bundle, question, apiKey, model: DEFAULT_QA_ANSWER_MODEL, signal: abort.signal });
-      let answerUsage = null;
-      let answerModel = DEFAULT_QA_ANSWER_MODEL;
-      for await (const chunk of stream) {
-        if (chunk.type === 'delta' && chunk.text) {
-          send('delta', { text: chunk.text });
-        } else if (chunk.type === 'done') {
-          answerUsage = chunk.usage;
-          answerModel = chunk.model || answerModel;
-        }
-      }
-      send('done', { model: answerModel, usage: answerUsage });
-      res.end();
     } catch (err) {
       if (err instanceof ChatProviderError) {
         const mapped = mapChatError(err);
-        send('error', { code: mapped.code, message: mapped.message, detail: mapped.detail, status: mapped.status });
-        return res.end();
+        return res.status(mapped.status).json({ code: mapped.code, message: mapped.message, detail: mapped.detail });
       }
-      send('error', { code: 'internal_error', message: err?.message || 'Failed to answer law question' });
-      res.end();
+      safeErrorResponse(res, err, 'Failed to generate law summary');
+    }
+  });
+
+  app.get('/api/laws/:celex/articles/:n/case-law-digest', rateLimitMiddleware, async (req, res) => {
+    try {
+      const { celex } = req.params;
+      const articleNumber = String(req.params.n || '').trim();
+      const rawLang = req.query.lang || 'ENG';
+
+      if (!validateCelex(celex)) {
+        return res.status(400).json({ error: 'Invalid CELEX format' });
+      }
+      if (!articleNumber) {
+        return res.status(400).json({ error: 'Article number is required' });
+      }
+      const lang = validateLang(rawLang);
+      if (!lang) {
+        return res.status(400).json({ error: `Invalid language code: ${rawLang}` });
+      }
+
+      const parsed = await resolveParsedLaw(celex, lang, { skipFmxProbe: req.query.skipFmxProbe === '1' });
+      const caseLawPayload = await fetchCaseLaw(celex, runSparqlQuery, { cacheDir: FMX_DIR });
+      const result = await ensureArticleDigest({
+        celex,
+        articleNumber,
+        lang,
+        parsedLaw: parsed,
+        caseLawPayload,
+        cacheDir: FMX_DIR,
+        apiKey: getStaticSummaryApiKey(),
+        model: DEFAULT_ARTICLE_DIGEST_MODEL,
+      });
+
+      res.json({
+        celex,
+        articleNumber,
+        lang,
+        model: result.model,
+        cached: result.cached,
+        generatedAt: result.generatedAt,
+        caseLawCacheVersion: result.caseLawCacheVersion,
+        digest: result.digest,
+      });
+    } catch (err) {
+      if (err instanceof ChatProviderError) {
+        const mapped = mapChatError(err);
+        return res.status(mapped.status).json({ code: mapped.code, message: mapped.message, detail: mapped.detail });
+      }
+      if (/Article .+ not found/.test(err?.message || '')) {
+        return res.status(404).json({ error: err.message, code: 'article_not_found' });
+      }
+      safeErrorResponse(res, err, 'Failed to generate article case-law digest');
     }
   });
 
@@ -606,8 +582,8 @@ function registerApiRoutes(app, deps) {
         'GET /api/laws/by-reference?actType=directive&year=2018&number=1972&lang=ENG': 'Resolve an official reference and fetch the matching FMX',
         'GET /api/laws/:celex/case-law': 'List CJEU judgments that interpret this law',
         'GET /api/laws/:celex/recital-titles?lang=ENG': 'Get cached AI-generated short titles for recitals',
-        'POST /api/laws/:celex/articles/:n/ask': 'Answer a question about one article, grounded in the law and CJEU case law (body: { question })',
-        'POST /api/laws/:celex/ask': 'Whole-law Q&A: planner picks relevant articles, then answers grounded in them + their recitals + case law (body: { question })',
+        'GET /api/laws/:celex/summary?lang=ENG': 'Get cached static summary of what this law does',
+        'GET /api/laws/:celex/articles/:n/case-law-digest?lang=ENG': 'Get cached static digest of CJEU case law interpreting one article',
         'GET /api/search?q=keyword&limit=10': 'Search cached primary-law metadata',
         'GET /api/resolve-reference?actType=directive&year=2018&number=1972&lang=ENG': 'Resolve an FMX-derived legal reference to CELEX via cache-first lookup with Cellar fallback',
         'GET /api/resolve-url?url=https://eur-lex.europa.eu/...&lang=ENG': 'Resolve a full EUR-Lex URL to a canonical CELEX'

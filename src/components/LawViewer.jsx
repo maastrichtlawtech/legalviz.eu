@@ -416,8 +416,7 @@ export function LawViewer() {
             isExternalReferencePending={interactions.isExternalReferencePending}
             effectiveCelex={source.effectiveCelex}
             formexLang={displayedFormexLang}
-            lawTitle={primaryDocument.data.title || primaryDocument.data.doc_title}
-            onAskArticleClick={(n) => interactions.onCrossRefArticle?.(n)}
+            onSummaryArticleClick={interactions.onCrossRefArticle}
             t={t}
           />
         </main>

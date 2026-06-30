@@ -50,6 +50,7 @@ async function withOpenRouterEnv(env, fn) {
   const previous = {
     OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY,
     ARTICLE_QA_OPENROUTER_API_KEY: process.env.ARTICLE_QA_OPENROUTER_API_KEY,
+    LAW_SUMMARY_OPENROUTER_API_KEY: process.env.LAW_SUMMARY_OPENROUTER_API_KEY,
     RECITAL_TITLE_OPENROUTER_API_KEY: process.env.RECITAL_TITLE_OPENROUTER_API_KEY,
   };
 
@@ -331,7 +332,7 @@ test("GET /api/laws/:celex/case-law uses a short cache ttl", async () => {
   assert.ok(ttlMs >= 5 * 60 * 1000 - 1_000, `Expected short cache ttl, got ${ttlMs}ms`);
 });
 
-test("AI routes require their own OpenRouter key or the shared fallback", async () => {
+test("AI-backed static routes require their own OpenRouter key or the shared fallback on cache miss", async () => {
   await withOpenRouterEnv({ ARTICLE_QA_OPENROUTER_API_KEY: "qa-key" }, async () => {
     const { app } = registerTestRoutes();
     const handler = app.routes.get("/api/laws/:celex/recital-titles");
@@ -348,19 +349,32 @@ test("AI routes require their own OpenRouter key or the shared fallback", async 
   });
 
   await withOpenRouterEnv({ RECITAL_TITLE_OPENROUTER_API_KEY: "title-key" }, async () => {
-    const { app } = registerTestRoutes();
-    const handler = app.routes.get("POST /api/laws/:celex/ask");
+    const { app } = registerTestRoutes({
+      fetchAndParseHtmlLaw: async (celex, lang) => ({
+        celex,
+        lang,
+        source: "eurlex-html",
+        format: "combined-v1",
+        title: "Regulation (EU) 2016/679",
+        langCode: "EN",
+        articles: [{ article_number: "1", article_title: "Subject matter", article_html: "<p>This Regulation lays down rules.</p>", division: { chapter: { title: "General provisions" } } }],
+        recitals: [{ recital_number: "1", recital_text: "Protection of natural persons.", recital_html: "<p>Protection of natural persons.</p>" }],
+        annexes: [],
+        definitions: [],
+        crossReferences: {},
+      }),
+    });
+    const handler = app.routes.get("/api/laws/:celex/summary");
     const res = createResponseRecorder();
 
     await handler({
       params: { celex: "32016R0679" },
-      query: { lang: "ENG" },
-      body: { question: "What does this law do?" },
+      query: { lang: "ENG", skipFmxProbe: "1" },
     }, res);
 
     assert.equal(res.statusCode, 503);
-    assert.equal(res.payload.code, "openrouter_unconfigured");
-    assert.match(res.payload.error, /Q&A/);
+    assert.equal(res.payload.code, "missing_api_key");
+    assert.match(res.payload.message, /OPENROUTER_API_KEY/);
   });
 });
 

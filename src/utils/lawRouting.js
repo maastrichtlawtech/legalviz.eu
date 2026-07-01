@@ -130,10 +130,13 @@ export function getCanonicalLawRoute(law, kind = null, id = null, locale = "en")
     const celex = String(law?.celex || "").trim().toUpperCase();
     if (!celex) return "/";
     const query = `?celex=${encodeURIComponent(celex)}`;
+    // "overview" is the bare-slug landing state, not a real entry to link to.
+    if (kind === "overview") return `/import${query}`;
     if (kind && id != null) return `/import/${kind}/${encodeURIComponent(String(id))}${query}`;
     return `/import${query}`;
   }
   const base = normalizeUiLocale(locale) === "en" ? `/${slug}` : `/${normalizeUiLocale(locale)}/${slug}`;
+  if (kind === "overview") return base;
   if (kind && id != null) return `${base}/${kind}/${encodeURIComponent(String(id))}`;
   return base;
 }

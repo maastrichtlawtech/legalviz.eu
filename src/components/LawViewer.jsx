@@ -42,6 +42,7 @@ import { LawViewerLoadingState } from "./law-viewer/LawViewerLoadingState.jsx";
 import { LawViewerErrorState } from "./law-viewer/LawViewerErrorState.jsx";
 import { LawViewerSidebar } from "./law-viewer/LawViewerSidebar.jsx";
 import { LawViewerSideBySide } from "./law-viewer/LawViewerSideBySide.jsx";
+import { LawOverviewPage } from "./law-viewer/LawOverviewPage.jsx";
 
 export function LawViewer() {
   const { locale: routeLocale, slug, key, kind, id } = useParams();
@@ -267,6 +268,20 @@ export function LawViewer() {
                   retryLoad={source.loadError ? source.retryLoad : primaryDocument.reload}
                   t={t}
                 />
+              ) : selection.selected.kind === "overview" ? (
+                <LawOverviewPage
+                  currentLaw={source.currentLaw}
+                  data={primaryDocument.data}
+                  effectiveCelex={source.effectiveCelex}
+                  formexLang={displayedFormexLang}
+                  onArticleClick={interactions.onCrossRefArticle}
+                  onStartReading={() => {
+                    if (primaryDocument.data.articles?.[0]) selection.selectArticleIdx(0);
+                    else if (primaryDocument.data.recitals?.[0]) selection.selectRecitalIdx(0);
+                    else if (primaryDocument.data.annexes?.[0]) selection.selectAnnexIdx(0);
+                  }}
+                  t={t}
+                />
               ) : (
                 <>
                   <div className="mb-4 flex items-center justify-between gap-4">
@@ -416,8 +431,6 @@ export function LawViewer() {
             isExternalReferencePending={interactions.isExternalReferencePending}
             effectiveCelex={source.effectiveCelex}
             formexLang={displayedFormexLang}
-            lawTitle={primaryDocument.data.title || primaryDocument.data.doc_title}
-            onAskArticleClick={(n) => interactions.onCrossRefArticle?.(n)}
             t={t}
           />
         </main>

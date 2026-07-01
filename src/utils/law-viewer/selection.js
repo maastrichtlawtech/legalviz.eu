@@ -30,6 +30,10 @@ export function resolveSelectionFromData(data, kind, id) {
     }
   }
 
+  if (!kind && !id) {
+    return { kind: "overview", id: null, html: "" };
+  }
+
   if (data.articles?.[0]) {
     return {
       kind: "article",

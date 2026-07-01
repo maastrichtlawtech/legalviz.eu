@@ -13,6 +13,10 @@ const projectRoot = path.join(__dirname, "..");
 const distDir = path.join(projectRoot, "dist");
 const siteUrl = "https://legalviz.eu";
 const FEATURED_LAWS = getBundledLaws();
+// Prefixed onto every deep-page meta description so search engines see what
+// the site is, not just a snippet of the underlying legal text (which reads
+// like a plain legal-text mirror otherwise).
+const APP_BLURB = "LegalViz.EU is a free interactive reader for EU law.";
 
 function installDomGlobals() {
   const { window } = new JSDOM("<!doctype html><html><body></body></html>");
@@ -108,7 +112,56 @@ async function fetchLawData(law, lang = "EN") {
   return parseFormexToCombined(xmlText);
 }
 
-function buildLawBody(law, data) {
+async function fetchLawSummary(law, lang = "EN") {
+  if (!law.celex) return null;
+
+  const url = `${getApiBase()}/api/laws/${encodeURIComponent(law.celex)}/summary?lang=${toApiLang(lang)}`;
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`Summary fetch failed for ${law.slug}: ${response.status} ${response.statusText}`);
+  }
+
+  return response.json();
+}
+
+function citedText(law, block) {
+  if (!block?.text) return "";
+  const links = (block.citations || [])
+    .map((articleNumber) => `<a href="/${law.slug}/article/${encodeURIComponent(articleNumber)}">Art. ${escapeHtml(String(articleNumber))}</a>`)
+    .join(" ");
+  return `${escapeHtml(block.text)}${links ? ` (${links})` : ""}`;
+}
+
+function buildLawSummarySection(law, summaryPayload) {
+  const summary = summaryPayload?.summary;
+  if (!summary) return "";
+
+  const purposeHtml = citedText(law, summary.purpose);
+  const scopeHtml = citedText(law, summary.scope);
+  const keyObligationsHtml = (summary.keyObligations || [])
+    .map((item) => `<li>${citedText(law, item)}</li>`)
+    .join("");
+  const relatedInstrumentsHtml = (summary.relatedInstruments || [])
+    .map((item) => {
+      const celexSuffix = item.celex ? ` (${escapeHtml(item.celex)})` : "";
+      const relationship = item.relationship ? ` — ${escapeHtml(item.relationship)}` : "";
+      return `<li>${escapeHtml(item.label || "")}${celexSuffix}${relationship}</li>`;
+    })
+    .join("");
+
+  return `
+    <section class="lv-summary">
+      <h2>Overview</h2>
+      ${purposeHtml ? `<p>${purposeHtml}</p>` : ""}
+      ${scopeHtml ? `<p>${scopeHtml}</p>` : ""}
+      ${keyObligationsHtml ? `<h3>Key points</h3><ul>${keyObligationsHtml}</ul>` : ""}
+      ${summary.structure ? `<h3>Structure</h3><p>${escapeHtml(summary.structure)}</p>` : ""}
+      ${relatedInstrumentsHtml ? `<h3>Related instruments</h3><ul>${relatedInstrumentsHtml}</ul>` : ""}
+    </section>
+  `;
+}
+
+function buildLawBody(law, data, summaryPayload) {
   const articleTotal = getArticleTotal(law, data);
   const recitalTotal = getRecitalTotal(law, data);
   const annexes = getValidAnnexes(data);
@@ -140,6 +193,7 @@ function buildLawBody(law, data) {
         <h1>${escapeHtml(data?.title || law.label)}</h1>
         ${summary}
       </header>
+      ${buildLawSummarySection(law, summaryPayload)}
       <section class="lv-callout">
         <p><strong>What LegalViz.EU helps with:</strong> faster reading of EU laws, quick jumps between articles and recitals, and easier orientation inside long regulations.</p>
       </section>
@@ -281,8 +335,10 @@ function buildSeoPayload({ title, description, canonical, type = "article", sche
   return `
     <title>${escapeHtml(title)}</title>
     <meta name="description" content="${escapeHtml(description)}" />
+    <meta name="application-name" content="LegalViz.EU" />
     <link rel="canonical" href="${escapeHtml(canonical)}" />
     <meta property="og:type" content="${escapeHtml(type)}" />
+    <meta property="og:site_name" content="LegalViz.EU" />
     <meta property="og:title" content="${escapeHtml(ogTitle)}" />
     <meta property="og:description" content="${escapeHtml(description)}" />
     <meta property="og:url" content="${escapeHtml(canonical)}" />
@@ -295,6 +351,11 @@ function buildSeoPayload({ title, description, canonical, type = "article", sche
       name: title,
       description,
       url: canonical,
+      isPartOf: {
+        "@type": "WebSite",
+        name: "LegalViz.EU",
+        url: siteUrl,
+      },
     })}</script>
   `;
 }
@@ -316,6 +377,9 @@ function buildPageHtml(template, { title, description, canonical, bodyHtml, type
       .lv-inline-links { margin: 12px 0 0; font: 500 14px/1.6 system-ui, sans-serif; }
       .lv-content p, .lv-content li { margin: 0 0 1em; }
       .lv-content ol, .lv-content ul { padding-left: 1.5rem; }
+      .lv-summary h3 { margin: 20px 0 8px; font: 600 1rem/1.2 system-ui, sans-serif; color: #111827; }
+      .lv-summary p, .lv-summary li { margin: 0 0 0.75em; }
+      .lv-summary ul { padding-left: 1.5rem; }
     </style>
   `;
 
@@ -352,16 +416,29 @@ async function buildLawPages(template, law) {
     console.warn(`[prerender] Falling back to metadata-only page for ${law.slug}: ${error.message}`);
   }
 
+  // Fetched independently from the main law data: a slow/cold cache or a
+  // failure here must never block generation of the (already-working)
+  // article/recital/annex pages for this law.
+  let summaryPayload = null;
+  try {
+    summaryPayload = await fetchLawSummary(law);
+    console.log(`[prerender] Loaded summary for ${law.slug}`);
+  } catch (error) {
+    console.warn(`[prerender] Skipping summary section for ${law.slug}: ${error.message}`);
+  }
+
   const lawTitle = data?.title || law.label;
-  const overviewDescription = data
-    ? summarize(`Use LegalViz.EU to read ${lawTitle} more easily. Browse articles, recitals, annexes, and law structure on one page.`)
-    : summarize(`Use LegalViz.EU to browse ${law.label} by article, recital, and annex.`);
+  const overviewDescription = summaryPayload?.summary?.purpose?.text
+    ? summarize(`${APP_BLURB} ${summaryPayload.summary.purpose.text}`)
+    : data
+      ? summarize(`${APP_BLURB} Read ${lawTitle} with articles, recitals, annexes, and law structure on one page.`)
+      : summarize(`${APP_BLURB} Browse ${law.label} by article, recital, and annex.`);
 
   writePage(`/${law.slug}`, buildPageHtml(template, {
     title: `Read ${lawTitle} more easily | LegalViz.EU`,
     description: overviewDescription,
     canonical: `${siteUrl}/${law.slug}/`,
-    bodyHtml: buildLawBody(law, data),
+    bodyHtml: buildLawBody(law, data, summaryPayload),
   }));
 
   const articleTotal = getArticleTotal(law, data);
@@ -372,7 +449,7 @@ async function buildLawPages(template, law) {
     const articleTitle = article?.article_title
       ? `Read Article ${index}: ${article.article_title} | ${lawTitle} | LegalViz.EU`
       : `Read Article ${index} | ${lawTitle} | LegalViz.EU`;
-    const articleDescription = summarize(article?.article_html || `Read Article ${index} of ${lawTitle} with LegalViz.EU, a tool for easier navigation of EU legislation.`);
+    const articleDescription = summarize(`${APP_BLURB} Article ${index} of ${lawTitle}. ${article?.article_html || ""}`);
 
     writePage(`/${law.slug}/article/${index}`, buildPageHtml(template, {
       title: articleTitle,
@@ -385,7 +462,7 @@ async function buildLawPages(template, law) {
   for (let index = 1; index <= recitalTotal; index += 1) {
     const recital = data?.recitals?.find((entry) => String(entry.recital_number) === String(index));
     const recitalTitle = `Read Recital ${index} | ${lawTitle} | LegalViz.EU`;
-    const recitalDescription = summarize(recital?.recital_html || `Read Recital ${index} of ${lawTitle} with LegalViz.EU, a tool for easier navigation of EU legislation.`);
+    const recitalDescription = summarize(`${APP_BLURB} Recital ${index} of ${lawTitle}. ${recital?.recital_html || ""}`);
 
     writePage(`/${law.slug}/recital/${index}`, buildPageHtml(template, {
       title: recitalTitle,
@@ -399,7 +476,7 @@ async function buildLawPages(template, law) {
     const annexTitle = annex?.annex_title
       ? `Read Annex ${annex.annex_id}: ${annex.annex_title} | ${lawTitle} | LegalViz.EU`
       : `Read Annex ${annex.annex_id} | ${lawTitle} | LegalViz.EU`;
-    const annexDescription = summarize(annex?.annex_html || `Read Annex ${annex.annex_id} of ${lawTitle} with LegalViz.EU.`);
+    const annexDescription = summarize(`${APP_BLURB} Annex ${annex.annex_id} of ${lawTitle}. ${annex?.annex_html || ""}`);
 
     writePage(`/${law.slug}/annex/${encodeURIComponent(annex.annex_id)}`, buildPageHtml(template, {
       title: annexTitle,

@@ -878,6 +878,7 @@ async function enrichWithCaseDetails(cases, detailsCache, {
 }
 
 module.exports = {
+  ACT_CELEX_MAP,
   fetchMetadata,
   fetchAmendments,
   fetchImplementing,

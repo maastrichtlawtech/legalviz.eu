@@ -18,9 +18,9 @@ Built by [Konrad Kollnig](https://kollnig.net) at the [Law & Tech Lab, Maastrich
 
 **Understand context** — Client-side TF-IDF analysis links related recitals to articles automatically and displays AI-generated short recital titles where available. Defined terms (e.g. "online platform") are highlighted with their legal definition on hover. Cross-law references — including pre-2004 references like "Directive 95/46/EC" — are parsed, resolved to CELEX, and linked across acts.
 
-**CJEU case law** — Every law pulls in the judgments that cite it, parsed from EUR-Lex (including older pre-2004 and Curia HTML formats) into structured article references. Cases that cite the article you're reading are surfaced beside it, with the operative part and a link back to EUR-Lex.
+**CJEU case law** — Every law pulls in the judgments that cite it, parsed from EUR-Lex (including older pre-2004 and Curia HTML formats) into structured article references. Cases that cite the article you're reading are surfaced beside it, with the operative part, a link back to EUR-Lex, and cached article-level digests where available.
 
-**Ask about the law** — Optional LLM-grounded Q&A. A planner picks the articles relevant to your question, then an answerer replies from a bundle containing only those articles, their related recitals, the definitions they use, and CJEU judgments that cite them. Every claim is tagged with a self-contained citation like `[Art. 5(1)(a)]`, `[Recital 39]`, or `[C-362/14 §1]`.
+**Static overviews** — Optional AI-generated law summaries are computed once, cached, and rendered as article-cited overviews above the reader. No model call is made while reading a warm cache.
 
 **Export** — Print or save to PDF with selectable sections (articles, recitals, annexes) and optional inline recitals next to articles.
 
@@ -91,7 +91,7 @@ React 19, React Router 7, Vite, Tailwind CSS 4, Framer Motion, Lucide React, Exp
 
 ### How It Works
 
-The app fetches Formex XML for a given CELEX identifier (falling back to EUR-Lex HTML for laws without FMX) and parses it into articles, chapters, recitals, definitions, annexes, and cross-references — the same parser powers the web app, the REST API, and the CLI. The client builds an inverted index for full-text search and runs a TF-IDF module to link recitals to relevant articles. CJEU judgments are fetched via SPARQL, their operative parts parsed, and their article references structured so the viewer can show "cases citing this article". Optional AI features use OpenRouter: recital titles are generated once and cached, while Q&A assembles a grounded bundle (selected articles + definitions + cases) and sends it through a two-stage planner → answerer pipeline. Deployments can use separate OpenRouter keys for Q&A and recital-title generation. The current view is synced to the URL so every position is bookmarkable.
+The app fetches Formex XML for a given CELEX identifier (falling back to EUR-Lex HTML for laws without FMX) and parses it into articles, chapters, recitals, definitions, annexes, and cross-references — the same parser powers the web app, the REST API, and the CLI. The client builds an inverted index for full-text search and runs a TF-IDF module to link recitals to relevant articles. CJEU judgments are fetched via SPARQL, their operative parts parsed, and their article references structured so the viewer can show "cases citing this article". Optional AI features use OpenRouter only on cache misses: recital titles, law overviews, and article case-law digests are generated once, validated, and cached. The current view is synced to the URL so every position is bookmarkable.
 
 ## Contributing
 

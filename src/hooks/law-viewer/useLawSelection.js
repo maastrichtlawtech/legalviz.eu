@@ -3,7 +3,7 @@ import { buildToc } from "../../utils/law-viewer/content.js";
 import { resolveSelectionFromData } from "../../utils/law-viewer/selection.js";
 
 export function useLawSelection({ data, kind, id, navigateToCanonical }) {
-  const [selected, setSelected] = useState({ kind: "article", id: null, html: "" });
+  const [selected, setSelected] = useState({ kind: "overview", id: null, html: "" });
   const [openChapter, setOpenChapter] = useState(null);
   const [isAnnexesOpen, setIsAnnexesOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);

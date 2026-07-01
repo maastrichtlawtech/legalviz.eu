@@ -20,13 +20,7 @@ const EURLEX_BASE = 'https://eur-lex.europa.eu';
 const TIMEOUT_MS = parseInt(process.env.TIMEOUT_MS) || 30_000;
 const STORAGE_LIMIT_MB = parseInt(process.env.STORAGE_LIMIT_MB) || 500;
 const RESOLUTION_CACHE_MS = 24 * 60 * 60 * 1000;
-const DEFAULT_QA_PLANNER_MODEL = process.env.ARTICLE_QA_PLANNER_MODEL || process.env.ARTICLE_QA_MODEL || 'google/gemini-2.5-flash-lite';
-const DEFAULT_QA_ANSWER_MODEL = process.env.ARTICLE_QA_ANSWER_MODEL || process.env.ARTICLE_QA_MODEL || 'google/gemini-2.5-flash';
-const DEFAULT_RECITAL_TITLE_MODEL = process.env.RECITAL_TITLE_MODEL || process.env.ARTICLE_QA_PLANNER_MODEL || process.env.ARTICLE_QA_MODEL || 'google/gemini-2.5-flash-lite';
-
-function getQaApiKey() {
-  return process.env.ARTICLE_QA_OPENROUTER_API_KEY || process.env.OPENROUTER_API_KEY;
-}
+const DEFAULT_RECITAL_TITLE_MODEL = process.env.RECITAL_TITLE_MODEL || process.env.ARTICLE_QA_PLANNER_MODEL || process.env.ARTICLE_QA_MODEL || 'google/gemini-2.5-pro';
 
 function getRecitalTitleApiKey() {
   return process.env.RECITAL_TITLE_OPENROUTER_API_KEY || process.env.OPENROUTER_API_KEY;
@@ -268,84 +262,6 @@ COMMANDS['recital-titles'] = {
   },
 };
 
-// --- ask -------------------------------------------------------------------
-
-COMMANDS.ask = {
-  summary: 'Ask a grounded AI question about a law',
-  usage: 'eurlex ask <celex> <question> [--lang ENG] [-o output.json]',
-  async run(args) {
-    const flags = parseFlags(args, ['celex', 'question']);
-    if (!flags.celex) die('CELEX number required.  Usage: eurlex ask <celex> <question>');
-    const question = String(flags.question || flags.q || '').trim();
-    if (!question) die('Question required.  Usage: eurlex ask <celex> <question>');
-    const svc = bootServices();
-    if (!svc.validateCelex(flags.celex)) die(`Invalid CELEX format: ${flags.celex}`);
-    const lang = svc.validateLang(flags.lang || 'ENG');
-    if (!lang) die(`Invalid language code: ${flags.lang}`);
-    const apiKey = getQaApiKey();
-    if (!apiKey) die('ARTICLE_QA_OPENROUTER_API_KEY or OPENROUTER_API_KEY is required for ask.');
-
-    const { fetchCaseLaw } = require('../shared/law-queries');
-    const { buildLawBundle } = require('../shared/article-bundle');
-    const { answerLawQuestion, planArticles } = require('../shared/article-qa-service');
-
-    const parsed = await parseLawByCelex(svc, flags.celex, lang);
-    const plan = await planArticles({
-      parsedLaw: parsed,
-      question,
-      apiKey,
-      model: flags.plannerModel || flags.model || DEFAULT_QA_PLANNER_MODEL,
-    });
-    if (!plan.articles.length) {
-      die(`Could not identify any relevant article for this question. Planner output: ${plan.rawText || ''}`.trim());
-    }
-
-    let cases = [];
-    try {
-      const caseLawPayload = await fetchCaseLaw(flags.celex, svc.runSparqlQuery, { cacheDir: DEFAULT_FMX_DIR });
-      cases = caseLawPayload?.cases || [];
-    } catch {
-      cases = [];
-    }
-
-    const bundle = buildLawBundle(parsed, null, cases, plan.articles);
-    if (!bundle) die('Selected articles not found in law.');
-
-    const answer = await answerLawQuestion({
-      bundle,
-      question,
-      apiKey,
-      model: flags.answerModel || flags.model || DEFAULT_QA_ANSWER_MODEL,
-    });
-
-    jsonOut({
-      celex: flags.celex,
-      lang,
-      question,
-      plan: {
-        articles: plan.articles,
-        rationale: plan.rationale,
-        model: plan.model,
-        usage: plan.usage,
-      },
-      bundle: {
-        meta: bundle.meta,
-        counts: {
-          articles: bundle.articles.length,
-          definitions: bundle.definitions.length,
-          recitals: bundle.recitals.length,
-          caseLaw: bundle.caseLaw.length,
-        },
-      },
-      answer: {
-        text: answer.text,
-        model: answer.model,
-        usage: answer.usage,
-      },
-    }, flags.o || flags.output);
-  },
-};
-
 // --- metadata --------------------------------------------------------------
 
 COMMANDS.metadata = {
@@ -540,7 +456,6 @@ Examples:
   eurlex amendments 32016R0679               # List GDPR amendments
   eurlex case-law 32016R0679                 # CJEU judgments citing GDPR
   eurlex recital-titles 32016R0679           # AI-generated recital titles
-  eurlex ask 32016R0679 "What rights does this create?"
   eurlex search "artificial intelligence"    # Search law metadata
   eurlex resolve "Regulation 2016/679"       # Resolve reference to CELEX
   eurlex resolve-url "https://eur-lex.europa.eu/eli/reg/2016/679/oj"

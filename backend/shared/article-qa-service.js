@@ -1,3 +1,4 @@
+// Currently unused; retained for a future cross-corpus Ask feature.
 const { chatComplete, chatStream, ChatProviderError } = require('./openrouter-chat');
 
 const LEGAL_REASONING_PRIMER = `EU-law reasoning principles you must apply:

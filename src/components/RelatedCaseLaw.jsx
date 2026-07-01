@@ -1,7 +1,9 @@
 import React, { useMemo, useState } from "react";
-import { Loader2, Scale, ExternalLink, ChevronDown, ChevronUp } from "lucide-react";
+import { Loader2, Scale, ExternalLink, ChevronDown, ChevronUp, Sparkles } from "lucide-react";
 import { useI18n } from "../i18n/useI18n.js";
 import { useCaseLaw } from "../hooks/law-viewer/useCaseLaw.js";
+import { ArticleCaseLawDigest } from "./ArticleCaseLawDigest.jsx";
+import { matchesArticle } from "../utils/law-viewer/caseLawMatching.js";
 
 function formatDate(isoDate) {
   if (!isoDate) return null;
@@ -10,14 +12,6 @@ function formatDate(isoDate) {
       year: "numeric", month: "short", day: "numeric",
     });
   } catch { return isoDate; }
-}
-
-function matchesArticle(c, celex, articleNumber) {
-  if (!c?.articleRefs || !articleNumber) return false;
-  const target = String(articleNumber);
-  return c.articleRefs.some(
-    (ref) => ref && ref.actCelex === celex && String(ref.article) === target
-  );
 }
 
 function CaseCard({ c, currentLang }) {
@@ -98,7 +92,8 @@ function CaseCard({ c, currentLang }) {
 
 export function RelatedCaseLaw({ celex, articleNumber, currentLang = "EN" }) {
   const { t } = useI18n();
-  const [isOpen, setIsOpen] = useState(false);
+  const [isListOpen, setIsListOpen] = useState(false);
+  const [digestRequested, setDigestRequested] = useState(false);
   const title = t("relatedCaseLaw.title");
   const { cases, loading, loaded } = useCaseLaw(celex, { autoLoad: true });
 
@@ -108,6 +103,10 @@ export function RelatedCaseLaw({ celex, articleNumber, currentLang = "EN" }) {
       .filter((c) => matchesArticle(c, celex, articleNumber))
       .sort((a, b) => (b.date || "").localeCompare(a.date || ""));
   }, [cases, celex, articleNumber]);
+
+  React.useEffect(() => {
+    setDigestRequested(false);
+  }, [celex, articleNumber, currentLang]);
 
   if (!articleNumber) return null;
 
@@ -133,12 +132,7 @@ export function RelatedCaseLaw({ celex, articleNumber, currentLang = "EN" }) {
 
   return (
     <div className="mt-6 px-6 md:px-12">
-      <button
-        type="button"
-        className="flex w-full items-center justify-between gap-3 border-y border-gray-200 py-3 text-left transition hover:border-teal-200 dark:border-gray-800 dark:hover:border-teal-900/70"
-        aria-expanded={isOpen}
-        onClick={() => setIsOpen((current) => !current)}
-      >
+      <div className="flex w-full items-center justify-between gap-3 border-y border-gray-200 py-3 text-left dark:border-gray-800">
         <span className="flex min-w-0 items-center gap-2">
           <Scale size={16} className="shrink-0 text-teal-700 dark:text-teal-300" />
           <span className="font-semibold text-gray-900 dark:text-gray-100">{title}</span>
@@ -147,14 +141,43 @@ export function RelatedCaseLaw({ celex, articleNumber, currentLang = "EN" }) {
           </span>
           <span className="rounded bg-teal-200 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-teal-800 dark:bg-teal-800 dark:text-teal-200">beta</span>
         </span>
-        <span
-          aria-hidden="true"
-          className={`shrink-0 text-sm text-gray-500 transition-transform dark:text-gray-400 ${isOpen ? "rotate-90" : ""}`}
+      </div>
+
+      {digestRequested ? (
+        <ArticleCaseLawDigest
+          celex={celex}
+          articleNumber={articleNumber}
+          currentLang={currentLang}
+          enabled={digestRequested}
+        />
+      ) : (
+        <button
+          type="button"
+          className="flex w-full items-center justify-between gap-3 border-b border-gray-200 py-3 text-left text-sm transition hover:border-teal-200 dark:border-gray-800 dark:hover:border-teal-900/70"
+          onClick={() => setDigestRequested(true)}
         >
-          &gt;
+          <span className="inline-flex min-w-0 items-center gap-2 font-medium text-gray-700 dark:text-gray-300">
+            <Sparkles size={14} className="shrink-0 text-teal-700 dark:text-teal-300" />
+            <span>Generate case-law digest</span>
+          </span>
+          <span className="shrink-0 rounded bg-teal-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-teal-800 dark:bg-teal-900/50 dark:text-teal-200">
+            AI
+          </span>
+        </button>
+      )}
+
+      <button
+        type="button"
+        className="flex w-full items-center justify-between gap-3 border-b border-gray-200 py-3 text-left text-sm transition hover:border-teal-200 dark:border-gray-800 dark:hover:border-teal-900/70"
+        aria-expanded={isListOpen}
+        onClick={() => setIsListOpen((current) => !current)}
+      >
+        <span className="font-medium text-gray-700 dark:text-gray-300">Show all {matching.length} judgments</span>
+        <span className="shrink-0 text-gray-500 dark:text-gray-400">
+          {isListOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
         </span>
       </button>
-      {isOpen ? (
+      {isListOpen ? (
         <div className="grid gap-4 border-b border-gray-200 py-4 dark:border-gray-800 sm:grid-cols-2">
           {matching.map((c) => (
             <CaseCard key={c.celex} c={c} currentLang={currentLang} />

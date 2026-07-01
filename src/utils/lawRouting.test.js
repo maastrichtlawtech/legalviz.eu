@@ -151,6 +151,16 @@ describe("getCanonicalLawRoute", () => {
     const route = getCanonicalLawRoute({ shortname: "gdpr" }, null, null, "de");
     expect(route).toContain("/de/");
   });
+
+  it("treats the overview kind as the bare slug route", () => {
+    const route = getCanonicalLawRoute({ shortname: "gdpr" }, "overview", null);
+    expect(route).toBe("/gdpr");
+  });
+
+  it("treats the overview kind as the bare import route for slugless laws", () => {
+    const route = getCanonicalLawRoute({ celex: "52026PC0502" }, "overview", null);
+    expect(route).toBe("/import?celex=52026PC0502");
+  });
 });
 
 describe("buildImportedLawCandidate", () => {

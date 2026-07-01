@@ -80,8 +80,67 @@ test('parseArticleDigestJson keeps only citations present in the input', () => {
   assert.deepEqual(digest.themes[0].cites, [{
     ecli: 'ECLI:EU:C:2020:559',
     celex: '62018CJ0311',
+    caseNumber: 'C-311/18',
+    name: 'Schrems II',
     declarationNumber: '1',
   }]);
+});
+
+test('parseArticleDigestJson falls back to noCaseLaw when no theme can be grounded', () => {
+  // A well-formed response that only cites cases/declarations absent from the
+  // input (e.g. because the model had nothing groundable to work with) should
+  // degrade gracefully rather than throw.
+  const input = buildArticleDigestInput('32016R0679', '6', sampleParsedLaw(), sampleCases());
+
+  const digest = parseArticleDigestJson(JSON.stringify({
+    summary: 'The Court discusses Article 6.',
+    noCaseLaw: false,
+    themes: [
+      {
+        name: 'Legal basis',
+        description: 'Nothing in the input actually supports this.',
+        cites: [{ ecli: 'ECLI:EU:C:2099:999', declarationNumber: '1' }],
+      },
+    ],
+  }), input);
+
+  assert.equal(digest.noCaseLaw, true);
+  assert.deepEqual(digest.themes, []);
+});
+
+test('ensureArticleDigest caches ungroundable digests without re-calling the model', async () => {
+  const cacheDir = fs.mkdtempSync(path.join(os.tmpdir(), 'article-digest-service-'));
+  let calls = 0;
+  const chatComplete = async () => {
+    calls++;
+    return {
+      model: 'test-model',
+      usage: null,
+      text: JSON.stringify({
+        summary: 'The Court discusses Article 6.',
+        noCaseLaw: false,
+        themes: [{ name: 'Legal basis', description: 'Not groundable.', cites: [] }],
+      }),
+    };
+  };
+  const args = {
+    celex: '32016R0679',
+    articleNumber: '6',
+    lang: 'ENG',
+    parsedLaw: sampleParsedLaw(),
+    caseLawPayload: sampleCases(),
+    cacheDir,
+    apiKey: 'test-key',
+    model: 'test-model',
+    chatComplete,
+  };
+
+  const first = await ensureArticleDigest(args);
+  const second = await ensureArticleDigest(args);
+
+  assert.equal(first.digest.noCaseLaw, true);
+  assert.equal(second.digest.noCaseLaw, true);
+  assert.equal(calls, 1);
 });
 
 test('ensureArticleDigest caches no-case-law results without calling the model', async () => {

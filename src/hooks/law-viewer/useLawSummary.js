@@ -1,7 +1,7 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { fetchLawSummary } from "../../utils/formexApi.js";
 
-export function useLawSummary(celex, { lang = "EN", enabled = false } = {}) {
+export function useLawSummary(celex, { lang = "EN", enabled = true } = {}) {
   const [summary, setSummary] = useState(null);
   const [metadata, setMetadata] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -18,11 +18,10 @@ export function useLawSummary(celex, { lang = "EN", enabled = false } = {}) {
 
   useEffect(() => {
     if (!celex || !enabled || loaded) return;
-    const ctrl = new AbortController();
     let cancelled = false;
 
     setLoading(true);
-    fetchLawSummary(celex, lang, { signal: ctrl.signal })
+    fetchLawSummary(celex, lang)
       .then((payload) => {
         if (cancelled) return;
         setSummary(payload.summary || null);
@@ -34,7 +33,7 @@ export function useLawSummary(celex, { lang = "EN", enabled = false } = {}) {
         setLoaded(true);
       })
       .catch((err) => {
-        if (cancelled || err.name === "AbortError") return;
+        if (cancelled) return;
         setSummary(null);
         setMetadata(null);
         setLoaded(true);
@@ -46,9 +45,13 @@ export function useLawSummary(celex, { lang = "EN", enabled = false } = {}) {
 
     return () => {
       cancelled = true;
-      ctrl.abort();
     };
   }, [celex, lang, enabled, loaded]);
 
-  return { summary, metadata, loading, loaded, error };
+  const retry = useCallback(() => {
+    setError(null);
+    setLoaded(false);
+  }, []);
+
+  return { summary, metadata, loading, loaded, error, retry };
 }

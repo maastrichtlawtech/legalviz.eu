@@ -3,6 +3,7 @@ import { Loader2, Scale, ExternalLink, ChevronDown, ChevronUp, Sparkles } from "
 import { useI18n } from "../i18n/useI18n.js";
 import { useCaseLaw } from "../hooks/law-viewer/useCaseLaw.js";
 import { ArticleCaseLawDigest } from "./ArticleCaseLawDigest.jsx";
+import { matchesArticle } from "../utils/law-viewer/caseLawMatching.js";
 
 function formatDate(isoDate) {
   if (!isoDate) return null;
@@ -11,14 +12,6 @@ function formatDate(isoDate) {
       year: "numeric", month: "short", day: "numeric",
     });
   } catch { return isoDate; }
-}
-
-function matchesArticle(c, celex, articleNumber) {
-  if (!c?.articleRefs || !articleNumber) return false;
-  const target = String(articleNumber);
-  return c.articleRefs.some(
-    (ref) => ref && ref.actCelex === celex && String(ref.article) === target
-  );
 }
 
 function CaseCard({ c, currentLang }) {

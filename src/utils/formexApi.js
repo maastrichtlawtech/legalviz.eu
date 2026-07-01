@@ -76,6 +76,12 @@ function makeRecitalTitleCacheKey(celex, lang = "EN") {
   return `${makeCacheKey(celex, lang)}_recital_titles`;
 }
 
+// Callers must not wire their own AbortSignal into a request made through
+// this helper: the underlying fetch is shared by every caller for the same
+// key, so one caller unmounting and aborting would cancel the request for
+// everyone else waiting on it (including a caller with a fresh signal that
+// re-requests the same key before the aborted one has cleared). Consumers
+// should instead track their own `cancelled` flag to ignore stale results.
 function getInFlightRequest(key, factory) {
   if (IN_FLIGHT_LAW_REQUESTS.has(key)) {
     return IN_FLIGHT_LAW_REQUESTS.get(key);
@@ -602,7 +608,7 @@ export async function fetchCaseLaw(celex) {
   return res.json();
 }
 
-export async function fetchRecitalTitles(celex, lang = "EN", { signal } = {}) {
+export async function fetchRecitalTitles(celex, lang = "EN") {
   const apiLang = toApiLang(lang);
   const cacheKey = makeRecitalTitleCacheKey(celex, lang);
   return getInFlightRequest(`recital-titles:${cacheKey}`, async () => {
@@ -617,7 +623,7 @@ export async function fetchRecitalTitles(celex, lang = "EN", { signal } = {}) {
     }
 
     const url = `${API_BASE}/api/laws/${encodeURIComponent(celex)}/recital-titles?lang=${apiLang}`;
-    const res = await fetch(url, { signal });
+    const res = await fetch(url);
 
     if (!res.ok) {
       await readApiError(res, `Recital title fetch failed (${res.status})`);
@@ -629,12 +635,12 @@ export async function fetchRecitalTitles(celex, lang = "EN", { signal } = {}) {
   });
 }
 
-export async function fetchLawSummary(celex, lang = "EN", { signal } = {}) {
+export async function fetchLawSummary(celex, lang = "EN") {
   const apiLang = toApiLang(lang);
   const key = `${celex}_${apiLang}`;
   return getInFlightRequest(`law-summary:${key}`, async () => {
     const url = `${API_BASE}/api/laws/${encodeURIComponent(celex)}/summary?lang=${apiLang}`;
-    const res = await fetch(url, { signal });
+    const res = await fetch(url);
 
     if (!res.ok) {
       await readApiError(res, `Law summary fetch failed (${res.status})`);
@@ -644,12 +650,12 @@ export async function fetchLawSummary(celex, lang = "EN", { signal } = {}) {
   });
 }
 
-export async function fetchArticleCaseLawDigest(celex, articleNumber, lang = "EN", { signal } = {}) {
+export async function fetchArticleCaseLawDigest(celex, articleNumber, lang = "EN") {
   const apiLang = toApiLang(lang);
   const key = `${celex}_${articleNumber}_${apiLang}`;
   return getInFlightRequest(`article-case-law-digest:${key}`, async () => {
     const url = `${API_BASE}/api/laws/${encodeURIComponent(celex)}/articles/${encodeURIComponent(articleNumber)}/case-law-digest?lang=${apiLang}`;
-    const res = await fetch(url, { signal });
+    const res = await fetch(url);
 
     if (!res.ok) {
       await readApiError(res, `Article case-law digest fetch failed (${res.status})`);

@@ -16,8 +16,21 @@ describe("resolveSelectionFromData", () => {
     });
   });
 
-  it("falls back to the first article when route params are missing", () => {
+  it("resolves to the overview state when no route params are given", () => {
     expect(resolveSelectionFromData(data, null, null)).toEqual({
+      kind: "overview",
+      id: null,
+      html: "",
+    });
+  });
+
+  it("falls back to the first article (not overview) when only kind or only id is given", () => {
+    expect(resolveSelectionFromData(data, "article", null)).toEqual({
+      kind: "article",
+      id: "1",
+      html: "<p>A1</p>",
+    });
+    expect(resolveSelectionFromData(data, null, "1")).toEqual({
       kind: "article",
       id: "1",
       html: "<p>A1</p>",

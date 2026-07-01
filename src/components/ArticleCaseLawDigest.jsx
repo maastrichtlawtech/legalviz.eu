@@ -1,25 +1,29 @@
-import { useEffect, useState } from "react";
-import { ExternalLink, Loader2, Scale } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { ExternalLink, Loader2, RefreshCw, Scale } from "lucide-react";
 import { fetchArticleCaseLawDigest } from "../utils/formexApi.js";
+import { useI18n } from "../i18n/useI18n.js";
+import { Button } from "./Button.jsx";
 
 function JudgmentCite({ cite, currentLang }) {
   if (!cite?.celex && !cite?.ecli) return null;
-  const label = cite.ecli || cite.celex;
+  const label = cite.caseNumber || cite.ecli || cite.celex;
   const suffix = cite.declarationNumber ? ` §${cite.declarationNumber}` : "";
   const href = cite.celex
     ? `https://eur-lex.europa.eu/legal-content/${currentLang || "EN"}/TXT/?uri=CELEX:${cite.celex}`
     : null;
+  const title = cite.name && cite.ecli ? `${cite.name} (${cite.ecli})` : cite.name || cite.ecli || undefined;
 
   const content = (
     <>
-      {label}{suffix}
-      {href ? <ExternalLink size={10} /> : null}
+      <span className="font-mono">{label}{suffix}</span>
+      {cite.name ? <span className="max-w-[220px] truncate">— {cite.name}</span> : null}
+      {href ? <ExternalLink size={10} className="shrink-0" /> : null}
     </>
   );
 
   if (!href) {
     return (
-      <span className="inline-flex items-center gap-1 rounded border border-teal-200 bg-teal-50 px-1.5 py-0.5 font-mono text-[10px] font-medium text-teal-700 dark:border-teal-800 dark:bg-teal-950/40 dark:text-teal-300">
+      <span title={title} className="inline-flex max-w-full items-center gap-1 rounded border border-teal-200 bg-teal-50 px-1.5 py-0.5 text-[11px] font-medium text-teal-700 dark:border-teal-800 dark:bg-teal-950/40 dark:text-teal-300">
         {content}
       </span>
     );
@@ -30,7 +34,8 @@ function JudgmentCite({ cite, currentLang }) {
       href={href}
       target="_blank"
       rel="noopener noreferrer"
-      className="inline-flex items-center gap-1 rounded border border-teal-200 bg-teal-50 px-1.5 py-0.5 font-mono text-[10px] font-medium text-teal-700 transition hover:border-teal-300 hover:bg-teal-100 dark:border-teal-800 dark:bg-teal-950/40 dark:text-teal-300 dark:hover:border-teal-700"
+      title={title}
+      className="inline-flex max-w-full items-center gap-1 rounded border border-teal-200 bg-teal-50 px-1.5 py-0.5 text-[11px] font-medium text-teal-700 transition hover:border-teal-300 hover:bg-teal-100 dark:border-teal-800 dark:bg-teal-950/40 dark:text-teal-300 dark:hover:border-teal-700"
     >
       {content}
     </a>
@@ -38,6 +43,7 @@ function JudgmentCite({ cite, currentLang }) {
 }
 
 export function ArticleCaseLawDigest({ celex, articleNumber, currentLang = "EN", enabled = true }) {
+  const { t } = useI18n();
   const [digest, setDigest] = useState(null);
   const [metadata, setMetadata] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -54,11 +60,10 @@ export function ArticleCaseLawDigest({ celex, articleNumber, currentLang = "EN",
 
   useEffect(() => {
     if (!enabled || !celex || !articleNumber || loaded) return;
-    const ctrl = new AbortController();
     let cancelled = false;
 
     setLoading(true);
-    fetchArticleCaseLawDigest(celex, articleNumber, currentLang, { signal: ctrl.signal })
+    fetchArticleCaseLawDigest(celex, articleNumber, currentLang)
       .then((payload) => {
         if (cancelled) return;
         setDigest(payload.digest || null);
@@ -70,7 +75,7 @@ export function ArticleCaseLawDigest({ celex, articleNumber, currentLang = "EN",
         setLoaded(true);
       })
       .catch((err) => {
-        if (cancelled || err.name === "AbortError") return;
+        if (cancelled) return;
         setDigest(null);
         setMetadata(null);
         setLoaded(true);
@@ -82,9 +87,13 @@ export function ArticleCaseLawDigest({ celex, articleNumber, currentLang = "EN",
 
     return () => {
       cancelled = true;
-      ctrl.abort();
     };
   }, [celex, articleNumber, currentLang, enabled, loaded]);
+
+  const retry = useCallback(() => {
+    setError(null);
+    setLoaded(false);
+  }, []);
 
   if (!enabled) return null;
   if (digest?.noCaseLaw) return null;
@@ -99,8 +108,12 @@ export function ArticleCaseLawDigest({ celex, articleNumber, currentLang = "EN",
       ) : null}
 
       {error ? (
-        <div className="border-l-2 border-amber-300 pl-3 text-sm text-amber-800 dark:border-amber-700 dark:text-amber-200">
-          Case-law digest is not available yet.
+        <div className="flex flex-wrap items-center justify-between gap-3 border-l-2 border-amber-300 pl-3 text-sm text-amber-800 dark:border-amber-700 dark:text-amber-200">
+          <span>Case-law digest is not available yet.</span>
+          <Button type="button" variant="outline" size="sm" onClick={retry}>
+            <RefreshCw size={14} />
+            {t("common.retry")}
+          </Button>
         </div>
       ) : null}
 

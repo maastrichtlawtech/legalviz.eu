@@ -6,7 +6,7 @@ const { chatComplete } = require('./openrouter-chat');
 
 const CACHE_FILE = 'article-digest-cache-v1.json';
 const CACHE_VERSION = 1;
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
 const PROMPT_VERSION = 1;
 const CASE_LAW_CACHE_VERSION = 'case-law-cache-v4';
 const MAX_ARTICLE_TEXT_CHARS = 5500;
@@ -202,6 +202,8 @@ function normalizeCites(value, input) {
       return {
         ecli: source.ecli || null,
         celex: source.celex,
+        caseNumber: source.caseNumber || null,
+        name: source.name || null,
         declarationNumber: normalizedDeclaration,
       };
     })
@@ -228,8 +230,15 @@ function parseArticleDigestJson(text, input) {
     .filter(Boolean)
     .slice(0, 6);
 
-  if (!summary) throw new Error('Digest is missing summary');
-  if (themes.length === 0) throw new Error('Digest is missing cited themes');
+  // A well-formed response can still fail to ground anything, e.g. when the
+  // matching cases have no parsed operative-part declarations to cite (older
+  // judgment HTML formats often don't parse cleanly). Treat that the same as
+  // "no case law" rather than throwing, so the outcome gets cached instead of
+  // re-invoking the model on every request for an article that can never
+  // produce a groundable digest.
+  if (!summary || themes.length === 0) {
+    return { summary: '', themes: [], noCaseLaw: true };
+  }
 
   return { summary, themes, noCaseLaw: false };
 }

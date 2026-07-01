@@ -1,6 +1,8 @@
 import { useState } from "react";
-import { ChevronDown, ChevronUp, Loader2, Sparkles } from "lucide-react";
+import { ChevronDown, ChevronUp, Loader2, RefreshCw, Sparkles } from "lucide-react";
 import { useLawSummary } from "../hooks/law-viewer/useLawSummary.js";
+import { useI18n } from "../i18n/useI18n.js";
+import { Button } from "./Button.jsx";
 
 function CitationChips({ citations, onArticleClick }) {
   if (!citations?.length) return null;
@@ -31,8 +33,9 @@ function CitedText({ block, onArticleClick }) {
 }
 
 export function LawSummary({ celex, lang = "EN", onArticleClick, className = "mb-6 border-y border-blue-100 py-3 dark:border-blue-950/70" }) {
-  const [open, setOpen] = useState(false);
-  const { summary, metadata, loading, loaded, error } = useLawSummary(celex, { lang, enabled: open });
+  const { t } = useI18n();
+  const [open, setOpen] = useState(true);
+  const { summary, metadata, loading, loaded, error, retry } = useLawSummary(celex, { lang });
 
   if (!celex) return null;
 
@@ -46,12 +49,7 @@ export function LawSummary({ celex, lang = "EN", onArticleClick, className = "mb
       >
         <span className="flex min-w-0 items-center gap-2">
           <Sparkles size={16} className="shrink-0 text-blue-700 dark:text-blue-300" />
-          <span className="font-semibold text-gray-900 dark:text-gray-100">Overview</span>
-          {metadata?.cached ? (
-            <span className="rounded bg-blue-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-blue-800 dark:bg-blue-900/50 dark:text-blue-200">
-              cached
-            </span>
-          ) : null}
+          <span className="font-semibold text-gray-900 dark:text-gray-100">AI Overview</span>
         </span>
         <span className="shrink-0 text-gray-500 dark:text-gray-400">
           {open ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
@@ -68,8 +66,12 @@ export function LawSummary({ celex, lang = "EN", onArticleClick, className = "mb
           ) : null}
 
           {error ? (
-            <div className="border-l-2 border-amber-300 pl-3 text-amber-800 dark:border-amber-700 dark:text-amber-200">
-              Overview is not available for this law yet.
+            <div className="flex flex-wrap items-center justify-between gap-3 border-l-2 border-amber-300 pl-3 text-amber-800 dark:border-amber-700 dark:text-amber-200">
+              <span>Overview is not available for this law yet.</span>
+              <Button type="button" variant="outline" size="sm" onClick={retry}>
+                <RefreshCw size={14} />
+                {t("common.retry")}
+              </Button>
             </div>
           ) : null}
 

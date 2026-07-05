@@ -1,4 +1,5 @@
 const fs = require("fs");
+const path = require("path");
 
 const { ClientError } = require("../shared/api-utils");
 const { createSearchHandler } = require("../search/search-route");
@@ -388,14 +389,44 @@ function registerApiRoutes(app, deps) {
       // parameter is ignored so other languages cannot trigger generation.
       const lang = 'ENG';
 
-      const parsed = await resolveParsedLaw(celex, lang, { skipFmxProbe: req.query.skipFmxProbe === '1' });
+      const skipFmxProbe = req.query.skipFmxProbe === '1';
       const result = await ensureLawSummary({
         celex,
         lang,
-        parsedLaw: parsed,
         cacheDir: FMX_DIR,
         apiKey: getStaticSummaryApiKey(),
         model: DEFAULT_STATIC_SUMMARY_MODEL,
+        // Resolve the raw FMX source without parsing it, so the summary
+        // service can validate its cache against the raw bytes and skip the
+        // (expensive) Formex parse on a hit.
+        getSource: skipFmxProbe ? null : async () => {
+          try {
+            const { servePath } = await prepareLawPayload(celex, lang);
+            return {
+              rawText: fs.readFileSync(servePath, 'utf8'),
+              sourceFile: path.relative(FMX_DIR, servePath),
+            };
+          } catch (err) {
+            if (err instanceof ClientError && err.statusCode === 404 && typeof fetchAndParseHtmlLaw === 'function') {
+              // No FMX for this law: defer to the HTML fallback in getParsedLaw.
+              return null;
+            }
+            throw err;
+          }
+        },
+        getParsedLaw: async (rawText) => {
+          if (rawText != null) {
+            return {
+              celex,
+              lang,
+              name: CELEX_NAMES[celex] || null,
+              format: 'combined-v1',
+              source: 'fmx',
+              ...(await parseFmxXml(rawText)),
+            };
+          }
+          return resolveParsedLaw(celex, lang, { skipFmxProbe: true });
+        },
       });
 
       res.json({

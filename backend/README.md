@@ -485,8 +485,6 @@ backend/
    ├─ fmx-service.js
    ├─ law-queries.js             # Shared SPARQL queries (metadata, amendments, implementing, case-law)
    ├─ case-law-parser.js         # Parses CJEU judgments (FMX + pre-2004 OJ HTML + Curia HTML)
-   ├─ article-bundle.js          # Preserved bundle assembler for future cross-corpus Ask work
-   ├─ article-qa-service.js      # Preserved planner + prompt logic for future Ask work
    ├─ article-digest-service.js  # Cached static article case-law digests
    ├─ law-summary-service.js     # Cached static law overviews
    ├─ openrouter-chat.js         # OpenRouter chat-completions wrapper

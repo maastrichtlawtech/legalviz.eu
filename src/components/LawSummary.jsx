@@ -35,8 +35,7 @@ function CitedText({ block, onArticleClick }) {
 export function LawSummary({ celex, lang = "EN", onArticleClick, className = "mb-6 border-y border-blue-100 py-3 dark:border-blue-950/70" }) {
   const { t } = useI18n();
   const [open, setOpen] = useState(true);
-  const { summary, metadata, loading, loaded, error, retry } = useLawSummary(celex);
-  const showEnglishOnlyNote = (lang || "EN").toUpperCase() !== "EN";
+  const { summary, metadata, loading, loaded, error, retry } = useLawSummary(celex, { lang });
 
   if (!celex) return null;
 
@@ -51,11 +50,6 @@ export function LawSummary({ celex, lang = "EN", onArticleClick, className = "mb
         <span className="flex min-w-0 items-center gap-2">
           <Sparkles size={16} className="shrink-0 text-blue-700 dark:text-blue-300" />
           <span className="font-semibold text-gray-900 dark:text-gray-100">AI Overview</span>
-          {showEnglishOnlyNote ? (
-            <span className="shrink-0 rounded border border-gray-200 px-1.5 py-0.5 text-[11px] font-medium text-gray-500 dark:border-gray-700 dark:text-gray-400">
-              English only
-            </span>
-          ) : null}
         </span>
         <span className="shrink-0 text-gray-500 dark:text-gray-400">
           {open ? <ChevronUp size={16} /> : <ChevronDown size={16} />}

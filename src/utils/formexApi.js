@@ -129,77 +129,6 @@ function createCombinedLawEnvelope(payload) {
   };
 }
 
-const API_JSON_CACHE_VERSION = 1;
-// After this age, cache-first entries are revalidated against the network
-// (still served from cache if the network is unavailable).
-const API_JSON_CACHE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
-
-function isApiJsonEnvelope(value) {
-  return !!value
-    && typeof value === "object"
-    && value.format === "api-json-v1"
-    && value.version === API_JSON_CACHE_VERSION
-    && typeof value.payload === "object"
-    && value.payload != null;
-}
-
-function createApiJsonEnvelope(payload) {
-  return {
-    format: "api-json-v1",
-    version: API_JSON_CACHE_VERSION,
-    cachedAt: Date.now(),
-    payload,
-  };
-}
-
-function shouldFallBackToCache(error) {
-  // Offline / network failures surface as TypeError from fetch; server-side
-  // trouble (5xx, rate limiting) is also worth papering over with a cached
-  // copy. Deliberate 4xx answers (e.g. 404) are not.
-  if (!(error instanceof FormexApiError)) return true;
-  return error.status >= 500 || error.status === 429;
-}
-
-/**
- * Fetch a JSON API response with IndexedDB caching so previously opened
- * laws stay readable offline.
- *
- * `cacheFirst: true` serves a cached copy immediately (revalidating only
- * once it is older than `maxAgeMs`); otherwise the network is tried first
- * and the cache is used as an offline fallback.
- */
-async function fetchJsonWithCache({
-  cacheKey,
-  url,
-  errorLabel,
-  cacheFirst = false,
-  maxAgeMs = API_JSON_CACHE_MAX_AGE_MS,
-}) {
-  const cached = await cacheGet(cacheKey);
-  const envelope = isApiJsonEnvelope(cached) ? cached : null;
-
-  if (cacheFirst && envelope && Date.now() - envelope.cachedAt < maxAgeMs) {
-    console.log(`[FormexAPI] Cache hit: ${cacheKey}`);
-    return { ...envelope.payload, cached: true, localCached: true };
-  }
-
-  try {
-    const res = await apiFetch(url);
-    if (!res.ok) {
-      await readApiError(res, `${errorLabel} (${res.status})`);
-    }
-    const payload = await res.json();
-    await cacheSet(cacheKey, createApiJsonEnvelope(payload));
-    return payload;
-  } catch (error) {
-    if (envelope && shouldFallBackToCache(error)) {
-      console.log(`[FormexAPI] Serving stale cache after fetch failure: ${cacheKey}`);
-      return { ...envelope.payload, cached: true, localCached: true };
-    }
-    throw error;
-  }
-}
-
 function isRecitalTitleEnvelope(value) {
   return !!value
     && typeof value === "object"
@@ -659,27 +588,36 @@ export async function resolveEurlexUrl(sourceUrl, lang = "EN") {
 }
 
 export async function fetchAmendments(celex) {
-  return getInFlightRequest(`amendments:${celex}`, () => fetchJsonWithCache({
-    cacheKey: `${celex}_amendments`,
-    url: `${API_BASE}/api/laws/${encodeURIComponent(celex)}/amendments`,
-    errorLabel: "Amendment history fetch failed",
-  }));
+  const url = `${API_BASE}/api/laws/${encodeURIComponent(celex)}/amendments`;
+  const res = await apiFetch(url);
+
+  if (!res.ok) {
+    await readApiError(res, `Amendment history fetch failed (${res.status})`);
+  }
+
+  return res.json();
 }
 
 export async function fetchLawMetadata(celex) {
-  return getInFlightRequest(`metadata:${celex}`, () => fetchJsonWithCache({
-    cacheKey: `${celex}_metadata`,
-    url: `${API_BASE}/api/laws/${encodeURIComponent(celex)}/metadata`,
-    errorLabel: "Metadata fetch failed",
-  }));
+  const url = `${API_BASE}/api/laws/${encodeURIComponent(celex)}/metadata`;
+  const res = await apiFetch(url);
+
+  if (!res.ok) {
+    await readApiError(res, `Metadata fetch failed (${res.status})`);
+  }
+
+  return res.json();
 }
 
 export async function fetchCaseLaw(celex) {
-  return getInFlightRequest(`case-law:${celex}`, () => fetchJsonWithCache({
-    cacheKey: `${celex}_case_law`,
-    url: `${API_BASE}/api/laws/${encodeURIComponent(celex)}/case-law`,
-    errorLabel: "Case law fetch failed",
-  }));
+  const url = `${API_BASE}/api/laws/${encodeURIComponent(celex)}/case-law`;
+  const res = await apiFetch(url);
+
+  if (!res.ok) {
+    await readApiError(res, `Case law fetch failed (${res.status})`);
+  }
+
+  return res.json();
 }
 
 export async function fetchRecitalTitles(celex, lang = "EN") {
@@ -709,35 +647,45 @@ export async function fetchRecitalTitles(celex, lang = "EN") {
   });
 }
 
-// Law summaries are generated in English only for now, regardless of the
-// reading language.
-export async function fetchLawSummary(celex) {
-  const key = `${celex}_ENG_summary`;
-  return getInFlightRequest(`law-summary:${key}`, () => fetchJsonWithCache({
-    cacheKey: key,
-    url: `${API_BASE}/api/laws/${encodeURIComponent(celex)}/summary?lang=ENG`,
-    errorLabel: "Law summary fetch failed",
-    cacheFirst: true,
-  }));
+export async function fetchLawSummary(celex, lang = "EN") {
+  const apiLang = toApiLang(lang);
+  const key = `${celex}_${apiLang}`;
+  return getInFlightRequest(`law-summary:${key}`, async () => {
+    const url = `${API_BASE}/api/laws/${encodeURIComponent(celex)}/summary?lang=${apiLang}`;
+    const res = await apiFetch(url);
+
+    if (!res.ok) {
+      await readApiError(res, `Law summary fetch failed (${res.status})`);
+    }
+
+    return res.json();
+  });
 }
 
 export async function fetchArticleCaseLawDigest(celex, articleNumber, lang = "EN") {
   const apiLang = toApiLang(lang);
-  const key = `${celex}_${apiLang}_digest_${articleNumber}`;
-  return getInFlightRequest(`article-case-law-digest:${key}`, () => fetchJsonWithCache({
-    cacheKey: key,
-    url: `${API_BASE}/api/laws/${encodeURIComponent(celex)}/articles/${encodeURIComponent(articleNumber)}/case-law-digest?lang=${apiLang}`,
-    errorLabel: "Article case-law digest fetch failed",
-    cacheFirst: true,
-  }));
+  const key = `${celex}_${articleNumber}_${apiLang}`;
+  return getInFlightRequest(`article-case-law-digest:${key}`, async () => {
+    const url = `${API_BASE}/api/laws/${encodeURIComponent(celex)}/articles/${encodeURIComponent(articleNumber)}/case-law-digest?lang=${apiLang}`;
+    const res = await apiFetch(url);
+
+    if (!res.ok) {
+      await readApiError(res, `Article case-law digest fetch failed (${res.status})`);
+    }
+
+    return res.json();
+  });
 }
 
 export async function fetchImplementingActs(celex) {
-  return getInFlightRequest(`implementing:${celex}`, () => fetchJsonWithCache({
-    cacheKey: `${celex}_implementing`,
-    url: `${API_BASE}/api/laws/${encodeURIComponent(celex)}/implementing`,
-    errorLabel: "Implementing acts fetch failed",
-  }));
+  const url = `${API_BASE}/api/laws/${encodeURIComponent(celex)}/implementing`;
+  const res = await apiFetch(url);
+
+  if (!res.ok) {
+    await readApiError(res, `Implementing acts fetch failed (${res.status})`);
+  }
+
+  return res.json();
 }
 
 export async function searchLaws(query, { limit = 10, noRewrite = false, signal } = {}) {

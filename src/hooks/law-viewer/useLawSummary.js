@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { fetchLawSummary } from "../../utils/formexApi.js";
 
-export function useLawSummary(celex, { enabled = true } = {}) {
+export function useLawSummary(celex, { lang = "EN", enabled = true } = {}) {
   const [summary, setSummary] = useState(null);
   const [metadata, setMetadata] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -14,14 +14,14 @@ export function useLawSummary(celex, { enabled = true } = {}) {
     setLoaded(false);
     setLoading(false);
     setError(null);
-  }, [celex]);
+  }, [celex, lang]);
 
   useEffect(() => {
     if (!celex || !enabled || loaded) return;
     let cancelled = false;
 
     setLoading(true);
-    fetchLawSummary(celex)
+    fetchLawSummary(celex, lang)
       .then((payload) => {
         if (cancelled) return;
         setSummary(payload.summary || null);
@@ -46,7 +46,7 @@ export function useLawSummary(celex, { enabled = true } = {}) {
     return () => {
       cancelled = true;
     };
-  }, [celex, enabled, loaded]);
+  }, [celex, lang, enabled, loaded]);
 
   const retry = useCallback(() => {
     setError(null);

@@ -9,6 +9,7 @@ const {
 } = require("./legal-cache-store");
 
 const fixturePath = path.join(__dirname, "__fixtures__", "search-fixture.json");
+const eurovocFixturePath = path.join(__dirname, "__fixtures__", "eurovoc-fixture.json");
 
 test("legal cache store loads fixture successfully", () => {
   const store = new JsonLegalCacheStore(fixturePath);
@@ -114,6 +115,51 @@ test("legal cache store searchLaws clamps the result limit", () => {
 
   assert.equal(store.searchLaws("regulation", { limit: 1 }).length, 1);
   assert.equal(store.searchLaws("regulation", { limit: 1000 }).length <= 50, true);
+});
+
+test("legal cache store attaches EuroVoc topics from the sidecar", () => {
+  const store = new JsonLegalCacheStore(fixturePath, eurovocFixturePath);
+  store.load();
+
+  const match = store.getByCelex("32016R0679");
+  assert.deepEqual(match?.eurovoc, [
+    "data protection",
+    "personal data",
+    "protection of privacy",
+    "data transfer",
+    "approximation of laws",
+    "EU Member State",
+    "electronic data processing",
+  ]);
+});
+
+test("legal cache store caps searchLaws topics at 5 and defaults to empty array without a sidecar entry", () => {
+  const store = new JsonLegalCacheStore(fixturePath, eurovocFixturePath);
+  store.load();
+
+  const [gdpr] = store.searchLaws("32016R0679", { limit: 1 });
+  assert.equal(gdpr.topics.length, 5);
+  assert.deepEqual(gdpr.topics, [
+    "data protection",
+    "personal data",
+    "protection of privacy",
+    "data transfer",
+    "approximation of laws",
+  ]);
+
+  const [dataAct] = store.searchLaws("32023R2854", { limit: 1 });
+  assert.deepEqual(dataAct.topics, []);
+});
+
+test("legal cache store degrades gracefully when the EuroVoc sidecar is missing", () => {
+  const missingEurovocPath = path.join(os.tmpdir(), `missing-eurovoc-${Date.now()}.json`);
+  const store = new JsonLegalCacheStore(fixturePath, missingEurovocPath);
+
+  assert.equal(store.load(), true);
+  assert.equal(store.getStatus().ready, true);
+
+  const [gdpr] = store.searchLaws("32016R0679", { limit: 1 });
+  assert.deepEqual(gdpr.topics, []);
 });
 
 test("legal cache store returns null for ambiguous official reference key", () => {

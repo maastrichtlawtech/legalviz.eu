@@ -11,6 +11,9 @@ const {
 const DEFAULT_SEARCH_CACHE_PATH = process.env.SEARCH_CACHE_PATH ||
   path.join(__dirname, "data", "search-cache.json");
 
+const DEFAULT_EUROVOC_DATA_PATH = process.env.EUROVOC_DATA_PATH ||
+  path.join(__dirname, "data", "eurovoc.json");
+
 const SUPPLEMENTAL_RECORDS = [
   {
     celex: "32000L0031",
@@ -92,6 +95,16 @@ function buildCanonicalEliFromReference(reference) {
   return `http://data.europa.eu/eli/${segment}/${year}/${number}/oj`;
 }
 
+function loadEurovocSidecar(eurovocPath) {
+  try {
+    if (!fs.existsSync(eurovocPath)) return {};
+    const parsed = JSON.parse(fs.readFileSync(eurovocPath, "utf8"));
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
 function getDeterministicMatch(index, key) {
   if (!key) return null;
   const matches = index.get(key) || [];
@@ -121,8 +134,9 @@ function buildMiniSearch(records) {
 }
 
 class JsonLegalCacheStore {
-  constructor(cachePath = DEFAULT_SEARCH_CACHE_PATH) {
+  constructor(cachePath = DEFAULT_SEARCH_CACHE_PATH, eurovocPath = DEFAULT_EUROVOC_DATA_PATH) {
     this.cachePath = cachePath;
+    this.eurovocPath = eurovocPath;
     this.payload = null;
     this.records = [];
     this.loadedAt = null;
@@ -157,6 +171,8 @@ class JsonLegalCacheStore {
           .filter((record) => record.isPrimaryAct)
         : [];
 
+      const eurovocData = loadEurovocSidecar(this.eurovocPath);
+
       this.payload = parsed;
       this.records = records;
       this.byCelex = new Map();
@@ -165,6 +181,8 @@ class JsonLegalCacheStore {
       this.byAlias = new Map();
 
       for (const record of records) {
+        record.eurovoc = eurovocData[record.celex] || [];
+
         const celexKey = normalizeCelexLookupKey(record.celex);
         if (celexKey) {
           this.byCelex.set(celexKey, [record]);
@@ -288,6 +306,7 @@ class JsonLegalCacheStore {
         eli: law.eli || null,
         fmxAvailable: Boolean(law.fmxAvailable),
         matchReason: determineMatchReason(law, parsed),
+        topics: (law.eurovoc || []).slice(0, 5),
       }));
   }
 
@@ -306,6 +325,7 @@ class JsonLegalCacheStore {
 
 module.exports = {
   buildCanonicalEliFromReference,
+  DEFAULT_EUROVOC_DATA_PATH,
   DEFAULT_SEARCH_CACHE_PATH,
   JsonLegalCacheStore,
   normalizeCelexLookupKey,

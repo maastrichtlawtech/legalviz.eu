@@ -62,7 +62,8 @@ test("search route returns results payload", () => {
           date: "2016-04-27",
           eli: "http://data.europa.eu/eli/reg/2016/679/oj",
           fmxAvailable: true,
-          matchReason: "alias_exact"
+          matchReason: "alias_exact",
+          topics: ["data protection", "personal data"]
         }
       ];
     }
@@ -73,4 +74,5 @@ test("search route returns results payload", () => {
   assert.equal(res.payload.query, "gdpr");
   assert.equal(res.payload.count, 1);
   assert.equal(res.payload.results[0].celex, "32016R0679");
+  assert.deepEqual(res.payload.results[0].topics, ["data protection", "personal data"]);
 });

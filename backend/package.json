@@ -12,6 +12,7 @@
     "dev": "node --env-file-if-exists=../.env --env-file-if-exists=.env --watch server.js",
     "stats": "node --env-file-if-exists=../.env --env-file-if-exists=.env bin/stats.js",
     "build:search-cache": "node search/search-build.js",
+    "build:search-eurovoc": "node search/fetch-eurovoc.js",
     "test": "node --test search/*.test.js shared/*.test.js routes/*.test.js bin/*.test.js",
     "test:search": "node --test search/*.test.js"
   },

@@ -822,6 +822,18 @@ export function SearchBox({
                                   {lawDisplay.metaLine}
                                 </p>
                               ) : null}
+                              {Array.isArray(item.topics) && item.topics.length > 0 ? (
+                                <div className="flex flex-wrap gap-1 pl-1">
+                                  {item.topics.slice(0, 3).map((topic) => (
+                                    <span
+                                      key={topic}
+                                      className="flex-shrink-0 text-[10px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full font-medium truncate max-w-[10rem] dark:bg-gray-800 dark:text-gray-400"
+                                    >
+                                      {topic}
+                                    </span>
+                                  ))}
+                                </div>
+                              ) : null}
                             </>
                           ) : (
                             <p className="text-sm text-gray-500 line-clamp-2 pl-1 leading-relaxed dark:text-gray-300">

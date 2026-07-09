@@ -183,8 +183,45 @@ cat input.xml | parse-fmx > output.json
 | `GET` | `/api/search?q=keyword&limit=10` | Search law metadata |
 | `GET` | `/api/resolve-reference?actType=...&year=...&number=...` | Resolve legal reference to CELEX |
 | `GET` | `/api/resolve-url?url=...` | Resolve EUR-Lex URL to CELEX |
+| `POST` | `/mcp` | Model Context Protocol endpoint (see [MCP server](#mcp-server)) |
 
 `/api/search` searches a local metadata cache of primary regulations/directives/decisions.
+
+## MCP server
+
+The backend also exposes its EU-law data as a [Model Context Protocol](https://modelcontextprotocol.io) server at **`POST /mcp`** (stateless Streamable HTTP). This lets people query EU law from inside AI assistants (Claude, ChatGPT, Cursor, …) without any coding — they add one URL as a connector. It reuses the same services, caches, and rate limiting as the REST API; no separate process or deployment.
+
+**Tools** (structured primary-law data only — no AI summaries):
+
+| Tool | Purpose |
+|------|---------|
+| `search_eu_law` | Find a law's CELEX id by keyword, title, or citation |
+| `resolve` | Turn a citation ("Directive 2018/1972"), a CELEX id, or an EUR-Lex URL into a CELEX |
+| `get_law_part` | Read a slice of a law: `structure` (table of contents), `article`, `recital` (with cached AI title when available), `annex`, or `definitions` |
+| `get_case_law` | List CJEU judgments interpreting a law |
+| `get_law_relations` | Amendments/corrigenda and implementing acts for a law |
+
+`get_law_part` never returns a whole law at once — call `structure` first for the map, then request individual articles/recitals. The first fetch of an uncached law can take up to ~30s (downloaded from EUR-Lex); subsequent calls are fast.
+
+### Add it to an AI client
+
+```bash
+# Claude Code
+claude mcp add --transport http eurlex https://api.legalviz.eu/mcp
+
+# Local dev
+claude mcp add --transport http eurlex-local http://localhost:3000/mcp
+```
+
+- **Claude.ai / Claude Desktop**: Settings → Connectors → add custom connector with the `/mcp` URL.
+- **Cursor / VS Code / Windsurf**: add an entry to the client's MCP config, e.g.
+  ```json
+  { "mcpServers": { "eurlex": { "url": "https://api.legalviz.eu/mcp" } } }
+  ```
+
+### Analytics
+
+`/api/_stats` reports request counts split by **channel** — `web` (own frontend, tagged via the `x-legalviz-client: web` header), `api` (direct REST callers), and `mcp` — under `channels` (all-time) and `dayChannels` (per day). Individual MCP tool calls appear in `topRoutes` as `mcp:<tool>`.
 
 ### Case-law endpoint
 

@@ -5,6 +5,7 @@ const os = require("node:os");
 const path = require("node:path");
 
 const { registerApiRoutes } = require("./api-routes");
+const { createParsedLawResolver } = require("../shared/parsed-law-service");
 const { createReferenceResolver } = require("../shared/reference-utils");
 const { ClientError, cacheGet, cacheSet, safeErrorResponse, toSearchLang } = require("../shared/api-utils");
 const { JsonLegalCacheStore } = require("../search/legal-cache-store");
@@ -77,7 +78,7 @@ function registerTestRoutes(overrides = {}) {
   const store = new JsonLegalCacheStore(fixturePath);
   store.load();
 
-  registerApiRoutes(app, {
+  const deps = {
     CELEX_NAMES: {},
     EURLEX_BASE: "https://eur-lex.europa.eu",
     FMX_DIR: path.join(__dirname, "..", "fmx-downloads"),
@@ -131,7 +132,17 @@ function registerTestRoutes(overrides = {}) {
     validateCelex: () => true,
     validateLang: (lang) => String(lang || "ENG").toUpperCase(),
     ...overrides,
-  });
+  };
+
+  if (!deps.resolveParsedLaw) {
+    deps.resolveParsedLaw = createParsedLawResolver({
+      prepareLawPayload: deps.prepareLawPayload,
+      fetchAndParseHtmlLaw: deps.fetchAndParseHtmlLaw,
+      CELEX_NAMES: deps.CELEX_NAMES,
+    });
+  }
+
+  registerApiRoutes(app, deps);
 
   return { app, store };
 }

@@ -2,7 +2,6 @@ const fs = require("fs");
 
 const { ClientError } = require("../shared/api-utils");
 const { createSearchHandler } = require("../search/search-route");
-const { parseFmxXml } = require("../shared/fmx-parser-node");
 const { fetchMetadata, fetchAmendments, fetchImplementing, fetchCaseLaw } = require("../shared/law-queries");
 const { ChatProviderError } = require("../shared/openrouter-chat");
 const { ensureRecitalTitles } = require("../shared/recital-title-service");
@@ -77,7 +76,6 @@ function registerApiRoutes(app, deps) {
     cacheSet,
     findDownloadUrls,
     findFmx4Uri,
-    fetchAndParseHtmlLaw,
     parseReferenceText,
     parseStructuredReference,
     prepareLawPayload,
@@ -85,6 +83,7 @@ function registerApiRoutes(app, deps) {
     resolutionCache,
     legalCacheStore,
     resolveEurlexUrl,
+    resolveParsedLaw,
     resolveReference,
     runSparqlQuery,
     safeErrorResponse,
@@ -92,41 +91,6 @@ function registerApiRoutes(app, deps) {
     validateCelex,
     validateLang
   } = deps;
-
-  async function resolveParsedLaw(celex, lang, { skipFmxProbe = false } = {}) {
-    let parsed = null;
-    let source = 'fmx';
-
-    if (!skipFmxProbe) {
-      try {
-        const { servePath } = await prepareLawPayload(celex, lang);
-        const xmlText = fs.readFileSync(servePath, 'utf8');
-        parsed = await parseFmxXml(xmlText);
-      } catch (err) {
-        if (!(err instanceof ClientError) || err.statusCode !== 404 || typeof fetchAndParseHtmlLaw !== 'function') {
-          throw err;
-        }
-        parsed = await fetchAndParseHtmlLaw(celex, lang);
-        source = parsed.source || 'eurlex-html';
-      }
-    } else if (typeof fetchAndParseHtmlLaw === 'function') {
-      parsed = await fetchAndParseHtmlLaw(celex, lang);
-      source = parsed.source || 'eurlex-html';
-    } else {
-      const { servePath } = await prepareLawPayload(celex, lang);
-      const xmlText = fs.readFileSync(servePath, 'utf8');
-      parsed = await parseFmxXml(xmlText);
-    }
-
-    return {
-      celex,
-      lang,
-      name: CELEX_NAMES[celex] || null,
-      format: 'combined-v1',
-      source,
-      ...parsed,
-    };
-  }
 
   app.get('/health', (req, res) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
@@ -586,7 +550,8 @@ function registerApiRoutes(app, deps) {
         'GET /api/laws/:celex/articles/:n/case-law-digest?lang=ENG': 'Get cached static digest of CJEU case law interpreting one article',
         'GET /api/search?q=keyword&limit=10': 'Search cached primary-law metadata',
         'GET /api/resolve-reference?actType=directive&year=2018&number=1972&lang=ENG': 'Resolve an FMX-derived legal reference to CELEX via cache-first lookup with Cellar fallback',
-        'GET /api/resolve-url?url=https://eur-lex.europa.eu/...&lang=ENG': 'Resolve a full EUR-Lex URL to a canonical CELEX'
+        'GET /api/resolve-url?url=https://eur-lex.europa.eu/...&lang=ENG': 'Resolve a full EUR-Lex URL to a canonical CELEX',
+        'POST /mcp': 'Model Context Protocol endpoint (stateless Streamable HTTP). Tools: search_eu_law, resolve, get_law_part, get_case_law, get_law_relations. Add to an AI client, e.g. `claude mcp add --transport http eurlex <base-url>/mcp`'
       },
       celexExamples: {
         '32016R0679': 'GDPR',

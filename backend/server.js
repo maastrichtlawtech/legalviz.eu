@@ -4,6 +4,8 @@ const fs = require('fs');
 const path = require('path');
 const { JsonLegalCacheStore, DEFAULT_SEARCH_CACHE_PATH } = require('./search/search-index');
 const { registerApiRoutes } = require('./routes/api-routes');
+const { registerMcpEndpoint } = require('./mcp/mcp-http');
+const { createParsedLawResolver } = require('./shared/parsed-law-service');
 const { createFmxService } = require('./shared/fmx-service');
 const { fetchEurlexHtmlLaw, parseEurlexHtmlToCombined, closeSharedPlaywrightBrowser } = require('./shared/eurlex-html-parser');
 const { createHtmlCacheService } = require('./shared/html-cache-service');
@@ -168,6 +170,12 @@ async function fetchAndParseHtmlLawCached(celex, lang) {
   };
 }
 
+const resolveParsedLaw = createParsedLawResolver({
+  prepareLawPayload,
+  fetchAndParseHtmlLaw: fetchAndParseHtmlLawCached,
+  CELEX_NAMES,
+});
+
 registerApiRoutes(app, {
   analytics,
   CELEX_NAMES,
@@ -179,7 +187,6 @@ registerApiRoutes(app, {
   cacheSet,
   findDownloadUrls,
   findFmx4Uri,
-  fetchAndParseHtmlLaw: fetchAndParseHtmlLawCached,
   legalCacheStore,
   parseReferenceText,
   parseStructuredReference,
@@ -187,6 +194,7 @@ registerApiRoutes(app, {
   rateLimitMiddleware,
   resolutionCache,
   resolveEurlexUrl,
+  resolveParsedLaw,
   resolveReference,
   resolveReferenceViaCellar,
   runSparqlQuery,
@@ -196,8 +204,20 @@ registerApiRoutes(app, {
   validateLang
 });
 
+registerMcpEndpoint(app, {
+  analytics,
+  legalCacheStore,
+  resolveEurlexUrl,
+  resolveParsedLaw,
+  resolveReference,
+  runSparqlQuery,
+  rateLimitMiddleware,
+  FMX_DIR: CACHE_DIR,
+});
+
 const server = app.listen(PORT, () => {
   console.log(`EUR-Lex FMX API running on port ${PORT}`);
+  console.log(`MCP endpoint: POST /mcp (Streamable HTTP)`);
   console.log(`Cache directory: ${CACHE_DIR} (FMX: ${STORAGE_LIMIT_MB} MB, HTML: ${HTML_CACHE_LIMIT_MB} MB)`);
   console.log(`Rate limit: ${RATE_LIMIT_MAX} req/15min per IP`);
   console.log(`Search cache: ${legalCacheStore.getStatus().ready ? 'loaded' : 'not loaded'} (${legalCacheStore.cachePath})`);

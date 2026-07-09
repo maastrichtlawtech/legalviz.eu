@@ -191,8 +191,34 @@ async function ensureRecitalTitles({ celex, lang, recitals, cacheDir, apiKey, mo
   return { titles, model, cached: false };
 }
 
+/**
+ * Read cached recital titles without ever generating (no OpenRouter call).
+ * Returns the cached titles only when they match the current recital content
+ * (same version + content hash), regardless of which model produced them.
+ * Used by the MCP `get_law_part` structure view, which must never block on or
+ * pay for generation.
+ */
+function getCachedRecitalTitles({ celex, lang, recitals, cacheDir }) {
+  if (!cacheDir) return { titles: {}, cached: false };
+  const hash = contentHash(recitals);
+  const key = cacheKey(celex, lang);
+  const cache = loadCache(cacheDir);
+  const cached = cache[key];
+
+  if (
+    cached?.version === CACHE_VERSION
+    && cached?.contentHash === hash
+    && hasTitles(cached?.titles)
+  ) {
+    return { titles: cached.titles, model: cached.model || null, cached: true };
+  }
+
+  return { titles: {}, cached: false };
+}
+
 module.exports = {
   ensureRecitalTitles,
   generateRecitalTitles,
+  getCachedRecitalTitles,
   parseTitleJson,
 };

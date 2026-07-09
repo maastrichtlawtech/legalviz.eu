@@ -12,7 +12,7 @@
     "dev": "node --env-file-if-exists=../.env --env-file-if-exists=.env --watch server.js",
     "stats": "node --env-file-if-exists=../.env --env-file-if-exists=.env bin/stats.js",
     "build:search-cache": "node search/search-build.js",
-    "test": "node --test search/*.test.js shared/*.test.js routes/*.test.js bin/*.test.js",
+    "test": "node --test search/*.test.js shared/*.test.js routes/*.test.js bin/*.test.js mcp/*.test.js",
     "test:search": "node --test search/*.test.js"
   },
   "keywords": [
@@ -24,10 +24,12 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "cors": "^2.8.5",
     "express": "^4.18.2",
     "jsdom": "^29.0.1",
-    "playwright-core": "^1.58.2"
+    "playwright-core": "^1.58.2",
+    "zod": "^4.4.3"
   },
   "optionalDependencies": {
     "adm-zip": "^0.5.16"

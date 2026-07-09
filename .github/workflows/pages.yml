@@ -16,6 +16,7 @@ jobs:
       - uses: actions/setup-node@v5
         with: { node-version: '24' }
       - run: npm ci
+      - run: npm ci --prefix backend
       - run: npm test
       - run: npm run build
       - uses: actions/upload-pages-artifact@v4

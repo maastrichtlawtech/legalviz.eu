@@ -15,7 +15,13 @@ const CASES = [
   ["data governance act", "32022R0868"],
   ["ecommerce", "32000L0031"],
   ["eprivacy", "32002L0058"],
-  ["payment services directive", "32015L2366"]
+  ["payment services directive", "32015L2366"],
+  ["genral data protection", "32016R0679"],
+  ["artifical intelligence act", "32024R1689"],
+  ["digital mark", "32022R1925"],
+  ["csrd", "32022L2464"],
+  ["mica", "32023R1114"],
+  ["emfa", "32024R1083"]
 ];
 
 test("search regression fixture queries rank expected law first without rewrites", () => {

@@ -36,7 +36,7 @@ const TIMEOUT_MS = 30_000;
 
 // === Rate Limiting ===
 const RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000; // 15 minutes
-const RATE_LIMIT_MAX = parseInt(process.env.RATE_LIMIT_MAX) || 100; // requests per window
+const RATE_LIMIT_MAX = parseInt(process.env.RATE_LIMIT_MAX) || 500; // requests per window (shared across all /api endpoints; one law view is ~6+ calls)
 
 // === Storage limits (each type evicts independently within the shared dir) ===
 const STORAGE_LIMIT_MB = parseInt(process.env.STORAGE_LIMIT_MB) || 500; // FMX files

@@ -28,7 +28,13 @@ const KNOWN_ALIASES = {
   "32022R1925": ["digital markets act"],
   "32022R2065": ["digital services act"],
   "32023R2854": ["data act"],
-  "32024R1689": ["ai act", "artificial intelligence act"]
+  "32024R1689": ["ai act", "artificial intelligence act"],
+  "32022L2464": ["csrd"],
+  "32023R1114": ["mica"],
+  "32024R1083": ["emfa", "european media freedom act"],
+  "32024L1799": ["right to repair"],
+  "32024R2847": ["cyber resilience act", "cra"],
+  "32024L2831": ["platform work directive"]
 };
 
 const QUERY_REWRITES = new Map([
@@ -267,94 +273,13 @@ function determineMatchReason(law, parsed) {
   return "token_match";
 }
 
-function scoreLaw(law, query, options = {}) {
-  const parsed = parseStructuredQuery(query, options);
-  const normalizedQuery = parsed.normalized;
-  const compactQuery = parsed.compact;
-  const terms = parsed.terms;
-  const title = law.normalizedTitle || normalizeText(law.title);
-  const celex = law.normalizedCelex || normalizeText(law.celex);
-  const eli = law.normalizedEli || normalizeText(law.eli);
-  const aliases = Array.isArray(law.aliases) ? law.aliases : [];
-  const compactTitle = compactText(law.title);
-  const compactEli = compactText(law.eli);
-  const compactCelex = compactText(law.celex);
-
-  let score = 0;
-  const queryMentionsAct = /\bact\b/i.test(String(query || ""));
-  const queryMentionsDirective = /\bdirective\b/i.test(parsed.originalQuery);
-  const queryMentionsRegulation = /\bregulation\b/i.test(parsed.originalQuery);
-
-  if (law.isPrimaryAct) score += 120;
-  if (law.eliKind === "implementing") score -= 180;
-  if (law.eliKind === "delegated") score -= 180;
-  if (law.eliKind === "corrigendum" || isCorrigendumCelex(law.celex)) score -= 300;
-  if (!parsed.type && law.type === "regulation") score += 30;
-  if (!parsed.type && law.type === "directive") score += 25;
-  if (!parsed.type && law.type === "decision") score -= 40;
-  if (queryMentionsAct && law.type === "decision") score -= 80;
-  if (queryMentionsDirective && law.type === "directive") score += 80;
-  if (queryMentionsDirective && law.type === "regulation") score -= 40;
-  if (queryMentionsRegulation && law.type === "regulation") score += 80;
-  if (queryMentionsRegulation && law.type === "directive") score -= 40;
-
-  if (celex === normalizedQuery) score += 200;
-  if (aliases.includes(normalizedQuery)) score += 160;
-  if (compactQuery && aliases.includes(compactQuery)) score += 180;
-  if (title === normalizedQuery) score += 140;
-  if (title.includes(normalizedQuery)) score += 80;
-  if (compactQuery && compactTitle === compactQuery) score += 140;
-  if (compactQuery && compactTitle.includes(compactQuery)) score += 80;
-
-  if (parsed.celex && law.celex === parsed.celex) score += 600;
-
-  if (parsed.type && parsed.type === law.type) score += 50;
-  if (parsed.year && parsed.year === law.celexYear) score += 70;
-  if (parsed.number && parsed.number === law.celexNumber) score += 90;
-  if (parsed.type && parsed.year && parsed.number) {
-    if (parsed.type === law.type && parsed.year === law.celexYear && parsed.number === law.celexNumber) {
-      score += 450;
-    }
-  } else if (parsed.year && parsed.number) {
-    if (parsed.year === law.celexYear && parsed.number === law.celexNumber) {
-      score += 250;
-    }
-  }
-
-  for (const term of terms) {
-    if (title.includes(term)) score += 12;
-    if (eli.includes(term)) score += 8;
-    if (aliases.some((alias) => alias.includes(term))) score += 18;
-    if (celex.includes(term)) score += 25;
-    if (compactQuery && compactTitle.includes(term)) score += 8;
-  }
-
-  if (compactQuery) {
-    if (compactCelex === compactQuery) score += 200;
-    if (compactEli.includes(compactQuery)) score += 40;
-  }
-
-  if (terms.length > 1) {
-    const titleCoverage = terms.filter((term) => title.includes(term)).length;
-    const aliasCoverage = terms.filter((term) => aliases.some((alias) => alias.includes(term))).length;
-    score += titleCoverage * 10;
-    score += aliasCoverage * 12;
-    if (titleCoverage === terms.length) score += 60;
-    if (aliasCoverage === terms.length) score += 70;
-  }
-
-  return {
-    score,
-    matchReason: determineMatchReason(law, parsed)
-  };
-}
-
 module.exports = {
+  KNOWN_ALIASES,
   QUERY_REWRITES,
   compactText,
+  determineMatchReason,
   enrichSearchRecord,
   inferTypeFromCelex,
   normalizeText,
-  parseStructuredQuery,
-  scoreLaw
+  parseStructuredQuery
 };

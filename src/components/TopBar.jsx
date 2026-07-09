@@ -11,6 +11,10 @@ import { searchLaws as searchLawsApi } from "../utils/formexApi.js";
 import { buildImportedLawCandidate, getCanonicalLawRoute } from "../utils/lawRouting.js";
 import { saveLawMeta } from "../utils/library.js";
 
+// Law search hits the network per query, so wait for a typing pause before
+// firing to avoid a request per keystroke (which trips the API rate limiter).
+const LAW_SEARCH_DEBOUNCE_MS = 300;
+
 function inferOfficialReferenceFromCelex(celex) {
   const match = String(celex || "").match(/^3(\d{4})([RLD])0*(\d{1,4})(?:\(\d+\))?$/);
   if (!match) return null;
@@ -146,6 +150,7 @@ export function SearchBox({
   const modalInputRef = useRef(null);
   const resultsRef = useRef(null);
   const lawSearchAbortRef = useRef(null);
+  const lawSearchDebounceRef = useRef(null);
   const pendingSearchRef = useRef(null);
   const hasGlobalSearch = availableModes.includes("laws") || availableModes.includes("matches");
   const globalEntryCount = (effectiveGlobalLists?.articles?.length || 0)
@@ -265,10 +270,33 @@ export function SearchBox({
       });
   }, [t]);
 
+  // Debounced entry point for law search: clears any pending timer and only
+  // fires the network request once the user pauses typing.
+  const scheduleLawSearch = useCallback((nextQuery) => {
+    if (lawSearchDebounceRef.current) {
+      clearTimeout(lawSearchDebounceRef.current);
+      lawSearchDebounceRef.current = null;
+    }
+
+    // Empty/too-short queries reset immediately — no request, no spinner.
+    if (String(nextQuery || "").trim().length < 2) {
+      runLawSearch(nextQuery);
+      return;
+    }
+
+    // Show the loading state right away so typing feels responsive, but hold
+    // the actual request until the pause elapses.
+    setIsLawSearchLoading(true);
+    lawSearchDebounceRef.current = setTimeout(() => {
+      lawSearchDebounceRef.current = null;
+      runLawSearch(nextQuery);
+    }, LAW_SEARCH_DEBOUNCE_MS);
+  }, [runLawSearch]);
+
   const executeSearch = useCallback((mode, nextQuery) => {
     if (mode === "laws") {
       pendingSearchRef.current = null;
-      runLawSearch(nextQuery);
+      scheduleLawSearch(nextQuery);
       return;
     }
 
@@ -321,7 +349,7 @@ export function SearchBox({
     onSearchOpen,
     runCurrentSearch,
     runGlobalMatchSearch,
-    runLawSearch,
+    scheduleLawSearch,
     searchableLawCount,
   ]);
 
@@ -381,6 +409,9 @@ export function SearchBox({
 
   useEffect(() => () => {
     lawSearchAbortRef.current?.abort();
+    if (lawSearchDebounceRef.current) {
+      clearTimeout(lawSearchDebounceRef.current);
+    }
   }, []);
 
   useEffect(() => {
@@ -529,13 +560,11 @@ export function SearchBox({
     setResults([]);
     setLawSearchError("");
     if (isLawMode) {
-      if (query.trim().length >= 2) {
-        runLawSearch(query);
-      }
+      scheduleLawSearch(query);
       return;
     }
     executeSearch(searchMode, query);
-  }, [executeSearch, isLawMode, isOpen, query, runLawSearch, searchMode]);
+  }, [executeSearch, isLawMode, isOpen, query, scheduleLawSearch, searchMode]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -821,6 +850,18 @@ export function SearchBox({
                                 <p className="pl-1 text-sm leading-relaxed text-gray-500 dark:text-gray-400">
                                   {lawDisplay.metaLine}
                                 </p>
+                              ) : null}
+                              {Array.isArray(item.topics) && item.topics.length > 0 ? (
+                                <div className="flex flex-wrap gap-1 pl-1">
+                                  {item.topics.slice(0, 3).map((topic) => (
+                                    <span
+                                      key={topic}
+                                      className="flex-shrink-0 text-[10px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full font-medium truncate max-w-[10rem] dark:bg-gray-800 dark:text-gray-400"
+                                    >
+                                      {topic}
+                                    </span>
+                                  ))}
+                                </div>
                               ) : null}
                             </>
                           ) : (

@@ -162,6 +162,42 @@ test("legal cache store degrades gracefully when the EuroVoc sidecar is missing"
   assert.deepEqual(gdpr.topics, []);
 });
 
+test("legal cache store stays searchable when a CELEX is duplicated", () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "legal-cache-store-"));
+  const tempPath = path.join(tempDir, "duplicate-celex.json");
+  fs.writeFileSync(tempPath, JSON.stringify({
+    generatedAt: "2026-03-28T00:00:00.000Z",
+    count: 2,
+    records: [
+      {
+        celex: "32020R0123",
+        title: "Regulation (EU) 2020/123 on widgets",
+        type: "regulation",
+        date: "2020-01-01",
+        eli: "http://data.europa.eu/eli/reg/2020/123/oj",
+        fmxAvailable: true,
+        fmxUnavailable: false,
+      },
+      {
+        celex: "32020R0123",
+        title: "Regulation (EU) 2020/123 on widgets duplicate",
+        type: "regulation",
+        date: "2020-01-02",
+        eli: "http://data.europa.eu/eli/reg/2020/124/oj",
+        fmxAvailable: true,
+        fmxUnavailable: false,
+      },
+    ],
+  }, null, 2));
+
+  const store = new JsonLegalCacheStore(tempPath);
+  assert.equal(store.load(), true);
+  assert.equal(store.getStatus().ready, true);
+  // A duplicated id must not throw during index build and take down search.
+  const results = store.searchLaws("widgets", { limit: 5 });
+  assert.equal(results[0]?.celex, "32020R0123");
+});
+
 test("legal cache store returns null for ambiguous official reference key", () => {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "legal-cache-store-"));
   const tempPath = path.join(tempDir, "ambiguous.json");

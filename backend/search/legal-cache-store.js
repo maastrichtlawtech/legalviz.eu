@@ -111,6 +111,22 @@ function getDeterministicMatch(index, key) {
   return matches.length === 1 ? matches[0] : null;
 }
 
+// MiniSearch throws on a duplicate id, so a single duplicated CELEX would
+// otherwise take down the whole search index. Keep one record per CELEX and
+// drop records without a usable CELEX (they can't be indexed). The other
+// lookup maps intentionally keep duplicates so they can flag ambiguity.
+function dedupeByCelex(records) {
+  const seen = new Set();
+  const unique = [];
+  for (const record of records) {
+    const key = normalizeCelexLookupKey(record.celex);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    unique.push(record);
+  }
+  return unique;
+}
+
 function buildMiniSearch(records) {
   const miniSearch = new MiniSearch({
     idField: "celex",
@@ -124,7 +140,7 @@ function buildMiniSearch(records) {
     },
   });
 
-  miniSearch.addAll(records.map((record) => ({
+  miniSearch.addAll(dedupeByCelex(records).map((record) => ({
     celex: record.celex,
     title: record.normalizedTitle || record.title || "",
     aliases: Array.isArray(record.aliases) ? record.aliases.join(" ") : "",

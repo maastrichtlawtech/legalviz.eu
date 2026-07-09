@@ -14,7 +14,7 @@ test("legal cache store loads fixture successfully", () => {
   const store = new JsonLegalCacheStore(fixturePath);
   assert.equal(store.load(), true);
   assert.equal(store.getStatus().ready, true);
-  assert.equal(store.getStatus().count, 12);
+  assert.equal(store.getStatus().count, 16);
 });
 
 test("legal cache store reports missing file", () => {
@@ -76,6 +76,44 @@ test("legal cache store supplements the eCommerce Directive when missing from ca
   const match = store.getByCelex("32000L0031");
   assert.equal(match?.celex, "32000L0031");
   assert.match(match?.title || "", /electronic commerce/i);
+});
+
+test("legal cache store searchLaws ranks deterministic hits above free-text hits", () => {
+  const store = new JsonLegalCacheStore(fixturePath);
+  store.load();
+
+  const results = store.searchLaws("digital markets act", { limit: 10 });
+  assert.equal(results[0]?.celex, "32022R1925");
+  assert.equal(results[0]?.matchReason, "alias_exact");
+});
+
+test("legal cache store searchLaws falls back to OR combine when AND yields no hits", () => {
+  const store = new JsonLegalCacheStore(fixturePath);
+  store.load();
+
+  const results = store.searchLaws("gdpr artificial intelligence");
+  const celexes = results.map((entry) => entry.celex);
+  assert.ok(celexes.includes("32016R0679"));
+  assert.ok(celexes.includes("32024R1689"));
+});
+
+test("legal cache store searchLaws honors disableRewrites for both stages", () => {
+  const store = new JsonLegalCacheStore(fixturePath);
+  store.load();
+
+  const rewritten = store.searchLaws("dma", { limit: 1 });
+  assert.equal(rewritten[0]?.celex, "32022R1925");
+
+  const notRewritten = store.searchLaws("dma", { limit: 1, disableRewrites: true });
+  assert.notEqual(notRewritten[0]?.celex, "32022R1925");
+});
+
+test("legal cache store searchLaws clamps the result limit", () => {
+  const store = new JsonLegalCacheStore(fixturePath);
+  store.load();
+
+  assert.equal(store.searchLaws("regulation", { limit: 1 }).length, 1);
+  assert.equal(store.searchLaws("regulation", { limit: 1000 }).length <= 50, true);
 });
 
 test("legal cache store returns null for ambiguous official reference key", () => {

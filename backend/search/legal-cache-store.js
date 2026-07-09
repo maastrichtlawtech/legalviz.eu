@@ -1,7 +1,12 @@
 const fs = require("fs");
 const path = require("path");
+const MiniSearch = require("minisearch");
 
-const { enrichSearchRecord, scoreLaw } = require("./search-ranking");
+const {
+  determineMatchReason,
+  enrichSearchRecord,
+  parseStructuredQuery,
+} = require("./search-ranking");
 
 const DEFAULT_SEARCH_CACHE_PATH = process.env.SEARCH_CACHE_PATH ||
   path.join(__dirname, "data", "search-cache.json");
@@ -93,6 +98,28 @@ function getDeterministicMatch(index, key) {
   return matches.length === 1 ? matches[0] : null;
 }
 
+function buildMiniSearch(records) {
+  const miniSearch = new MiniSearch({
+    idField: "celex",
+    fields: ["title", "aliases"],
+    storeFields: [],
+    searchOptions: {
+      boost: { aliases: 3, title: 1 },
+      fuzzy: 0.2,
+      prefix: true,
+      combineWith: "AND",
+    },
+  });
+
+  miniSearch.addAll(records.map((record) => ({
+    celex: record.celex,
+    title: record.normalizedTitle || record.title || "",
+    aliases: Array.isArray(record.aliases) ? record.aliases.join(" ") : "",
+  })));
+
+  return miniSearch;
+}
+
 class JsonLegalCacheStore {
   constructor(cachePath = DEFAULT_SEARCH_CACHE_PATH) {
     this.cachePath = cachePath;
@@ -103,6 +130,8 @@ class JsonLegalCacheStore {
     this.byCelex = new Map();
     this.byEli = new Map();
     this.byOfficialReference = new Map();
+    this.byAlias = new Map();
+    this.miniSearch = null;
   }
 
   load() {
@@ -115,6 +144,8 @@ class JsonLegalCacheStore {
         this.byCelex = new Map();
         this.byEli = new Map();
         this.byOfficialReference = new Map();
+        this.byAlias = new Map();
+        this.miniSearch = null;
         return false;
       }
 
@@ -131,6 +162,7 @@ class JsonLegalCacheStore {
       this.byCelex = new Map();
       this.byEli = new Map();
       this.byOfficialReference = new Map();
+      this.byAlias = new Map();
 
       for (const record of records) {
         const celexKey = normalizeCelexLookupKey(record.celex);
@@ -155,8 +187,15 @@ class JsonLegalCacheStore {
           matches.push(record);
           this.byOfficialReference.set(referenceKey, matches);
         }
+
+        for (const alias of record.aliases || []) {
+          const matches = this.byAlias.get(alias) || [];
+          matches.push(record);
+          this.byAlias.set(alias, matches);
+        }
       }
 
+      this.miniSearch = buildMiniSearch(records);
       this.loadedAt = new Date().toISOString();
       this.loadError = null;
       return true;
@@ -168,6 +207,8 @@ class JsonLegalCacheStore {
       this.byCelex = new Map();
       this.byEli = new Map();
       this.byOfficialReference = new Map();
+      this.byAlias = new Map();
+      this.miniSearch = null;
       return false;
     }
   }
@@ -199,26 +240,54 @@ class JsonLegalCacheStore {
 
     const limit = Math.max(1, Math.min(Number.parseInt(options.limit || "10", 10) || 10, 50));
     const disableRewrites = Boolean(options.disableRewrites);
+    const parsed = parseStructuredQuery(query, { disableRewrites });
 
-    return this.records
-      .map((law) => {
-        const { score, matchReason } = scoreLaw(law, query, { disableRewrites });
-        return { law, score, matchReason };
-      })
-      .filter((entry) => entry.score > 0)
-      .sort((a, b) => {
-        if (b.score !== a.score) return b.score - a.score;
-        return String(b.law.date || "").localeCompare(String(a.law.date || ""));
-      })
+    const seen = new Set();
+    const matched = [];
+    const addMatch = (record) => {
+      if (!record) return;
+      const key = normalizeCelexLookupKey(record.celex);
+      if (!key || seen.has(key)) return;
+      seen.add(key);
+      matched.push(record);
+    };
+
+    if (parsed.celex) {
+      addMatch(getDeterministicMatch(this.byCelex, parsed.celex));
+    }
+
+    if (parsed.type && parsed.year && parsed.number) {
+      const referenceKey = `${parsed.type}|${parsed.year}|${parsed.number}`;
+      addMatch(getDeterministicMatch(this.byOfficialReference, referenceKey));
+    }
+
+    for (const key of [parsed.normalized, parsed.compact]) {
+      if (!key) continue;
+      for (const record of this.byAlias.get(key) || []) {
+        addMatch(record);
+      }
+    }
+
+    if (this.miniSearch) {
+      let hits = this.miniSearch.search(parsed.rewrittenQuery, { combineWith: "AND" });
+      if (hits.length === 0) {
+        hits = this.miniSearch.search(parsed.rewrittenQuery, { combineWith: "OR" });
+      }
+      for (const hit of hits) {
+        addMatch(getDeterministicMatch(this.byCelex, normalizeCelexLookupKey(hit.id)));
+      }
+    }
+
+    return matched
       .slice(0, limit)
-      .map((entry) => ({
-        celex: entry.law.celex,
-        title: entry.law.title,
-        type: entry.law.type,
-        date: entry.law.date || null,
-        eli: entry.law.eli || null,
-        fmxAvailable: Boolean(entry.law.fmxAvailable),
-        matchReason: entry.matchReason,
+      .map((law) => ({
+        celex: law.celex,
+        title: law.title,
+        type: law.type,
+        date: law.date || null,
+        eli: law.eli || null,
+        fmxAvailable: Boolean(law.fmxAvailable),
+        matchReason: determineMatchReason(law, parsed),
       }));
   }
 

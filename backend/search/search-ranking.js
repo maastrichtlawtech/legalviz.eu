@@ -28,7 +28,13 @@ const KNOWN_ALIASES = {
   "32022R1925": ["digital markets act"],
   "32022R2065": ["digital services act"],
   "32023R2854": ["data act"],
-  "32024R1689": ["ai act", "artificial intelligence act"]
+  "32024R1689": ["ai act", "artificial intelligence act"],
+  "32022L2464": ["csrd"],
+  "32023R1114": ["mica"],
+  "32024R1083": ["emfa", "european media freedom act"],
+  "32024L1799": ["right to repair"],
+  "32024R2847": ["cyber resilience act", "cra"],
+  "32024L2831": ["platform work directive"]
 };
 
 const QUERY_REWRITES = new Map([
@@ -350,8 +356,10 @@ function scoreLaw(law, query, options = {}) {
 }
 
 module.exports = {
+  KNOWN_ALIASES,
   QUERY_REWRITES,
   compactText,
+  determineMatchReason,
   enrichSearchRecord,
   inferTypeFromCelex,
   normalizeText,

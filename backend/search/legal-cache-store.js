@@ -115,7 +115,7 @@ function buildMiniSearch(records) {
   const miniSearch = new MiniSearch({
     idField: "celex",
     fields: ["title", "aliases"],
-    storeFields: [],
+    storeFields: ["type"],
     searchOptions: {
       boost: { aliases: 3, title: 1 },
       fuzzy: 0.2,
@@ -128,9 +128,33 @@ function buildMiniSearch(records) {
     celex: record.celex,
     title: record.normalizedTitle || record.title || "",
     aliases: Array.isArray(record.aliases) ? record.aliases.join(" ") : "",
+    type: record.type,
   })));
 
   return miniSearch;
+}
+
+// Re-encodes the act-type priors that the retired scoreLaw ranking applied,
+// as multiplicative boosts on MiniSearch relevance. This only reshuffles the
+// free-text stage: the deterministic celex/reference/alias matches run first
+// and are unaffected. Demote decisions (they rarely answer a plain "... act"
+// query) and nudge results toward the act type the query names.
+function buildDocumentBoost(parsed) {
+  const query = String(parsed.originalQuery || "").toLowerCase();
+  const mentionsAct = /\bact\b/.test(query);
+  const mentionsDirective = /\bdirective\b/.test(query);
+  const mentionsRegulation = /\bregulation\b/.test(query);
+
+  return (_id, _term, stored) => {
+    const type = stored && stored.type;
+    let boost = 1;
+    if (type === "decision") boost *= mentionsAct ? 0.3 : 0.6;
+    else if (type === "directive") boost *= mentionsDirective ? 1.5 : 1.05;
+    else if (type === "regulation") boost *= mentionsRegulation ? 1.5 : 1.1;
+    if (mentionsDirective && type === "regulation") boost *= 0.7;
+    if (mentionsRegulation && type === "directive") boost *= 0.7;
+    return boost;
+  };
 }
 
 class JsonLegalCacheStore {
@@ -287,9 +311,10 @@ class JsonLegalCacheStore {
     }
 
     if (this.miniSearch) {
-      let hits = this.miniSearch.search(parsed.rewrittenQuery, { combineWith: "AND" });
+      const boostDocument = buildDocumentBoost(parsed);
+      let hits = this.miniSearch.search(parsed.rewrittenQuery, { combineWith: "AND", boostDocument });
       if (hits.length === 0) {
-        hits = this.miniSearch.search(parsed.rewrittenQuery, { combineWith: "OR" });
+        hits = this.miniSearch.search(parsed.rewrittenQuery, { combineWith: "OR", boostDocument });
       }
       for (const hit of hits) {
         addMatch(getDeterministicMatch(this.byCelex, normalizeCelexLookupKey(hit.id)));

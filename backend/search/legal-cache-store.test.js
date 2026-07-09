@@ -15,7 +15,7 @@ test("legal cache store loads fixture successfully", () => {
   const store = new JsonLegalCacheStore(fixturePath);
   assert.equal(store.load(), true);
   assert.equal(store.getStatus().ready, true);
-  assert.equal(store.getStatus().count, 16);
+  assert.equal(store.getStatus().count, 18);
 });
 
 test("legal cache store reports missing file", () => {
@@ -115,6 +115,23 @@ test("legal cache store searchLaws clamps the result limit", () => {
 
   assert.equal(store.searchLaws("regulation", { limit: 1 }).length, 1);
   assert.equal(store.searchLaws("regulation", { limit: 1000 }).length <= 50, true);
+});
+
+test("legal cache store searchLaws ranks a regulation above a decision for an \"... act\" query", () => {
+  const store = new JsonLegalCacheStore(fixturePath);
+  store.load();
+
+  // The fixture holds a decision and a regulation with near-identical titles
+  // that both free-text match "harmonised widget act". The act-type boost must
+  // pull the regulation above the decision (the decision is indexed first, so
+  // without the boost it would win the tie).
+  const celexes = store.searchLaws("harmonised widget act", { limit: 5 }).map((r) => r.celex);
+  assert.ok(celexes.includes("32021R0999"), `regulation missing: ${celexes.join(", ")}`);
+  assert.ok(celexes.includes("32021D0998"), `decision missing: ${celexes.join(", ")}`);
+  assert.ok(
+    celexes.indexOf("32021R0999") < celexes.indexOf("32021D0998"),
+    `regulation should outrank decision, got: ${celexes.join(", ")}`
+  );
 });
 
 test("legal cache store attaches EuroVoc topics from the sidecar", () => {

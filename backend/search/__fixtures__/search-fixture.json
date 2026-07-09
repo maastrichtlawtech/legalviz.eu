@@ -1,6 +1,6 @@
 {
   "generatedAt": "2026-03-26T00:00:00.000Z",
-  "count": 14,
+  "count": 16,
   "records": [
     {
       "celex": "32016R0679",
@@ -126,6 +126,24 @@
       "date": "2024-04-11",
       "eli": "http://data.europa.eu/eli/reg/2024/1083/oj",
       "fmxAvailable": true,
+      "fmxUnavailable": false
+    },
+    {
+      "celex": "32021D0998",
+      "title": "Decision (EU) 2021/998 of 1 January 2021 establishing the harmonised widget act",
+      "type": "decision",
+      "date": "2021-01-01",
+      "eli": "http://data.europa.eu/eli/dec/2021/998/oj",
+      "fmxAvailable": false,
+      "fmxUnavailable": false
+    },
+    {
+      "celex": "32021R0999",
+      "title": "Regulation (EU) 2021/999 of 1 January 2021 establishing the harmonised widget act",
+      "type": "regulation",
+      "date": "2021-01-02",
+      "eli": "http://data.europa.eu/eli/reg/2021/999/oj",
+      "fmxAvailable": false,
       "fmxUnavailable": false
     }
   ]

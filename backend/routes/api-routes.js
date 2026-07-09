@@ -380,15 +380,13 @@ function registerApiRoutes(app, deps) {
   app.get('/api/laws/:celex/summary', rateLimitMiddleware, async (req, res) => {
     try {
       const { celex } = req.params;
-      const rawLang = req.query.lang || 'ENG';
 
       if (!validateCelex(celex)) {
         return res.status(400).json({ error: 'Invalid CELEX format' });
       }
-      const lang = validateLang(rawLang);
-      if (!lang) {
-        return res.status(400).json({ error: `Invalid language code: ${rawLang}` });
-      }
+      // Summaries are generated in English only for now; the lang query
+      // parameter is ignored so other languages cannot trigger generation.
+      const lang = 'ENG';
 
       const parsed = await resolveParsedLaw(celex, lang, { skipFmxProbe: req.query.skipFmxProbe === '1' });
       const result = await ensureLawSummary({
@@ -546,7 +544,7 @@ function registerApiRoutes(app, deps) {
         'GET /api/laws/by-reference?actType=directive&year=2018&number=1972&lang=ENG': 'Resolve an official reference and fetch the matching FMX',
         'GET /api/laws/:celex/case-law': 'List CJEU judgments that interpret this law',
         'GET /api/laws/:celex/recital-titles?lang=ENG': 'Get cached AI-generated short titles for recitals',
-        'GET /api/laws/:celex/summary?lang=ENG': 'Get cached static summary of what this law does',
+        'GET /api/laws/:celex/summary': 'Get cached static summary of what this law does (English only)',
         'GET /api/laws/:celex/articles/:n/case-law-digest?lang=ENG': 'Get cached static digest of CJEU case law interpreting one article',
         'GET /api/search?q=keyword&limit=10': 'Search cached primary-law metadata',
         'GET /api/resolve-reference?actType=directive&year=2018&number=1972&lang=ENG': 'Resolve an FMX-derived legal reference to CELEX via cache-first lookup with Cellar fallback',

@@ -1,3 +1,4 @@
+const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
 
@@ -101,8 +102,12 @@ function registerApiRoutes(app, deps) {
   app.get('/api/_stats', rateLimitMiddleware, (req, res) => {
     const token = process.env.ANALYTICS_TOKEN;
     if (!token) return res.status(404).json({ error: 'Not found' });
-    const provided = req.headers['x-analytics-token'] || req.query.token;
-    if (provided !== token) return res.status(401).json({ error: 'Unauthorized' });
+    const provided = String(req.headers['x-analytics-token'] || '');
+    const tokenBuf = Buffer.from(token);
+    const providedBuf = Buffer.from(provided);
+    if (providedBuf.length !== tokenBuf.length || !crypto.timingSafeEqual(providedBuf, tokenBuf)) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
     res.json(analytics.getStats());
   });
 
@@ -390,12 +395,17 @@ function registerApiRoutes(app, deps) {
       // parameter is ignored so other languages cannot trigger generation.
       const lang = 'ENG';
 
+      const apiKey = getStaticSummaryApiKey();
+      if (!apiKey) {
+        return res.status(503).json({ error: 'OpenRouter API key is not configured', code: 'openrouter_unconfigured' });
+      }
+
       const skipFmxProbe = req.query.skipFmxProbe === '1';
       const result = await ensureLawSummary({
         celex,
         lang,
         cacheDir: FMX_DIR,
-        apiKey: getStaticSummaryApiKey(),
+        apiKey,
         model: DEFAULT_STATIC_SUMMARY_MODEL,
         // Resolve the raw FMX source without parsing it, so the summary
         // service can validate its cache against the raw bytes and skip the
@@ -466,6 +476,11 @@ function registerApiRoutes(app, deps) {
         return res.status(400).json({ error: `Invalid language code: ${rawLang}` });
       }
 
+      const apiKey = getStaticSummaryApiKey();
+      if (!apiKey) {
+        return res.status(503).json({ error: 'OpenRouter API key is not configured', code: 'openrouter_unconfigured' });
+      }
+
       const parsed = await resolveParsedLaw(celex, lang, { skipFmxProbe: req.query.skipFmxProbe === '1' });
       const caseLawPayload = await fetchCaseLaw(celex, runSparqlQuery, { cacheDir: FMX_DIR });
       const result = await ensureArticleDigest({
@@ -475,7 +490,7 @@ function registerApiRoutes(app, deps) {
         parsedLaw: parsed,
         caseLawPayload,
         cacheDir: FMX_DIR,
-        apiKey: getStaticSummaryApiKey(),
+        apiKey,
         model: DEFAULT_ARTICLE_DIGEST_MODEL,
       });
 
@@ -514,6 +529,11 @@ function registerApiRoutes(app, deps) {
         return res.status(400).json({ error: `Invalid language code: ${rawLang}` });
       }
 
+      const apiKey = getStaticSummaryApiKey();
+      if (!apiKey) {
+        return res.status(503).json({ error: 'OpenRouter API key is not configured', code: 'openrouter_unconfigured' });
+      }
+
       const parsed = await resolveParsedLaw(celex, lang, { skipFmxProbe: req.query.skipFmxProbe === '1' });
       const caseLawPayload = await fetchCaseLaw(celex, runSparqlQuery, { cacheDir: FMX_DIR });
       const result = await ensureCaseLawDigest({
@@ -522,7 +542,7 @@ function registerApiRoutes(app, deps) {
         parsedLaw: parsed,
         caseLawPayload,
         cacheDir: FMX_DIR,
-        apiKey: getStaticSummaryApiKey(),
+        apiKey,
         model: DEFAULT_CASE_LAW_DIGEST_MODEL,
       });
 

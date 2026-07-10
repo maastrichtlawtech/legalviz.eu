@@ -160,6 +160,37 @@ describe("mapRecitalsToArticles", () => {
     expect(result.get("3").map((r) => r.recital_number)).not.toContain("1");
   });
 
+  it("keeps a recital under every article it clarifies (many-to-many, no exclusive cap)", () => {
+    const multiArticles = [
+      { article_number: "1", article_title: "", article_html: "<p>aloneone</p>" },
+      { article_number: "2", article_title: "", article_html: "<p>coretopic</p>" },
+      { article_number: "3", article_title: "", article_html: "<p>coretopic</p>" },
+      { article_number: "4", article_title: "", article_html: "<p>coretopic</p>" },
+      { article_number: "5", article_title: "", article_html: "<p>alonefive</p>" },
+      { article_number: "6", article_title: "", article_html: "<p>irrelevanttopic irrelevanttopic irrelevanttopic</p>" },
+    ];
+    const multiRecitals = [
+      { recital_number: "1", recital_text: "aloneone" },
+      { recital_number: "2", recital_text: "coretopic" },
+      { recital_number: "3", recital_text: "alonefive" },
+    ];
+
+    const result = mapRecitalsToArticles(multiRecitals, multiArticles);
+
+    // Recital 2 clarifies articles 2, 3 AND 4 — it should appear under all three,
+    // not be dropped after "winning" the best-matching one.
+    expect(result.get("2").map((r) => r.recital_number)).toContain("2");
+    expect(result.get("3").map((r) => r.recital_number)).toContain("2");
+    expect(result.get("4").map((r) => r.recital_number)).toContain("2");
+
+    // Recital 2 must not leak into articles it has no term overlap with.
+    expect(result.get("1").map((r) => r.recital_number)).not.toContain("2");
+    expect(result.get("5").map((r) => r.recital_number)).not.toContain("2");
+
+    // An article with no genuinely relevant recital abstains (empty list, not padded).
+    expect(result.get("6")).toEqual([]);
+  });
+
   it("exposes recitals with no term overlap as orphans", () => {
     const result = mapRecitalsToArticles(
       [{ recital_number: "1", recital_text: "nooverlapterm" }],

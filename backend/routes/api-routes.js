@@ -68,9 +68,7 @@ function registerApiRoutes(app, deps) {
   const {
     analytics,
     CELEX_NAMES,
-    EURLEX_BASE,
     FMX_DIR,
-    RATE_LIMIT_MAX,
     RESOLUTION_CACHE_MS,
     cacheGet,
     cacheSet,

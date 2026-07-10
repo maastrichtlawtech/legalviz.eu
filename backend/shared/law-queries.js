@@ -8,7 +8,7 @@
 const fs = require('fs');
 const path = require('path');
 const { JSDOM } = require('jsdom');
-const { getSharedPlaywrightPage, loadPlaywrightModule, closeSharedPlaywrightBrowser } = require('./eurlex-html-parser');
+const { getSharedPlaywrightPage, loadPlaywrightModule } = require('./eurlex-html-parser');
 
 const EURLEX_COOKIE_MAX_AGE_MS = parseInt(process.env.EURLEX_COOKIE_MAX_AGE_MS) || 12 * 60 * 60 * 1000; // 12h
 const PARTIAL_RETRY_COOLDOWN_MS = 6 * 60 * 60 * 1000; // 6h

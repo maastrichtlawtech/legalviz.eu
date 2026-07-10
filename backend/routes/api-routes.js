@@ -2,6 +2,7 @@ const fs = require("fs");
 const path = require("path");
 
 const { ClientError } = require("../shared/api-utils");
+const { parseFmxXml } = require("../shared/fmx-parser-node");
 const { createSearchHandler } = require("../search/search-route");
 const { fetchMetadata, fetchAmendments, fetchImplementing, fetchCaseLaw } = require("../shared/law-queries");
 const { ChatProviderError } = require("../shared/openrouter-chat");
@@ -405,8 +406,10 @@ function registerApiRoutes(app, deps) {
               sourceFile: path.relative(FMX_DIR, servePath),
             };
           } catch (err) {
-            if (err instanceof ClientError && err.statusCode === 404 && typeof fetchAndParseHtmlLaw === 'function') {
-              // No FMX for this law: defer to the HTML fallback in getParsedLaw.
+            if (err instanceof ClientError && err.statusCode === 404) {
+              // No FMX for this law: defer to the HTML fallback in
+              // getParsedLaw, which calls resolveParsedLaw(..., {
+              // skipFmxProbe: true }) and handles the EUR-Lex HTML path.
               return null;
             }
             throw err;

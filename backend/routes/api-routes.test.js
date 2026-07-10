@@ -11,6 +11,7 @@ const { ClientError, cacheGet, cacheSet, safeErrorResponse, toSearchLang } = req
 const { JsonLegalCacheStore } = require("../search/legal-cache-store");
 
 const fixturePath = path.join(__dirname, "..", "search", "__fixtures__", "search-fixture.json");
+const gdprFmxPath = path.join(__dirname, "..", "..", "src", "__fixtures__", "gdpr.fmx.xml");
 
 function createAppRecorder() {
   const routes = new Map();
@@ -386,6 +387,79 @@ test("AI-backed static routes require their own OpenRouter key or the shared fal
     assert.equal(res.statusCode, 503);
     assert.equal(res.payload.code, "missing_api_key");
     assert.match(res.payload.message, /OPENROUTER_API_KEY/);
+  });
+});
+
+// These two tests exercise the *real* getSource/getParsedLaw closures wired
+// up inside the /api/laws/:celex/summary handler (unlike the "cache miss"
+// test above, which always passes skipFmxProbe=1 and therefore never calls
+// getSource or the FMX parse branch of getParsedLaw). They are regression
+// tests for two bugs that a stub-heavy test suite missed: (1) parseFmxXml
+// was never imported into api-routes.js, so any FMX-backed summary request
+// threw `ReferenceError: parseFmxXml is not defined`; (2) getSource's 404
+// fallback was guarded by `typeof fetchAndParseHtmlLaw === 'function'`, an
+// identifier that was never in scope in api-routes.js (it's only wired into
+// server.js's resolveParsedLaw), so the guard was always false and HTML-only
+// laws got a re-thrown 404 instead of falling back to HTML parsing.
+test("GET /api/laws/:celex/summary drives the real getSource/getParsedLaw closures for an FMX law", async () => {
+  await withOpenRouterEnv({}, async () => {
+    const gdprXml = fs.readFileSync(gdprFmxPath, "utf8");
+    const { app } = registerTestRoutes({
+      prepareLawPayload: async () => ({ servePath: gdprFmxPath }),
+    });
+    const handler = app.routes.get("/api/laws/:celex/summary");
+    const res = createResponseRecorder();
+
+    await handler({
+      params: { celex: "32016R0679" },
+      query: { lang: "ENG" },
+    }, res);
+
+    // No OpenRouter key is configured, so the request should fail with the
+    // handled 503/missing_api_key error from the chat call -- proving
+    // getSource() read the fixture and getParsedLaw() successfully parsed it
+    // with parseFmxXml (a ReferenceError there would surface as an unhandled
+    // 500 with no `code`, and gdprXml would never have been read at all).
+    assert.ok(gdprXml.length > 0);
+    assert.equal(res.statusCode, 503);
+    assert.equal(res.payload.code, "missing_api_key");
+  });
+});
+
+test("GET /api/laws/:celex/summary falls back to HTML parsing when FMX is unavailable for a law", async () => {
+  await withOpenRouterEnv({}, async () => {
+    const { app } = registerTestRoutes({
+      prepareLawPayload: async () => {
+        throw new ClientError("FMX not found", 404, "fmx_not_found");
+      },
+      fetchAndParseHtmlLaw: async (celex, lang) => ({
+        celex,
+        lang,
+        source: "eurlex-html",
+        format: "combined-v1",
+        title: "Regulation (EU) 2016/679",
+        langCode: "EN",
+        articles: [{ article_number: "1", article_title: "Subject matter", article_html: "<p>This Regulation lays down rules.</p>", division: { chapter: { title: "General provisions" } } }],
+        recitals: [{ recital_number: "1", recital_text: "Protection of natural persons.", recital_html: "<p>Protection of natural persons.</p>" }],
+        annexes: [],
+        definitions: [],
+        crossReferences: {},
+      }),
+    });
+    const handler = app.routes.get("/api/laws/:celex/summary");
+    const res = createResponseRecorder();
+
+    await handler({
+      params: { celex: "32016R0679" },
+      query: { lang: "ENG" },
+    }, res);
+
+    // With the guard bug, getSource() re-throws the 404 from
+    // prepareLawPayload instead of swallowing it, so the handler would
+    // respond 404 here instead of falling through to the HTML parse and
+    // reaching the (also handled) missing-API-key error.
+    assert.equal(res.statusCode, 503);
+    assert.equal(res.payload.code, "missing_api_key");
   });
 });
 

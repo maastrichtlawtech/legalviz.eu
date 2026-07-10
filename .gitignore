@@ -23,6 +23,15 @@ dist
 backend/law-cache/
 backend/fmx-downloads/
 backend/html-fallback-downloads/
+# Raw law corpus + resumable build artifacts produced by the search-cache
+# harvest. The corpus can grow to hundreds of MB / tens of thousands of files;
+# only the derived search-cache.json is committed, never the raw XML.
+backend/search/data/laws/
+backend/search/data/shards/
+backend/search/data/search-build-state*.json
+backend/search/data/search-cache-historical*.json
+backend/search/data/*.backup
+backend/search/data/*.bak
 dist-ssr
 *.local
 

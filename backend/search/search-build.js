@@ -8,6 +8,7 @@ const { promisify } = require("util");
 const { DEFAULT_SEARCH_CACHE_PATH } = require("./search-index");
 const { enrichSearchRecord, inferTypeFromCelex } = require("./search-ranking");
 const { parseFmxXml } = require("../shared/fmx-parser-node");
+const { readCorpusXml, writeCorpusXml } = require("./law-corpus-store");
 
 const execFileAsync = promisify(execFile);
 const SPARQL_ENDPOINT = "https://publications.europa.eu/webapi/rdf/sparql";
@@ -15,10 +16,19 @@ const CELLAR_BASE = "http://publications.europa.eu/resource";
 const EURLEX_BASE = "https://eur-lex.europa.eu";
 const USER_AGENT = "LegalViz API Law Search Builder/0.1";
 const SEARCH_CACHE_DIR = path.dirname(DEFAULT_SEARCH_CACHE_PATH);
+// Base dir for the on-disk raw-law corpus (laws/<year>/<CELEX>.xml.gz lives
+// under here). Kept alongside the search cache so a single data dir holds
+// everything the build produces.
+const CORPUS_DIR = SEARCH_CACHE_DIR;
 const DEFAULT_SEARCH_STATE_PATH = path.join(SEARCH_CACHE_DIR, "search-build-state.json");
 const GENERIC_OJ_TITLE = "Official Journal of the European Union";
 const DEFAULT_CHALLENGE_RETRY_BASE_MS = 2_000;
 const DEFAULT_CHALLENGE_RETRY_CAP_MS = 30_000;
+// Bound on transient-failure retries (WAF challenge, HTTP 429/5xx, network
+// errors) for a single request during a long unattended harvest. Generous
+// enough to ride out a rate-limit burst, bounded so a permanently-broken URL
+// can't wedge the whole run.
+const DEFAULT_MAX_REQUEST_ATTEMPTS = 8;
 // Recitals + Article 1/2 body text, truncated to keep the cache/index size
 // bounded. ~3KB is enough prose to carry the conceptual vocabulary of an act
 // (recitals restate the act's purpose in plain language; Art. 1/2 give
@@ -91,29 +101,6 @@ OFFSET ${offset}
 `.trim();
 }
 
-async function fetchText(url, headers = {}) {
-  const response = await fetch(url, {
-    headers: {
-      Accept: "*/*",
-      "User-Agent": USER_AGENT,
-      ...headers
-    }
-  });
-
-  if (response.status === 404) {
-    const error = new Error(`HTTP 404 for ${url}`);
-    error.statusCode = 404;
-    throw error;
-  }
-
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(`HTTP ${response.status} for ${url}: ${text.slice(0, 400)}`);
-  }
-
-  return response.text();
-}
-
 function isChallengeResponse(response) {
   return response.status === 202
     && String(response.headers.get("x-amzn-waf-action") || "").toLowerCase() === "challenge";
@@ -130,18 +117,36 @@ function getChallengeDelayMs(attempt) {
   return capped + jitter;
 }
 
-async function fetchTextWithChallengeRetry(url, headers = {}) {
+// A single request that rides out the transient failure modes of a long,
+// unattended EUR-Lex/CELLAR harvest:
+//   - WAF 202 "challenge" (Cloudflare/AWS WAF interstitial)
+//   - HTTP 429 (rate limiting) and 5xx (endpoint hiccups)
+//   - network-level errors (reset/timeout/DNS)
+// Each is retried with exponential backoff + jitter up to `maxAttempts`. A 404
+// is treated as a hard, non-retriable miss (many old acts simply lack an FMX
+// payload). Returns the successful Response; callers pull .text()/.json()/bytes.
+async function requestWithRetry(url, { headers = {}, maxAttempts = DEFAULT_MAX_REQUEST_ATTEMPTS } = {}) {
   let attempt = 0;
+  let lastError = null;
 
-  while (true) {
+  while (attempt < maxAttempts) {
     attempt += 1;
-    const response = await fetch(url, {
-      headers: {
-        Accept: "*/*",
-        "User-Agent": USER_AGENT,
-        ...headers
-      }
-    });
+    let response;
+    try {
+      response = await fetch(url, {
+        headers: {
+          Accept: "*/*",
+          "User-Agent": USER_AGENT,
+          ...headers
+        }
+      });
+    } catch (error) {
+      lastError = error;
+      const delayMs = getChallengeDelayMs(attempt);
+      logProgress(`Network error for ${url} on attempt ${attempt} (${error.message}); retrying in ${delayMs}ms`);
+      await sleep(delayMs);
+      continue;
+    }
 
     if (isChallengeResponse(response)) {
       const delayMs = getChallengeDelayMs(attempt);
@@ -156,29 +161,41 @@ async function fetchTextWithChallengeRetry(url, headers = {}) {
       throw error;
     }
 
+    if (response.status === 429 || response.status >= 500) {
+      const delayMs = getChallengeDelayMs(attempt);
+      logProgress(`HTTP ${response.status} for ${url} on attempt ${attempt}; retrying in ${delayMs}ms`);
+      await sleep(delayMs);
+      continue;
+    }
+
     if (!response.ok) {
       const text = await response.text();
       throw new Error(`HTTP ${response.status} for ${url}: ${text.slice(0, 400)}`);
     }
 
-    return response.text();
+    return response;
   }
+
+  const suffix = lastError ? `: ${lastError.message}` : "";
+  throw new Error(`Exhausted ${maxAttempts} attempts for ${url}${suffix}`);
+}
+
+async function fetchText(url, headers = {}) {
+  const response = await requestWithRetry(url, { headers });
+  return response.text();
+}
+
+// Kept as a distinct name because callers document intent by using it, but the
+// resilient core now handles the WAF challenge for every request path.
+async function fetchTextWithChallengeRetry(url, headers = {}) {
+  return fetchText(url, headers);
 }
 
 async function runSparql(query) {
   const url = `${SPARQL_ENDPOINT}?query=${encodeURIComponent(query)}&format=application%2Fsparql-results%2Bjson`;
-  const response = await fetch(url, {
-    headers: {
-      Accept: "application/sparql-results+json",
-      "User-Agent": USER_AGENT
-    }
+  const response = await requestWithRetry(url, {
+    headers: { Accept: "application/sparql-results+json" }
   });
-
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(`SPARQL request failed with HTTP ${response.status}: ${text.slice(0, 400)}`);
-  }
-
   return response.json();
 }
 
@@ -353,11 +370,22 @@ function buildExcerptFromCombined(combined) {
   return clampToBudget([articleText, definitionsText, recitalsText], EXCERPT_MAX_LENGTH);
 }
 
+// A single CELLAR download can be more than one XML file — modern Formex ships
+// the act as an <OJ>/<PUBLICATION> wrapper *plus* a separate <ACT> document, so
+// the combined corpus blob has multiple roots. The streaming FMX parser rejects
+// multiple roots, so normalise to a single synthetic root: drop every embedded
+// XML declaration and wrap the whole thing. A well-formed single-root document
+// is unaffected (the parser still finds the ACT nested one level deeper).
+function wrapForParsing(xml) {
+  const withoutDecls = String(xml || "").replace(/<\?xml[\s\S]*?\?>/g, "").trim();
+  return `<FMX.COLLECTION>${withoutDecls}</FMX.COLLECTION>`;
+}
+
 // Extraction must degrade gracefully: a malformed/unexpected FMX shape must
 // never take down the title extraction that the rest of the build depends on.
 async function extractExcerptFromXml(xml) {
   try {
-    const combined = await parseFmxXml(xml);
+    const combined = await parseFmxXml(wrapForParsing(xml));
     return buildExcerptFromCombined(combined);
   } catch (error) {
     logProgress(`Excerpt extraction failed: ${error.message}`);
@@ -366,11 +394,7 @@ async function extractExcerptFromXml(xml) {
 }
 
 async function downloadToTempFile(url) {
-  const response = await fetch(url, { headers: { "User-Agent": USER_AGENT } });
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(`Download failed with HTTP ${response.status}: ${text.slice(0, 400)}`);
-  }
+  const response = await requestWithRetry(url);
   const tempPath = path.join(os.tmpdir(), `legalviz-search-${Date.now()}-${Math.random().toString(36).slice(2)}.zip`);
   const buffer = Buffer.from(await response.arrayBuffer());
   await fsp.writeFile(tempPath, buffer);
@@ -427,31 +451,63 @@ async function extractXmlFromZip(zipPath) {
   return parts.join("\n");
 }
 
-// Returns { title, excerpt }. Title extraction (regex-based) and excerpt
-// extraction (shared FMX parser) are independent: a title miss must not
-// suppress an excerpt hit, and vice versa.
-async function extractOfficialTitleAndExcerpt(celex) {
+// Fetches the act's full combined FMX XML from CELLAR (all data-file parts
+// joined, matching how the ZIP path already concatenates them). This is the
+// single blob we persist to the local corpus and extract title/excerpt from.
+async function fetchCombinedFmxXml(celex) {
   const fmx4Uri = await findFmx4Uri(celex, "ENG");
   const download = await findDownloadUrls(fmx4Uri);
 
   if (download.type === "xml") {
+    const parts = [];
     for (const url of download.urls) {
       const xml = await fetchText(url);
-      const title = extractTitleFromXml(xml);
-      if (title) return { title, excerpt: await extractExcerptFromXml(xml) };
+      parts.push(String(xml).replace(/<\?xml[^?]*\?>/, "").trim());
     }
-    return { title: null, excerpt: "" };
+    return parts.join("\n");
   }
 
   const zipPath = await downloadToTempFile(download.urls[0]);
   try {
-    const xml = await extractXmlFromZip(zipPath);
-    const title = extractTitleFromXml(xml);
-    const excerpt = await extractExcerptFromXml(xml);
-    return { title, excerpt };
+    return await extractXmlFromZip(zipPath);
   } finally {
     await fsp.rm(zipPath, { force: true });
   }
+}
+
+// Returns { title, excerpt }. Title extraction (regex-based) and excerpt
+// extraction (shared FMX parser) are independent: a title miss must not
+// suppress an excerpt hit, and vice versa.
+//
+// Corpus-first: if we already have this act's XML on disk we parse that and
+// skip the network entirely; otherwise we fetch once and persist it so future
+// runs (and later parser work) are offline. `useCorpus: false` forces a fresh
+// fetch (used by tests / to refresh a stale local copy).
+async function extractOfficialTitleAndExcerpt(celex, { corpusDir = CORPUS_DIR, useCorpus = true } = {}) {
+  let xml = null;
+
+  if (useCorpus && corpusDir) {
+    xml = await readCorpusXml(corpusDir, celex);
+  }
+
+  if (!xml) {
+    xml = await fetchCombinedFmxXml(celex);
+    if (useCorpus && corpusDir && xml) {
+      try {
+        await writeCorpusXml(corpusDir, celex, xml);
+      } catch (error) {
+        // Persisting the local copy is best-effort; never fail enrichment
+        // because the disk cache couldn't be written.
+        logProgress(`Corpus write failed for ${celex}: ${error.message}`);
+      }
+    }
+  }
+
+  if (!xml) return { title: null, excerpt: "" };
+
+  const title = extractTitleFromXml(xml);
+  const excerpt = await extractExcerptFromXml(xml);
+  return { title, excerpt };
 }
 
 async function extractOfficialTitleFromEurlexHtml(celex) {
@@ -462,12 +518,12 @@ async function extractOfficialTitleFromEurlexHtml(celex) {
   return extractTitleFromEurlexHtml(html);
 }
 
-async function extractOfficialTitleWithFallback(celex) {
+async function extractOfficialTitleWithFallback(celex, options = {}) {
   let fmxError = null;
   let excerpt = "";
 
   try {
-    const result = await extractOfficialTitleAndExcerpt(celex);
+    const result = await extractOfficialTitleAndExcerpt(celex, options);
     excerpt = result.excerpt || "";
     if (result.title) return { title: result.title, source: "fmx", fmxError: null, excerpt };
     fmxError = new Error(`No title extracted from FMX for ${celex}`);
@@ -597,6 +653,10 @@ async function enrichRecords(records, options = {}) {
     ? ensurePositiveInt(options.startIndex, 0)
     : 0;
   const maxRecords = options.maxRecords ? ensurePositiveInt(options.maxRecords, 0) : 0;
+  // Optional pause between batches to keep a long unattended harvest polite and
+  // under EUR-Lex's rate limits. Defaults to 0 (no change for existing callers).
+  const batchDelayMs = Math.max(0, Number.parseInt(String(options.batchDelayMs || "0"), 10) || 0);
+  const corpusDir = options.corpusDir === undefined ? CORPUS_DIR : options.corpusDir;
   const shouldProcess = typeof options.shouldProcess === "function"
     ? options.shouldProcess
     : () => true;
@@ -619,7 +679,7 @@ async function enrichRecords(records, options = {}) {
       const current = records[index];
       const next = { ...current };
       try {
-        const titleResult = await extractOfficialTitleWithFallback(current.celex);
+        const titleResult = await extractOfficialTitleWithFallback(current.celex, { corpusDir });
         if (titleResult.title) next.title = normalizeTitle(titleResult.title);
         next.excerpt = titleResult.excerpt || "";
         next.fmxAvailable = titleResult.source === "fmx";
@@ -665,6 +725,10 @@ async function enrichRecords(records, options = {}) {
         `Enriched ${batchEnd}/${eligibleIndices.length} eligible records in this pass (${processed} processed, ${enriched} with FMX, ${failed} failed)`
       );
     }
+
+    if (batchDelayMs && batchEnd < eligibleIndices.length) {
+      await sleep(batchDelayMs);
+    }
   }
 
   return {
@@ -703,6 +767,8 @@ async function reEnrichCurrentCache(options = {}) {
   const enrichResult = await enrichRecords(records, {
     concurrency,
     maxRecords,
+    batchDelayMs: options.batchDelayMs,
+    corpusDir: options.corpusDir,
     shouldProcess(record) {
       if (primaryActsOnly && !record.isPrimaryAct) return false;
       return onlyMissingTitles ? !normalizeTitle(record.title) : true;
@@ -781,6 +847,8 @@ async function buildSearchCache(options = {}) {
     concurrency,
     maxRecords,
     startIndex: nextIndex,
+    batchDelayMs: options.batchDelayMs,
+    corpusDir: options.corpusDir,
     async onBatchComplete(batch) {
       await writeStateAtomically(statePath, createStatePayload({
         cachePath,
@@ -843,6 +911,11 @@ async function main() {
     const next = args[index + 1];
     if (!next || next.startsWith("--")) {
       options[key] = true;
+    } else if (next === "true" || next === "false") {
+      // Coerce explicit boolean flags (e.g. `--onlyMissingTitles false`) so
+      // callers can actually turn a default-true option off from the CLI.
+      options[key] = next === "true";
+      index += 1;
     } else {
       options[key] = next;
       index += 1;
@@ -863,10 +936,13 @@ if (require.main === module) {
 module.exports = {
   DEFAULT_SEARCH_CACHE_PATH,
   DEFAULT_SEARCH_STATE_PATH,
+  CORPUS_DIR,
   EXCERPT_MAX_LENGTH,
   buildExcerptFromCombined,
   buildSearchCache,
   extractExcerptFromXml,
+  extractOfficialTitleAndExcerpt,
+  fetchCombinedFmxXml,
   harvestPrimaryActs,
   buildYearQuery,
   ensurePositiveInt,
@@ -876,5 +952,6 @@ module.exports = {
   logProgress,
   normalizeYearQueryActTypes,
   reEnrichCurrentCache,
+  requestWithRetry,
   runSparql
 };

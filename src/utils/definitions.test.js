@@ -84,6 +84,20 @@ describe("injectDefinitionTooltips", () => {
     expect(result).toContain('class="defined-term"');
   });
 
+  it("does not match the stem of an inflected term inside an unrelated word", () => {
+    const defs = [{ term: "dane", definition: "informacje dotyczące osoby fizycznej" }];
+
+    // "abundance" contains the "dan" stem mid-word — must NOT be wrapped.
+    const unrelatedHtml = "<p>The region saw an abundance of natural resources.</p>";
+    const unrelatedResult = injectDefinitionTooltips(unrelatedHtml, defs, { langCode: "PL" });
+    expect(unrelatedResult).not.toContain('class="defined-term"');
+
+    // "danych" is a genuine inflected form of "dane" and must still be wrapped.
+    const inflectedHtml = "<p>Przetwarzanie danych wymaga podstawy prawnej.</p>";
+    const inflectedResult = injectDefinitionTooltips(inflectedHtml, defs, { langCode: "PL" });
+    expect(inflectedResult).toContain('class="defined-term"');
+  });
+
   it("escapes HTML in definition attributes", () => {
     const defs = [{ term: "test", definition: 'a "special" <value> & entity' }];
     const html = "<p>This is a test.</p>";

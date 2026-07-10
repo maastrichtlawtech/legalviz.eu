@@ -348,7 +348,9 @@ function buildArticleBodyAndParagraphs(articleEl, idPrefix, lang) {
     if (isElement && node.tagName === "PARAG") {
       flushImplicit();
       const noP = node.querySelector("NO\\.PARAG");
-      const number = noP ? allText(noP).replace(/[.\s]+$/, "").trim() : String(paragraphs.length + 1);
+      const number = noP
+        ? allText(noP).replace(/[.\s]+$/, "").trim()
+        : String(paragraphs.filter((p) => p.number != null).length + 1);
       paragraphs.push({ number, html: injectCrossRefLinks(html, lang) });
     } else if (isElement && node.tagName === "STI.ART") {
       // Subtitle heading — keep in bodyHtml for backward compat, but it's

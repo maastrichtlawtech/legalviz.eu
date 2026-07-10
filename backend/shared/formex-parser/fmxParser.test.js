@@ -371,6 +371,45 @@ describe("parseFmxToCombined — error handling", () => {
 });
 
 // ---------------------------------------------------------------------------
+// parseFmxToCombined — paragraph numbering fallback
+// ---------------------------------------------------------------------------
+
+describe("parseFmxToCombined — unnumbered PARAG numbering", () => {
+  const wrap = (articleXml) => `<ACT xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://formex.publications.europa.eu/schema/formex-05.59-20170418.xd"><BIB.INSTANCE><LG.DOC>EN</LG.DOC></BIB.INSTANCE><ENACTING.TERMS><DIVISION>${articleXml}</DIVISION></ENACTING.TERMS></ACT>`;
+
+  it("numbers the first unnumbered PARAG '1' even after an implicit chapeau ALINEA", () => {
+    // A chapeau ALINEA before the first PARAG produces an implicit
+    // (number: null) paragraph that must not consume a numbering slot from
+    // the fallback counter used for unnumbered PARAG elements.
+    const xml = wrap(
+      `<ARTICLE IDENTIFIER="001"><TI.ART>Article 1</TI.ART>` +
+      `<ALINEA><P>Intro chapeau.</P></ALINEA>` +
+      `<PARAG><P>Unnumbered body.</P></PARAG>` +
+      `</ARTICLE>`
+    );
+    const result = parseFmxToCombined(xml);
+    const art1 = result.articles.find((a) => a.article_number === "1");
+    expect(art1.paragraphs).toHaveLength(2);
+    expect(art1.paragraphs[0].number).toBeNull();
+    expect(art1.paragraphs[1].number).toBe("1");
+  });
+
+  it("numbers two consecutive unnumbered PARAGs 1, 2 when there is no chapeau", () => {
+    const xml = wrap(
+      `<ARTICLE IDENTIFIER="001"><TI.ART>Article 1</TI.ART>` +
+      `<PARAG><P>First unnumbered body.</P></PARAG>` +
+      `<PARAG><P>Second unnumbered body.</P></PARAG>` +
+      `</ARTICLE>`
+    );
+    const result = parseFmxToCombined(xml);
+    const art1 = result.articles.find((a) => a.article_number === "1");
+    expect(art1.paragraphs).toHaveLength(2);
+    expect(art1.paragraphs[0].number).toBe("1");
+    expect(art1.paragraphs[1].number).toBe("2");
+  });
+});
+
+// ---------------------------------------------------------------------------
 // injectCrossRefLinks
 // ---------------------------------------------------------------------------
 

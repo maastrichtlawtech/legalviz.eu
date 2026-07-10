@@ -385,15 +385,16 @@ function wrapForParsing(xml) {
 // MB of FMX XML. Building a DOM from those can spike hundreds of MB to multiple
 // GB and, at any concurrency, OOM the worker. The excerpt only needs recitals +
 // Article 1/2 + definitions, which live in the compact main document, so parsing
-// a giant blob is never worth the memory. Above this size we skip parsing (the
-// raw XML is still saved to the corpus for later, more careful handling).
+// a giant blob is never worth the memory. Above this size (measured in string
+// length, i.e. UTF-16 code units, not encoded bytes) we skip parsing (the raw
+// XML is still saved to the corpus for later, more careful handling).
 const MAX_EXCERPT_PARSE_BYTES = 6 * 1024 * 1024;
 
 // Extraction must degrade gracefully: a malformed/unexpected FMX shape must
 // never take down the title extraction that the rest of the build depends on.
 async function extractExcerptFromXml(xml) {
   if (String(xml || "").length > MAX_EXCERPT_PARSE_BYTES) {
-    logProgress(`Excerpt extraction skipped: XML too large (${String(xml).length} bytes)`);
+    logProgress(`Excerpt extraction skipped: XML too large (${String(xml).length} characters)`);
     return "";
   }
   try {

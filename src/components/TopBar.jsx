@@ -687,8 +687,14 @@ export function SearchBox({
 
       {/* Spotlight Modal Overlay (Rendered in Portal to cover whole screen) */}
       {isOpen && createPortal(
-        <div className="fixed inset-0 z-[100] flex items-start justify-center bg-black/20 transition-all md:p-4 md:pt-[15vh]">
+        <div
+          className="fixed inset-0 z-[100] flex items-start justify-center bg-black/20 transition-all md:p-4 md:pt-[15vh]"
+          onClick={() => setIsOpen(false)}
+        >
           <div
+            role="dialog"
+            aria-modal="true"
+            aria-label={t("search.trigger")}
             className="w-full max-w-2xl flex flex-col h-full md:h-auto md:max-h-[70vh] bg-white shadow-2xl ring-1 ring-black/5 animate-in fade-in zoom-in-95 duration-100 overflow-hidden fixed inset-0 md:static md:inset-auto md:rounded-2xl dark:bg-gray-900 dark:ring-white/10"
             onClick={(e) => e.stopPropagation()}
           >
@@ -956,9 +962,6 @@ export function SearchBox({
               <span>{t("search.escToClose")}</span>
             </div>
           </div>
-
-          {/* Click backdrop to close */}
-          <div className="absolute inset-0 -z-10" />
         </div>,
         document.body
       )}

@@ -249,7 +249,12 @@ function enrichSearchRecord(record) {
     isPrimaryAct: eliKind === "primary" && !isCorrigendumCelex(record.celex),
     fmxAvailable: Boolean(record.fmxAvailable),
     fmxUnavailable: Boolean(record.fmxUnavailable),
-    enrichError: record.enrichError || null
+    enrichError: record.enrichError || null,
+    // Recitals + Art. 1/2 body text for free-text recall (see search-build.js
+    // buildExcerptFromCombined). Older cache records built before this field
+    // existed won't have it — default to "" rather than undefined so it's
+    // always safe to index/serialize.
+    excerpt: typeof record.excerpt === "string" ? record.excerpt : ""
   };
   enriched.aliases = buildAliases(enriched);
   return enriched;

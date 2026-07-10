@@ -215,6 +215,91 @@ test("legal cache store stays searchable when a CELEX is duplicated", () => {
   assert.equal(results[0]?.celex, "32020R0123");
 });
 
+test("legal cache store searchLaws matches a law via excerpt text alone (title/aliases don't mention the topic)", () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "legal-cache-store-excerpt-"));
+  const tempPath = path.join(tempDir, "excerpt.json");
+  fs.writeFileSync(tempPath, JSON.stringify({
+    generatedAt: "2026-03-28T00:00:00.000Z",
+    count: 2,
+    records: [
+      {
+        celex: "32024R9001",
+        title: "Regulation (EU) 2024/9001 on widget market surveillance",
+        type: "regulation",
+        date: "2024-01-01",
+        eli: "http://data.europa.eu/eli/reg/2024/9001/oj",
+        fmxAvailable: true,
+        fmxUnavailable: false,
+        excerpt: "This Regulation lays down harmonised rules on automated decision-making systems and establishes transparency obligations for providers deploying automated decision-making in the internal market.",
+      },
+      {
+        celex: "32024R9002",
+        title: "Regulation (EU) 2024/9002 on gadget labelling requirements",
+        type: "regulation",
+        date: "2024-01-02",
+        eli: "http://data.europa.eu/eli/reg/2024/9002/oj",
+        fmxAvailable: true,
+        fmxUnavailable: false,
+        excerpt: "This Regulation concerns the physical labelling of consumer gadgets sold within the Union.",
+      },
+    ],
+  }, null, 2));
+
+  const store = new JsonLegalCacheStore(tempPath);
+  assert.equal(store.load(), true);
+
+  // Neither record's title/aliases mention "automated decision-making" — only
+  // the first record's excerpt does. A pre-excerpt index would return nothing.
+  const results = store.searchLaws("automated decision-making", { limit: 5 });
+  const celexes = results.map((entry) => entry.celex);
+  assert.ok(celexes.includes("32024R9001"), `expected excerpt-only match, got: ${celexes.join(", ")}`);
+  assert.ok(!celexes.includes("32024R9002"), `unrelated excerpt should not match, got: ${celexes.join(", ")}`);
+});
+
+test("legal cache store searchLaws keeps a title match ahead of an excerpt-only match for the same term", () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "legal-cache-store-excerpt-boost-"));
+  const tempPath = path.join(tempDir, "excerpt-boost.json");
+  fs.writeFileSync(tempPath, JSON.stringify({
+    generatedAt: "2026-03-28T00:00:00.000Z",
+    count: 2,
+    records: [
+      {
+        celex: "32024R9003",
+        title: "Regulation (EU) 2024/9003 on producer obligations",
+        type: "regulation",
+        date: "2024-01-01",
+        eli: "http://data.europa.eu/eli/reg/2024/9003/oj",
+        fmxAvailable: true,
+        fmxUnavailable: false,
+        // "widgets" only appears deep in body text here, never in the title.
+        excerpt: "This Regulation applies to producers of widgets and related components placed on the market.",
+      },
+      {
+        celex: "32024R9004",
+        title: "Widgets Regulation",
+        type: "regulation",
+        date: "2024-01-02",
+        eli: "http://data.europa.eu/eli/reg/2024/9004/oj",
+        fmxAvailable: true,
+        fmxUnavailable: false,
+        excerpt: "",
+      },
+    ],
+  }, null, 2));
+
+  const store = new JsonLegalCacheStore(tempPath);
+  store.load();
+
+  const results = store.searchLaws("widgets", { limit: 5 });
+  const celexes = results.map((entry) => entry.celex);
+  assert.ok(celexes.includes("32024R9003"));
+  assert.ok(celexes.includes("32024R9004"));
+  assert.ok(
+    celexes.indexOf("32024R9004") < celexes.indexOf("32024R9003"),
+    `title match should outrank excerpt-only match, got: ${celexes.join(", ")}`
+  );
+});
+
 test("legal cache store returns null for ambiguous official reference key", () => {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "legal-cache-store-"));
   const tempPath = path.join(tempDir, "ambiguous.json");

@@ -7,6 +7,7 @@ const { promisify } = require("util");
 
 const { DEFAULT_SEARCH_CACHE_PATH } = require("./search-index");
 const { enrichSearchRecord, inferTypeFromCelex } = require("./search-ranking");
+const { parseFmxXml } = require("../shared/fmx-parser-node");
 
 const execFileAsync = promisify(execFile);
 const SPARQL_ENDPOINT = "https://publications.europa.eu/webapi/rdf/sparql";
@@ -18,6 +19,12 @@ const DEFAULT_SEARCH_STATE_PATH = path.join(SEARCH_CACHE_DIR, "search-build-stat
 const GENERIC_OJ_TITLE = "Official Journal of the European Union";
 const DEFAULT_CHALLENGE_RETRY_BASE_MS = 2_000;
 const DEFAULT_CHALLENGE_RETRY_CAP_MS = 30_000;
+// Recitals + Article 1/2 body text, truncated to keep the cache/index size
+// bounded. ~3KB is enough prose to carry the conceptual vocabulary of an act
+// (recitals restate the act's purpose in plain language; Art. 1/2 give
+// subject-matter/scope) without ballooning the ~thousands-of-records cache.
+const EXCERPT_MAX_LENGTH = 3000;
+const EXCERPT_ARTICLE_NUMBERS = ["1", "2"];
 
 function normalizeTitle(value) {
   const title = String(value || "").trim();
@@ -284,6 +291,42 @@ function extractTitleFromXml(xml) {
   return candidates[0]?.title || null;
 }
 
+// Builds the searchable excerpt from the shared FMX parser's combined output:
+// recitals (plain text, already stripped of tags) plus the body text of
+// Article 1 and Article 2 (typically "subject matter" and "scope"), which are
+// the highest-signal, lowest-boilerplate sections for conceptual queries.
+function buildExcerptFromCombined(combined) {
+  const recitalsText = (combined?.recitals || [])
+    .map((recital) => recital?.recital_text || "")
+    .filter(Boolean)
+    .join(" ");
+
+  const articleText = EXCERPT_ARTICLE_NUMBERS
+    .map((number) => (combined?.articles || []).find((article) => article?.article_number === number))
+    .filter(Boolean)
+    .map((article) => stripXmlTags(article.article_html || ""))
+    .join(" ");
+
+  return [recitalsText, articleText]
+    .filter(Boolean)
+    .join(" ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, EXCERPT_MAX_LENGTH);
+}
+
+// Extraction must degrade gracefully: a malformed/unexpected FMX shape must
+// never take down the title extraction that the rest of the build depends on.
+async function extractExcerptFromXml(xml) {
+  try {
+    const combined = await parseFmxXml(xml);
+    return buildExcerptFromCombined(combined);
+  } catch (error) {
+    logProgress(`Excerpt extraction failed: ${error.message}`);
+    return "";
+  }
+}
+
 async function downloadToTempFile(url) {
   const response = await fetch(url, { headers: { "User-Agent": USER_AGENT } });
   if (!response.ok) {
@@ -346,7 +389,10 @@ async function extractXmlFromZip(zipPath) {
   return parts.join("\n");
 }
 
-async function extractOfficialTitle(celex) {
+// Returns { title, excerpt }. Title extraction (regex-based) and excerpt
+// extraction (shared FMX parser) are independent: a title miss must not
+// suppress an excerpt hit, and vice versa.
+async function extractOfficialTitleAndExcerpt(celex) {
   const fmx4Uri = await findFmx4Uri(celex, "ENG");
   const download = await findDownloadUrls(fmx4Uri);
 
@@ -354,15 +400,17 @@ async function extractOfficialTitle(celex) {
     for (const url of download.urls) {
       const xml = await fetchText(url);
       const title = extractTitleFromXml(xml);
-      if (title) return title;
+      if (title) return { title, excerpt: await extractExcerptFromXml(xml) };
     }
-    return null;
+    return { title: null, excerpt: "" };
   }
 
   const zipPath = await downloadToTempFile(download.urls[0]);
   try {
     const xml = await extractXmlFromZip(zipPath);
-    return extractTitleFromXml(xml);
+    const title = extractTitleFromXml(xml);
+    const excerpt = await extractExcerptFromXml(xml);
+    return { title, excerpt };
   } finally {
     await fsp.rm(zipPath, { force: true });
   }
@@ -378,10 +426,12 @@ async function extractOfficialTitleFromEurlexHtml(celex) {
 
 async function extractOfficialTitleWithFallback(celex) {
   let fmxError = null;
+  let excerpt = "";
 
   try {
-    const title = await extractOfficialTitle(celex);
-    if (title) return { title, source: "fmx", fmxError: null };
+    const result = await extractOfficialTitleAndExcerpt(celex);
+    excerpt = result.excerpt || "";
+    if (result.title) return { title: result.title, source: "fmx", fmxError: null, excerpt };
     fmxError = new Error(`No title extracted from FMX for ${celex}`);
   } catch (error) {
     fmxError = error;
@@ -389,11 +439,13 @@ async function extractOfficialTitleWithFallback(celex) {
 
   const title = await extractOfficialTitleFromEurlexHtml(celex);
   if (title) {
-    return { title, source: "html", fmxError };
+    // The HTML fallback path has no FMX XML to pull recitals/articles from,
+    // but a partially-successful FMX fetch above may still have yielded one.
+    return { title, source: "html", fmxError, excerpt };
   }
 
   if (fmxError) throw fmxError;
-  return { title: null, source: null, fmxError: null };
+  return { title: null, source: null, fmxError: null, excerpt };
 }
 
 function toRecord(binding) {
@@ -531,6 +583,7 @@ async function enrichRecords(records, options = {}) {
       try {
         const titleResult = await extractOfficialTitleWithFallback(current.celex);
         if (titleResult.title) next.title = normalizeTitle(titleResult.title);
+        next.excerpt = titleResult.excerpt || "";
         next.fmxAvailable = titleResult.source === "fmx";
         next.fmxUnavailable = Boolean(titleResult.fmxError)
           && String(titleResult.fmxError.message || titleResult.fmxError).includes("No FMX URI found");
@@ -538,6 +591,7 @@ async function enrichRecords(records, options = {}) {
           ? (titleResult.fmxError?.message || null)
           : null;
       } catch (error) {
+        next.excerpt = next.excerpt || "";
         next.fmxAvailable = false;
         next.fmxUnavailable = String(error.message || error).includes("No FMX URI found");
         next.enrichError = error.message;
@@ -771,7 +825,10 @@ if (require.main === module) {
 module.exports = {
   DEFAULT_SEARCH_CACHE_PATH,
   DEFAULT_SEARCH_STATE_PATH,
+  EXCERPT_MAX_LENGTH,
+  buildExcerptFromCombined,
   buildSearchCache,
+  extractExcerptFromXml,
   harvestPrimaryActs,
   buildYearQuery,
   ensurePositiveInt,

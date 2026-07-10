@@ -127,13 +127,21 @@ function dedupeByCelex(records) {
   return unique;
 }
 
+// excerpt (recitals + Art. 1/2 body text, see search-build.js) exists purely
+// to add recall for conceptual queries that never hit a title/alias term
+// (e.g. "automated decision-making"). It is long, unstructured body text, so
+// it gets a boost an order of magnitude below title/aliases: enough to
+// surface a law that free text alone would otherwise miss entirely, but not
+// enough for body-text noise to outrank a genuine title/alias match.
+const EXCERPT_BOOST = 0.3;
+
 function buildMiniSearch(records) {
   const miniSearch = new MiniSearch({
     idField: "celex",
-    fields: ["title", "aliases"],
+    fields: ["title", "aliases", "excerpt"],
     storeFields: ["type"],
     searchOptions: {
-      boost: { aliases: 3, title: 1 },
+      boost: { aliases: 3, title: 1, excerpt: EXCERPT_BOOST },
       fuzzy: 0.2,
       prefix: true,
       combineWith: "AND",
@@ -144,6 +152,7 @@ function buildMiniSearch(records) {
     celex: record.celex,
     title: record.normalizedTitle || record.title || "",
     aliases: Array.isArray(record.aliases) ? record.aliases.join(" ") : "",
+    excerpt: record.excerpt || "",
     type: record.type,
   })));
 

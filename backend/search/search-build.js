@@ -23,14 +23,15 @@ const DEFAULT_CHALLENGE_RETRY_CAP_MS = 30_000;
 // bounded. ~3KB is enough prose to carry the conceptual vocabulary of an act
 // (recitals restate the act's purpose in plain language; Art. 1/2 give
 // subject-matter/scope) without ballooning the ~thousands-of-records cache.
-// Article 1/2 is the highest-signal, lowest-boilerplate section, so it goes
-// FIRST with a reserved budget: a large act's recitals run to tens of KB and
-// would otherwise crowd the subject-matter/scope text out of the truncated
-// excerpt entirely — exactly the big laws we most want findable by topic.
-// The article text is itself capped so a stray long "scope" article can't eat
-// the whole budget; recitals then fill whatever remains.
+// Sections are emitted in priority order — subject-matter/scope, then the
+// definitions vocabulary, then recitals — each with a reserved budget so a
+// large act's recitals (tens of KB) can't crowd the higher-signal sections out
+// of the truncated excerpt entirely, which is exactly what happened to the big
+// laws we most want findable by topic. Each capped section is itself bounded so
+// one long section can't eat the whole budget; recitals fill whatever remains.
 const EXCERPT_MAX_LENGTH = 3000;
 const EXCERPT_ARTICLE_BUDGET = 1200;
+const EXCERPT_DEFINITIONS_BUDGET = 800;
 const EXCERPT_ARTICLE_NUMBERS = ["1", "2"];
 
 function normalizeTitle(value) {
@@ -302,14 +303,24 @@ function extractTitleFromXml(xml) {
 // recitals (plain text, already stripped of tags) plus the body text of
 // Article 1 and Article 2 (typically "subject matter" and "scope"), which are
 // the highest-signal, lowest-boilerplate sections for conceptual queries.
-function buildExcerptFromCombined(combined) {
-  const recitalsText = (combined?.recitals || [])
-    .map((recital) => recital?.recital_text || "")
-    .filter(Boolean)
-    .join(" ")
-    .replace(/\s+/g, " ")
-    .trim();
+// Greedily joins ordered parts up to a total budget, so higher-priority
+// sections (listed first) are guaranteed to survive truncation.
+function clampToBudget(parts, maxLength) {
+  const out = [];
+  let remaining = maxLength;
+  for (const part of parts) {
+    if (!part || remaining <= 0) continue;
+    const separator = out.length ? 1 : 0;
+    const room = remaining - separator;
+    if (room <= 0) break;
+    const slice = part.slice(0, room);
+    out.push(slice);
+    remaining -= slice.length + separator;
+  }
+  return out.join(" ");
+}
 
+function buildExcerptFromCombined(combined) {
   const articleText = EXCERPT_ARTICLE_NUMBERS
     .map((number) => (combined?.articles || []).find((article) => article?.article_number === number))
     .filter(Boolean)
@@ -319,15 +330,27 @@ function buildExcerptFromCombined(combined) {
     .trim()
     .slice(0, EXCERPT_ARTICLE_BUDGET);
 
-  // Article 1/2 first, so it always survives truncation; recitals fill the rest.
-  const separatorLength = articleText && recitalsText ? 1 : 0;
-  const recitalBudget = EXCERPT_MAX_LENGTH - articleText.length - separatorLength;
-  const trimmedRecitals = recitalBudget > 0 ? recitalsText.slice(0, recitalBudget) : "";
-
-  return [articleText, trimmedRecitals]
+  // Definitions carry an act's domain vocabulary. The shared parser locates the
+  // definitions article by heading (and multilingually), so this works even
+  // when it isn't Article 3 — e.g. GDPR's definitions are Article 4.
+  const definitionsText = (combined?.definitions || [])
+    .map((entry) => [entry?.term, entry?.definition].filter(Boolean).join(" "))
     .filter(Boolean)
     .join(" ")
-    .slice(0, EXCERPT_MAX_LENGTH);
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, EXCERPT_DEFINITIONS_BUDGET);
+
+  const recitalsText = (combined?.recitals || [])
+    .map((recital) => recital?.recital_text || "")
+    .filter(Boolean)
+    .join(" ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  // Priority order: subject-matter/scope, then definitions, then recitals fill
+  // whatever budget remains.
+  return clampToBudget([articleText, definitionsText, recitalsText], EXCERPT_MAX_LENGTH);
 }
 
 // Extraction must degrade gracefully: a malformed/unexpected FMX shape must

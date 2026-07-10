@@ -85,6 +85,42 @@ test("buildExcerptFromCombined keeps Article 1/2 text even when recitals overflo
   assert.ok(excerpt.length <= EXCERPT_MAX_LENGTH, `excerpt too long: ${excerpt.length}`);
 });
 
+test("buildExcerptFromCombined folds in parsed definitions (domain vocabulary)", () => {
+  const combined = {
+    recitals: [{ recital_number: "1", recital_text: "purpose text" }],
+    articles: [
+      { article_number: "1", article_html: "<p>subject matter text</p>" },
+      { article_number: "2", article_html: "<p>scope text</p>" },
+    ],
+    // The parser locates these by heading, so their article number is irrelevant
+    // here (GDPR's definitions are Article 4, not 3).
+    definitions: [
+      { term: "automated decision-making", definition: "a process producing legal effects without human intervention" },
+      { term: "provider", definition: "a natural or legal person developing an automated system" },
+    ],
+  };
+
+  const excerpt = buildExcerptFromCombined(combined);
+  assert.match(excerpt, /subject matter text/, "Art 1/2 still present");
+  assert.match(excerpt, /automated decision-making/, "definition term folded in");
+  assert.match(excerpt, /without human intervention/, "definition body folded in");
+  assert.match(excerpt, /purpose text/, "recitals still fill the remainder");
+});
+
+test("buildExcerptFromCombined keeps Article 1/2 and definitions when recitals overflow", () => {
+  const hugeRecitals = "boilerplate ".repeat(5000); // ~60KB, far exceeds EXCERPT_MAX_LENGTH
+  const combined = {
+    recitals: [{ recital_number: "1", recital_text: hugeRecitals }],
+    articles: [{ article_number: "1", article_html: "<p>SUBJECTMATTERSENTINEL lays down rules</p>" }],
+    definitions: [{ term: "DEFTERMSENTINEL", definition: "a defined concept" }],
+  };
+
+  const excerpt = buildExcerptFromCombined(combined);
+  assert.match(excerpt, /SUBJECTMATTERSENTINEL/, "subject-matter survives recital overflow");
+  assert.match(excerpt, /DEFTERMSENTINEL/, "definitions survive recital overflow");
+  assert.ok(excerpt.length <= EXCERPT_MAX_LENGTH, `excerpt too long: ${excerpt.length}`);
+});
+
 test("buildExcerptFromCombined only pulls Article 1 and Article 2, skipping other articles", () => {
   const combined = {
     recitals: [],

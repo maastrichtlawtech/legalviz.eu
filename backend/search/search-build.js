@@ -519,6 +519,7 @@ async function extractOfficialTitleFromEurlexHtml(celex) {
 }
 
 async function extractOfficialTitleWithFallback(celex, options = {}) {
+  const htmlFallback = options.htmlFallback !== false;
   let fmxError = null;
   let excerpt = "";
 
@@ -531,11 +532,18 @@ async function extractOfficialTitleWithFallback(celex, options = {}) {
     fmxError = error;
   }
 
-  const title = await extractOfficialTitleFromEurlexHtml(celex);
-  if (title) {
-    // The HTML fallback path has no FMX XML to pull recitals/articles from,
-    // but a partially-successful FMX fetch above may still have yielded one.
-    return { title, source: "html", fmxError, excerpt };
+  // The EUR-Lex HTML endpoint only yields a title (never an excerpt) and is far
+  // more aggressively WAF-challenged than CELLAR. In bulk harvest mode it is the
+  // dominant time sink and log-noise source for FMX-less acts (e.g. decisions),
+  // which already carry a title from the SPARQL harvest — so it can be turned
+  // off (`htmlFallback: false`) to keep the run moving.
+  if (htmlFallback) {
+    const title = await extractOfficialTitleFromEurlexHtml(celex);
+    if (title) {
+      // The HTML fallback path has no FMX XML to pull recitals/articles from,
+      // but a partially-successful FMX fetch above may still have yielded one.
+      return { title, source: "html", fmxError, excerpt };
+    }
   }
 
   if (fmxError) throw fmxError;
@@ -657,6 +665,7 @@ async function enrichRecords(records, options = {}) {
   // under EUR-Lex's rate limits. Defaults to 0 (no change for existing callers).
   const batchDelayMs = Math.max(0, Number.parseInt(String(options.batchDelayMs || "0"), 10) || 0);
   const corpusDir = options.corpusDir === undefined ? CORPUS_DIR : options.corpusDir;
+  const htmlFallback = options.htmlFallback !== false;
   const shouldProcess = typeof options.shouldProcess === "function"
     ? options.shouldProcess
     : () => true;
@@ -679,7 +688,7 @@ async function enrichRecords(records, options = {}) {
       const current = records[index];
       const next = { ...current };
       try {
-        const titleResult = await extractOfficialTitleWithFallback(current.celex, { corpusDir });
+        const titleResult = await extractOfficialTitleWithFallback(current.celex, { corpusDir, htmlFallback });
         if (titleResult.title) next.title = normalizeTitle(titleResult.title);
         next.excerpt = titleResult.excerpt || "";
         next.fmxAvailable = titleResult.source === "fmx";
@@ -769,6 +778,7 @@ async function reEnrichCurrentCache(options = {}) {
     maxRecords,
     batchDelayMs: options.batchDelayMs,
     corpusDir: options.corpusDir,
+    htmlFallback: options.htmlFallback,
     shouldProcess(record) {
       if (primaryActsOnly && !record.isPrimaryAct) return false;
       return onlyMissingTitles ? !normalizeTitle(record.title) : true;
@@ -849,6 +859,7 @@ async function buildSearchCache(options = {}) {
     startIndex: nextIndex,
     batchDelayMs: options.batchDelayMs,
     corpusDir: options.corpusDir,
+    htmlFallback: options.htmlFallback,
     async onBatchComplete(batch) {
       await writeStateAtomically(statePath, createStatePayload({
         cachePath,

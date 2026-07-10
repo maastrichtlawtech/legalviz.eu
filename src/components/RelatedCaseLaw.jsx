@@ -128,7 +128,26 @@ export function RelatedCaseLaw({ celex, articleNumber, currentLang = "EN" }) {
     );
   }
 
-  if (!loaded || matching.length === 0) return null;
+  if (!loaded) return null;
+
+  // No judgment maps to this specific article. If the law has case law overall,
+  // say so — otherwise the section silently vanishing looks like a broken
+  // feature rather than a genuine "nothing here yet".
+  if (matching.length === 0) {
+    const total = cases?.length || 0;
+    if (total === 0) return null;
+    return (
+      <div className="mt-6 px-6 md:px-12">
+        <div className="flex flex-wrap items-center gap-2 border-y border-gray-200 py-3 text-sm dark:border-gray-800">
+          <Scale size={16} className="shrink-0 text-gray-400 dark:text-gray-500" />
+          <span className="text-gray-500 dark:text-gray-400">
+            No case law maps to this article yet. {total} CJEU {total === 1 ? "judgment interprets" : "judgments interpret"} this law overall — open{" "}
+            <span className="font-medium text-gray-700 dark:text-gray-300">Case law</span> in the sidebar for the full list and an AI digest.
+          </span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="mt-6 px-6 md:px-12">

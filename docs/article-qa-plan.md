@@ -1,6 +1,8 @@
 # LLM-Assisted Article Q&A — Design Plan
 
 > Per-article free-form Q&A is paused; see the static law-summary and article case-law digest migration.
+> The prototype modules (`article-qa-service.js`, `article-bundle.js`) were removed from the tree and live in git history.
+> The `ARTICLE_QA_*` environment variables remain in use as fallbacks for the law-summary, digest, and recital-title features.
 
 Captures the design for a v1 question-answering panel that helps a user
 understand a single article of an EU law, grounded in the law's own

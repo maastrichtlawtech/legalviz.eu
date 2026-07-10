@@ -1,10 +1,17 @@
+const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
-const crypto = require('crypto');
-
 const { chatComplete } = require('./openrouter-chat');
 const { ACT_CELEX_MAP } = require('./law-queries');
 const { inferTypeFromCelex } = require('../search/search-ranking');
+const {
+  stripTags,
+  normalizeText,
+  stableHash,
+  makeSingleFlight,
+  loadCache,
+  saveCache,
+} = require('./ai-digest-utils');
 
 const CACHE_FILE = 'law-summary-cache-v1.json';
 const CACHE_VERSION = 1;
@@ -23,7 +30,7 @@ const ACT_TYPE_GUIDANCE = {
   unknown: 'The act type could not be determined: frame key points generically as obligations, rights, powers, or prohibitions as best supported by the text.',
 };
 
-const inFlight = new Map();
+const withSingleFlight = makeSingleFlight();
 
 function buildSystemPrompt(actType) {
   const guidance = ACT_TYPE_GUIDANCE[actType] || ACT_TYPE_GUIDANCE.unknown;
@@ -52,18 +59,8 @@ Rules:
 - Do not invent article numbers, CELEX identifiers, instruments, obligations, or legal effects.`;
 }
 
-function stripTags(value) {
-  return String(value || '')
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/&nbsp;|&#160;/g, ' ')
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
+// Sentence-boundary-aware truncation, specific to the summary feature (the
+// digest features use the plain clip in ai-digest-utils).
 function clip(value, maxChars) {
   const text = stripTags(value);
   if (text.length <= maxChars) return text;
@@ -86,10 +83,6 @@ function clip(value, maxChars) {
 
 function cacheKey(celex, lang) {
   return `${String(celex || '').toUpperCase()}_${String(lang || 'ENG').toUpperCase()}`;
-}
-
-function stableHash(value) {
-  return crypto.createHash('sha256').update(JSON.stringify(value)).digest('hex');
 }
 
 function rawSourceHash(text) {
@@ -123,34 +116,6 @@ function cachedResult(entry) {
     generatedAt: entry.generatedAt || null,
     cached: true,
   };
-}
-
-function withSingleFlight(key, factory) {
-  if (inFlight.has(key)) return inFlight.get(key);
-  const promise = Promise.resolve()
-    .then(factory)
-    .finally(() => inFlight.delete(key));
-  inFlight.set(key, promise);
-  return promise;
-}
-
-function loadCache(cacheDir) {
-  try {
-    const filePath = path.join(cacheDir, CACHE_FILE);
-    if (!fs.existsSync(filePath)) return {};
-    const parsed = JSON.parse(fs.readFileSync(filePath, 'utf8'));
-    return parsed && typeof parsed === 'object' ? parsed : {};
-  } catch {
-    return {};
-  }
-}
-
-function saveCache(cacheDir, cache) {
-  fs.mkdirSync(cacheDir, { recursive: true });
-  const filePath = path.join(cacheDir, CACHE_FILE);
-  const tempPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
-  fs.writeFileSync(tempPath, JSON.stringify(cache, null, 2), 'utf8');
-  fs.renameSync(tempPath, filePath);
 }
 
 function findKnownCelex(label, actCelexMap = ACT_CELEX_MAP) {
@@ -266,11 +231,6 @@ function normalizeCitations(value, validArticles) {
   return Array.from(new Set(values
     .map((citation) => String(citation || '').replace(/^Art\.?\s*/i, '').trim())
     .filter((citation) => validArticles.has(citation))));
-}
-
-function normalizeText(value, maxChars = 1200) {
-  const text = stripTags(value);
-  return text.length > maxChars ? `${text.slice(0, maxChars).trim()}...` : text;
 }
 
 function normalizeCitedBlock(value, validArticles, { requireCitation = false } = {}) {
@@ -413,7 +373,7 @@ async function ensureLawSummary({
   const key = cacheKey(celex || parsedLaw?.celex, lang || parsedLaw?.lang);
 
   return withSingleFlight(`law-summary:${key}:${model}`, async () => {
-    const cache = cacheDir ? loadCache(cacheDir) : {};
+    const cache = cacheDir ? loadCache(cacheDir, CACHE_FILE) : {};
     const cached = cache[key];
     const servable = isServableEntry(cached, model);
 
@@ -441,7 +401,7 @@ async function ensureLawSummary({
     if (servable && rawHash && cached.rawHash === rawHash) {
       if (cacheDir && cached.sourceFile !== (source.sourceFile || null)) {
         cache[key] = { ...cached, sourceFile: source.sourceFile || null };
-        saveCache(cacheDir, cache);
+        saveCache(cacheDir, CACHE_FILE, cache);
       }
       return cachedResult(cached);
     }
@@ -456,7 +416,7 @@ async function ensureLawSummary({
       // migrates entries written before rawHash/sourceFile existed.
       if (cacheDir && rawHash && (cached.rawHash !== rawHash || cached.sourceFile !== (source.sourceFile || null))) {
         cache[key] = { ...cached, rawHash, sourceFile: source.sourceFile || null };
-        saveCache(cacheDir, cache);
+        saveCache(cacheDir, CACHE_FILE, cache);
       }
       return cachedResult(cache[key] || cached);
     }
@@ -474,7 +434,7 @@ async function ensureLawSummary({
         generatedAt: new Date().toISOString(),
         summary: generated.summary,
       };
-      saveCache(cacheDir, cache);
+      saveCache(cacheDir, CACHE_FILE, cache);
     }
 
     return {

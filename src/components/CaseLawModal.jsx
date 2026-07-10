@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { X, Search, ExternalLink, ChevronDown, ChevronUp } from "lucide-react";
 import { useI18n } from "../i18n/useI18n.js";
+import { CaseLawDigest } from "./CaseLawDigest.jsx";
 
 const PAGE_SIZE = 20;
 
@@ -143,7 +144,7 @@ function CaseCard({ c, currentLang }) {
   );
 }
 
-export function CaseLawModal({ isOpen, onClose, cases, currentLang }) {
+export function CaseLawModal({ isOpen, onClose, cases, currentLang, celex }) {
   const { t } = useI18n();
   const [query, setQuery] = useState("");
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
@@ -242,6 +243,9 @@ export function CaseLawModal({ isOpen, onClose, cases, currentLang }) {
 
         {/* Case list */}
         <div className="flex-1 overflow-y-auto px-4 py-3">
+          {celex && !query.trim() ? (
+            <CaseLawDigest celex={celex} currentLang={currentLang} />
+          ) : null}
           {filtered.length === 0 ? (
             <p className="py-8 text-center text-sm text-gray-400 dark:text-gray-500">
               {t("metadata.caseLawNoResults")}

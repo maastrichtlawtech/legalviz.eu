@@ -44,7 +44,7 @@ export function useRecitalMap({ data, currentLaw, formexLang }) {
       }
 
       const timer = setTimeout(() => {
-        const map = mapRecitalsToArticles(data.recitals, data.articles);
+        const map = mapRecitalsToArticles(data.recitals, data.articles, data.langCode);
         setRecitalMap(withOrphanRecitals(map));
 
         if (!cacheKey) return;
@@ -60,7 +60,7 @@ export function useRecitalMap({ data, currentLaw, formexLang }) {
 
     setRecitalMap(withOrphanRecitals(new Map()));
     return undefined;
-  }, [currentLaw, data.articles, data.recitals, formexLang]);
+  }, [currentLaw, data.articles, data.recitals, data.langCode, formexLang]);
 
   return recitalMap;
 }

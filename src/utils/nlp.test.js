@@ -173,6 +173,28 @@ describe("mapRecitalsToArticles", () => {
       }
     }
   });
+
+  it("honours an optional langCode by using language-specific stop words", () => {
+    // "der" and "verordnung" are German stop words but not English ones, so
+    // without a langCode they still count as matching evidence between the
+    // recital and article 1, while passing "DE" filters them out entirely
+    // (leaving no tokens to match on) and the recital becomes an orphan.
+    const deArticles = [
+      { article_number: "1", article_title: "", article_html: "<p>der verordnung</p>" },
+      { article_number: "2", article_title: "", article_html: "<p>fillertwo fillertwo</p>" },
+    ];
+    const deRecitals = [
+      { recital_number: "1", recital_text: "der verordnung" },
+    ];
+
+    const defaultResult = mapRecitalsToArticles(deRecitals, deArticles);
+    expect(defaultResult.get("1").map((r) => r.recital_number)).toContain("1");
+    expect(defaultResult.get(null)).toEqual([]);
+
+    const deResult = mapRecitalsToArticles(deRecitals, deArticles, "DE");
+    expect(deResult.get("1")).toHaveLength(0);
+    expect(deResult.get(null)).toEqual(["1"]);
+  });
 });
 
 describe("buildSearchIndex + searchIndex", () => {

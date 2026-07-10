@@ -170,14 +170,11 @@ export function LawViewer() {
     t,
   });
 
+  const { secondaryLang, setSecondaryLanguage } = preferences;
   useEffect(() => {
-    if (!derived.isLegacyHtmlFallback || !preferences.secondaryLang) return;
-    preferences.setSecondaryLanguage(null);
-  }, [
-    derived.isLegacyHtmlFallback,
-    preferences.secondaryLang,
-    preferences.setSecondaryLanguage,
-  ]);
+    if (!derived.isLegacyHtmlFallback || !secondaryLang) return;
+    setSecondaryLanguage(null);
+  }, [derived.isLegacyHtmlFallback, secondaryLang, setSecondaryLanguage]);
 
   useEffect(() => {
     if (!source.effectiveCelex || !derived.hasLoadedContent) return;

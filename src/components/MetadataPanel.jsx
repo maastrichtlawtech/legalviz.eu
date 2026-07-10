@@ -53,6 +53,7 @@ export function CaseLawButton({ celex, currentLang = "EN" }) {
           onClose={() => setModalOpen(false)}
           cases={cases}
           currentLang={currentLang}
+          celex={celex}
         />
       </>
     );

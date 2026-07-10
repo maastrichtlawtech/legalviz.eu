@@ -178,6 +178,7 @@ cat input.xml | parse-fmx > output.json
 | `GET` | `/api/laws/:celex/case-law?lang=ENG` | CJEU judgments citing this act, with operative parts and structured `articleRefs` |
 | `GET` | `/api/laws/:celex/recital-titles?lang=ENG` | Cached AI-generated short titles for recitals. Requires `RECITAL_TITLE_OPENROUTER_API_KEY` or `OPENROUTER_API_KEY` on cache miss. |
 | `GET` | `/api/laws/:celex/summary?lang=ENG` | Cached static law overview with article citations. Requires `LAW_SUMMARY_OPENROUTER_API_KEY`, `ARTICLE_QA_OPENROUTER_API_KEY`, or `OPENROUTER_API_KEY` on cache miss. |
+| `GET` | `/api/laws/:celex/case-law-digest?lang=ENG` | Cached static digest of CJEU case law interpreting the whole act, grouped into doctrinal themes. Zero-case results are cached without an LLM call. |
 | `GET` | `/api/laws/:celex/articles/:n/case-law-digest?lang=ENG` | Cached static digest of CJEU case law interpreting one article. Zero-case results are cached without an LLM call. |
 | `GET` | `/api/laws/by-reference?actType=...&year=...&number=...` | Fetch law by official reference |
 | `GET` | `/api/search?q=keyword&limit=10` | Search law metadata |
@@ -214,10 +215,12 @@ claude mcp add --transport http eurlex-local http://localhost:3000/mcp
 ```
 
 - **Claude.ai / Claude Desktop**: Settings → Connectors → add custom connector with the `/mcp` URL.
+- **ChatGPT**: Settings → Connectors → Advanced settings → **Add custom connector** (or, inside a chat with Developer Mode enabled, Tools → **Add connector**) → paste the `/mcp` URL as the MCP server URL. ChatGPT connects over Streamable HTTP directly, no auth needed.
 - **Cursor / VS Code / Windsurf**: add an entry to the client's MCP config, e.g.
   ```json
   { "mcpServers": { "eurlex": { "url": "https://api.legalviz.eu/mcp" } } }
   ```
+- **Other MCP-compatible clients**: any client supporting the Streamable HTTP transport can connect directly to `https://api.legalviz.eu/mcp` — no API key or extra headers required.
 
 ### Analytics
 
@@ -310,7 +313,28 @@ The backend stores titles in `recital-title-cache-v1.json` with a cache `version
 }
 ```
 
-Both endpoints validate generated JSON and citations before writing cache files. The backend stores summaries in `law-summary-cache-v1.json` and digests in `article-digest-cache-v1.json`, with cache version, prompt/schema version, source hash, model, and generation timestamp.
+`GET /api/laws/:celex/case-law-digest?lang=ENG` returns the same digest shape (`summary` / `themes` / `noCaseLaw`) but grouped across the whole act rather than a single article — useful for laws whose case law is too thin to attribute to individual articles:
+
+```json
+{
+  "celex": "32014L0104",
+  "lang": "ENG",
+  "caseLawCacheVersion": "case-law-cache-v4",
+  "digest": {
+    "summary": "…",
+    "themes": [
+      {
+        "name": "Disclosure of evidence",
+        "description": "…",
+        "cites": [{ "ecli": "ECLI:EU:C:2022:863", "celex": "62021CJ0163", "declarationNumber": "1" }]
+      }
+    ],
+    "noCaseLaw": false
+  }
+}
+```
+
+These endpoints validate generated JSON and citations before writing cache files. The backend stores summaries in `law-summary-cache-v1.json`, article digests in `article-digest-cache-v1.json`, and whole-law case-law digests in `case-law-digest-cache-v1.json`, with cache version, prompt/schema version, source hash, model, and generation timestamp. The shared plumbing for these features (text clipping, cache read/write, single-flight, citation grounding) lives in `shared/ai-digest-utils.js`.
 
 ## Using from Python (and other languages)
 

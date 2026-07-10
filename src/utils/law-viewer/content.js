@@ -163,7 +163,12 @@ export function buildSeoData({ dataTitle, currentLaw, selected, t }) {
         ? t("common.recital")
         : t("common.annex");
     title = `${kindLabel} ${selected.id} - ${lawName}`;
-    description = `Read ${kindLabel} ${selected.id} of ${lawName} on ${t("app.name")}.`;
+    description = t("seo.itemDescription", {
+      kind: kindLabel,
+      id: selected.id,
+      law: lawName,
+      app: t("app.name"),
+    });
   }
 
   return { title, description };

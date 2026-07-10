@@ -63,7 +63,7 @@ export function CaseLawButton({ celex, currentLang = "EN" }) {
     return (
       <div className="flex w-full items-center gap-2 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-gray-400 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-500">
         <Scale size={16} />
-        {t("metadata.caseLaw")} — none found
+        {t("metadata.caseLaw")} {t("metadata.noneFound")}
       </div>
     );
   }
@@ -113,6 +113,7 @@ const TYPE_BADGE = {
  */
 // Renders with the same shell as Accordion so there's no layout shift on load
 function LoadButton({ label, count, loading, loaded, onClick }) {
+  const { t } = useI18n();
   return (
     <div className="rounded-xl border border-gray-200 bg-white dark:bg-gray-800 dark:border-gray-700">
       <button
@@ -125,7 +126,7 @@ function LoadButton({ label, count, loading, loaded, onClick }) {
           {loading && <Loader2 size={12} className="animate-spin text-gray-400" />}
           {label}
           {loaded && count === 0 && (
-            <span className="text-xs font-normal text-gray-400 dark:text-gray-500">— none found</span>
+            <span className="text-xs font-normal text-gray-400 dark:text-gray-500">{t("metadata.noneFound")}</span>
           )}
         </span>
         {!loaded && !loading && <ChevronDown size={16} />}
@@ -138,6 +139,7 @@ function LoadButton({ label, count, loading, loaded, onClick }) {
  * Renders a list of acts (amendments or implementing acts) as cards.
  */
 function ActList({ acts, currentLang, type = "amendment" }) {
+  const { t } = useI18n();
   if (!acts || acts.length === 0) return null;
 
   return (
@@ -149,8 +151,8 @@ function ActList({ acts, currentLang, type = "amendment" }) {
           ? "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300"
           : (TYPE_BADGE[a.type] || TYPE_BADGE.amendment);
         const typeLabel = type === "implementing"
-          ? "Impl/Del"
-          : (a.type === "corrigendum" ? "Corrigendum" : "Amendment");
+          ? t("metadata.implDelBadge")
+          : (a.type === "corrigendum" ? t("amendmentHistory.corrigendum") : t("amendmentHistory.amendment"));
 
         return (
           <li key={a.celex}>

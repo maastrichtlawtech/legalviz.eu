@@ -26,7 +26,8 @@
   "seo": {
     "defaultDescription": "Read EU laws like the GDPR, AI Act, DMA, DSA and Data Act with ease. Navigate articles, recitals, annexes and cross-references, side by side.",
     "defaultKeywords": "EU law, GDPR, AI Act, DMA, DSA, Data Act, read EU law, EU regulation reader, legal tech",
-    "landingDescription": "Read EU laws like the GDPR, AI Act, DMA, DSA and Data Act with ease. Navigate articles, recitals, annexes and cross-references, side by side."
+    "landingDescription": "Read EU laws like the GDPR, AI Act, DMA, DSA and Data Act with ease. Navigate articles, recitals, annexes and cross-references, side by side.",
+    "itemDescription": "Read {kind} {id} of {law} on {app}."
   },
   "error": {
     "somethingWentWrong": "Something went wrong",
@@ -155,7 +156,8 @@
     "addFromUrl": "Add from URL",
     "invalidEurlexUrl": "Enter a valid EUR-Lex URL.",
     "importResolveFailed": "This EUR-Lex page could not be resolved to a law LegalViz can open.",
-    "extensionInline": "Or install our extension to open any law directly from EUR-Lex by clicking the extension icon, without copying URLs:"
+    "extensionInline": "Or install our extension to open any law directly from EUR-Lex by clicking the extension icon, without copying URLs:",
+    "orConjunction": " or "
   },
   "resetFooter": {
     "title": "Something isn't working?",
@@ -253,8 +255,16 @@
     "eea": "EEA relevant",
     "yes": "Yes",
     "implementingActs": "Implementing / Delegated Acts",
+    "implDelBadge": "Impl/Del",
+    "noneFound": "— none found",
     "caseLaw": "CJEU Case Law",
     "caseLawSearchPlaceholder": "Search by party, case number, or article…",
-    "caseLawNoResults": "No cases match your search."
+    "caseLawNoResults": "No cases match your search.",
+    "caseLawDecisionLabel": "Decision:",
+    "caseLawExpandDecision": "Expand decision",
+    "caseLawCollapse": "Collapse",
+    "caseLawReadFullJudgment": "Read full judgment",
+    "caseLawMoreArticles": "+{count} more",
+    "caseLawShowMore": "Show {count} more ({remaining} remaining)"
   }
 }

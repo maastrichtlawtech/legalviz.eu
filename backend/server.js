@@ -26,6 +26,10 @@ const {
 const { createAnalytics } = require('./shared/analytics');
 
 const app = express();
+// Trust a fixed number of proxy hops so req.ip reflects the real client
+// instead of a client-spoofed X-Forwarded-For header. Operators sitting
+// behind more than one reverse proxy should set TRUSTED_PROXY_HOPS to match.
+app.set('trust proxy', Number(process.env.TRUSTED_PROXY_HOPS) || 1);
 const PORT = process.env.PORT || 3000;
 
 // Shared cache directory for both FMX (*.xml, *.zip) and parsed HTML (*.parsed.json.gz)

@@ -889,4 +889,5 @@ module.exports = {
   fetchImplementing,
   fetchCaseLaw,
   parseCitationsToRefs,
+  CASE_LAW_CACHE_FILE,
 };

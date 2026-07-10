@@ -24,6 +24,21 @@ function RecitalTitle({ recital, t }) {
   return `${t("common.recital")} ${recital.recital_number}`;
 }
 
+// STEP 6 MVP indication: a small "¶N" badge noting which paragraph of the
+// current article this recital was matched to (see nlp.js findBestParagraph).
+// TODO (full UX): jump-to-paragraph / in-place highlight instead of a static badge.
+function ParagraphBadge({ paragraphNumber }) {
+  if (!paragraphNumber) return null;
+  return (
+    <span
+      className="ml-1 align-super text-xs font-normal text-gray-400 dark:text-gray-500"
+      title={`Paragraph ${paragraphNumber}`}
+    >
+      ¶{paragraphNumber}
+    </span>
+  );
+}
+
 function RecitalTitleList({ recitals, onSelectRecital, t }) {
   return (
     <p className="font-serif text-sm leading-7 text-gray-700 dark:text-gray-300">
@@ -41,6 +56,7 @@ function RecitalTitleList({ recitals, onSelectRecital, t }) {
                 ({recital.recital_number})
               </span>{" "}
               <RecitalTitle recital={recital} t={t} />
+              <ParagraphBadge paragraphNumber={recital.paragraph_number} />
             </button>
             {index < recitals.length - 1 ? "," : "."}
           </React.Fragment>
@@ -56,7 +72,13 @@ export function RelatedRecitals({ recitals, allRecitals, recitalTitlesLoading = 
   const recitalLookup = useRecitalLookup(allRecitals);
 
   if (!recitals || recitals.length === 0) return null;
-  const linkedRecitals = recitals.map((r) => recitalLookup.get(r.recital_number) || r);
+  // Merge the full recital record (title, html, ...) with the paragraph-level
+  // hint attached by mapRecitalsToArticles — the lookup below only has the
+  // former, so it must not clobber the latter.
+  const linkedRecitals = recitals.map((r) => {
+    const full = recitalLookup.get(r.recital_number);
+    return full ? { ...full, paragraph_number: r.paragraph_number ?? null } : r;
+  });
   const showTitleLoading = recitalTitlesLoading
     && linkedRecitals.some((recital) => !String(recital.recital_title || "").trim());
 

@@ -1,5 +1,5 @@
 // NLP Algorithm Version - bump this when algorithm changes to invalidate cache
-export const NLP_VERSION = 14;
+export const NLP_VERSION = 15;
 
 const MONOTONICITY_BETA = 0.9;
 const MONOTONICITY_GAMMA = 2;
@@ -194,7 +194,7 @@ function prepareRecitalEntries(recitals, idf) {
       .slice(0, 3)
       .map(([term]) => term);
 
-    return { recital: r, recitalIndex, recitalVec, keywords };
+    return { recital: r, recitalIndex, recitalVec, keywords, text: recitalText };
   });
 }
 
@@ -283,16 +283,74 @@ function retrieveRecitalsPerTarget(scoreMatrix, targetCount) {
 }
 
 /**
+ * STEP 6 MVP — paragraph-level linking.
+ *
+ * Given a recital already established as relevant to an article (step 4),
+ * find which of that article's structured `paragraphs` it most likely
+ * clarifies. Kept deliberately simple for the MVP: a small TF-IDF corpus
+ * scoped to *just this article's own paragraphs* (typically 2-10 documents),
+ * rather than a single law-wide paragraph index — cheap, and the article-level
+ * match has already narrowed the search space to one article.
+ *
+ * TODO (full UX, not in MVP scope): surface this per-paragraph link with real
+ * UI (e.g. jump-to-paragraph, highlight-in-place) instead of a numeric badge;
+ * consider a law-wide paragraph corpus if per-article scoping proves too
+ * narrow (e.g. a recital whose clearest match is a near-duplicate paragraph
+ * in a neighbouring article); reuse buildScoreMatrix/retrieveRecitalsPerTarget
+ * here too if/when multiple recitals need ranking against the same paragraph.
+ *
+ * @param {string} recitalText - plain-text (HTML-stripped) recital content
+ * @param {Array} paragraphs - article.paragraphs, i.e. [{ number, html }]
+ * @returns {string|null} best-matching paragraph number, or null when there's
+ *   nothing to disambiguate (0-1 paragraphs) or no real term overlap.
+ */
+function findBestParagraph(recitalText, paragraphs) {
+  if (!paragraphs || paragraphs.length <= 1) return null;
+
+  const paragraphDocs = paragraphs.map((p, idx) => ({
+    id: p.number ?? String(idx),
+    tokens: tokenize(stripTags(p.html)),
+  }));
+  const idf = computeIDF(paragraphDocs);
+  const paragraphVectors = paragraphDocs.map((doc) => ({
+    id: doc.id,
+    ...computeTFIDFVector(doc.tokens, idf),
+  }));
+
+  const recitalVec = computeTFIDFVector(tokenize(recitalText), idf);
+  if (recitalVec.magnitude === 0) return null;
+
+  let bestId = null;
+  let bestScore = 0;
+  for (const pVec of paragraphVectors) {
+    const score = cosineSimilarity(recitalVec, pVec);
+    if (score > bestScore) {
+      bestScore = score;
+      bestId = pVec.id;
+    }
+  }
+  // Only report a paragraph when there's genuine term overlap — otherwise
+  // this would just be reporting an arbitrary tie-break default.
+  return bestScore > 0 ? bestId : null;
+}
+
+/**
  * Map recitals to articles based on TF-IDF Cosine Similarity with a positional prior.
  *
  * Retrieval runs *per article* (many-to-many): a recital that clarifies several
  * articles will appear under all of them, rather than being exclusively assigned
  * to at most a couple of "winning" articles.
  *
+ * Also attaches a best-effort `paragraph_number` (step 6 MVP) to each matched
+ * recital when the article has structured paragraphs — see `findBestParagraph`.
+ *
  * @param {Array} recitals - Array of { recital_number, recital_text, ... }
- * @param {Array} articles - Array of { article_number, article_title, article_html, ... }
+ * @param {Array} articles - Array of { article_number, article_title, article_html, paragraphs?, ... }
  * @returns {Map} - Map where key is article_number, value is array of
- *                  { recital_number, relevanceScore, keywords }, ranked by relevance.
+ *                  { recital_number, relevanceScore, keywords, paragraph_number },
+ *                  ranked by relevance. `paragraph_number` is null when the
+ *                  article has no structured paragraphs to disambiguate, or no
+ *                  single paragraph stands out.
  *                  Recitals that don't clear the bar for any article are exposed
  *                  under the reserved null key (array of recital_number).
  */
@@ -307,15 +365,19 @@ export function mapRecitalsToArticles(recitals, articles) {
   const scoreMatrix = buildScoreMatrix(recitalEntries, articleVectors, recitals.length);
   const selectedPerArticle = retrieveRecitalsPerTarget(scoreMatrix, articleVectors.length);
 
+  const paragraphsByArticle = new Map(articles.map((a) => [a.article_number, a.paragraphs]));
   const assignedRecitalNumbers = new Set();
 
   articleVectors.forEach((aVec, articleIndex) => {
     const list = articleToRecitals.get(aVec.id);
     if (!list) return;
 
+    const paragraphs = paragraphsByArticle.get(aVec.id);
+
     for (const { recitalIndex, score } of selectedPerArticle[articleIndex]) {
-      const { recital, keywords } = recitalEntries[recitalIndex];
-      list.push({ recital_number: recital.recital_number, relevanceScore: score, keywords });
+      const { recital, keywords, text } = recitalEntries[recitalIndex];
+      const paragraph_number = findBestParagraph(text, paragraphs);
+      list.push({ recital_number: recital.recital_number, relevanceScore: score, keywords, paragraph_number });
       assignedRecitalNumbers.add(recital.recital_number);
     }
 

@@ -204,6 +204,54 @@ describe("mapRecitalsToArticles", () => {
       }
     }
   });
+
+  describe("paragraph-level linking (step 6 MVP)", () => {
+    const paragraphArticles = [
+      {
+        article_number: "1",
+        article_title: "",
+        article_html:
+          "<p>alphatopic content about alpha</p><p>betatopic content about beta specialword</p><p>gammatopic content about gamma</p>",
+        paragraphs: [
+          { number: "1", html: "<p>alphatopic content about alpha</p>" },
+          { number: "2", html: "<p>betatopic content about beta specialword</p>" },
+          { number: "3", html: "<p>gammatopic content about gamma</p>" },
+        ],
+      },
+      {
+        article_number: "2",
+        article_title: "",
+        article_html: "<p>unrelatedfiller unrelatedfiller</p>",
+        paragraphs: [],
+      },
+    ];
+
+    it("links a recital to the specific paragraph it clarifies, not just the article", () => {
+      const result = mapRecitalsToArticles(
+        [{ recital_number: "1", recital_text: "betatopic specialword" }],
+        paragraphArticles
+      );
+
+      const matched = result.get("1").find((r) => r.recital_number === "1");
+      expect(matched).toBeDefined();
+      expect(matched.paragraph_number).toBe("2");
+    });
+
+    it("reports paragraph_number as null when the article has no structured paragraphs", () => {
+      const noParagraphArticles = [
+        { article_number: "1", article_title: "", article_html: "<p>sharedterm</p>", paragraphs: [] },
+        { article_number: "2", article_title: "", article_html: "<p>unrelatedfiller unrelatedfiller</p>", paragraphs: [] },
+      ];
+      const result = mapRecitalsToArticles(
+        [{ recital_number: "1", recital_text: "sharedterm" }],
+        noParagraphArticles
+      );
+
+      const matched = result.get("1").find((r) => r.recital_number === "1");
+      expect(matched).toBeDefined();
+      expect(matched.paragraph_number).toBeNull();
+    });
+  });
 });
 
 describe("buildSearchIndex + searchIndex", () => {

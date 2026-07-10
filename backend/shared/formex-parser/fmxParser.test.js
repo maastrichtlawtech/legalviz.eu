@@ -170,6 +170,32 @@ describe("parseFmxToCombined — GDPR", () => {
       expect(nums[i]).toBeGreaterThanOrEqual(nums[i - 1]);
     }
   });
+
+  it("exposes structured paragraphs alongside article_html (additive)", () => {
+    for (const art of result.articles) {
+      expect(Array.isArray(art.paragraphs)).toBe(true);
+      expect(art).toHaveProperty("article_html");
+    }
+  });
+
+  it("Article 5 (numbered PARAGs) exposes each paragraph with its number", () => {
+    const art5 = result.articles.find((a) => a.article_number === "5");
+    expect(art5.paragraphs.length).toBeGreaterThanOrEqual(2);
+    const numbers = art5.paragraphs.map((p) => p.number);
+    expect(numbers).toContain("1");
+    expect(numbers).toContain("2");
+    for (const p of art5.paragraphs) {
+      expect(typeof p.html).toBe("string");
+      expect(p.html.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("paragraph HTML for Article 5 does not leak between paragraphs", () => {
+    const art5 = result.articles.find((a) => a.article_number === "5");
+    const p1 = art5.paragraphs.find((p) => p.number === "1");
+    const p2 = art5.paragraphs.find((p) => p.number === "2");
+    expect(p1.html).not.toBe(p2.html);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -205,6 +231,18 @@ describe("parseFmxToCombined — AI Act", () => {
 
   it("extracts 13 annexes", () => {
     expect(result.annexes).toHaveLength(13);
+  });
+
+  it("an article with no PARAG elements still exposes a single implicit paragraph", () => {
+    // Article 3 (Definitions) in the AI Act fixture has no numbered PARAGs —
+    // its content is direct ALINEA/LIST children of <ARTICLE>.
+    const art3 = result.articles.find((a) => a.article_number === "3");
+    expect(art3.paragraphs).toHaveLength(1);
+    expect(art3.paragraphs[0].number).toBeNull();
+    expect(art3.paragraphs[0].html.length).toBeGreaterThan(0);
+    // article_html contract must stay untouched by the additive paragraphs field
+    expect(art3.article_html).not.toMatch(/<PARAG\b/);
+    expect(art3.article_html).not.toMatch(/<ARTICLE\b/);
   });
 
   it("annexes have expected shape", () => {

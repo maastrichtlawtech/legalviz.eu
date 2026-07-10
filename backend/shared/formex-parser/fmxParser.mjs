@@ -310,14 +310,57 @@ function renderWithFootnotes(el, idPrefix) {
   return appendFootnotes(html, ctx);
 }
 
-function renderChildrenWithFootnotes(el, idPrefix, shouldSkip = () => false) {
+/**
+ * Build an article's full body HTML (unchanged legacy contract) AND a
+ * structured paragraph breakdown (additive — step 6 paragraph-level linking)
+ * in a single pass, so footnote numbering stays consistent between the two
+ * views (a footnote referenced inside a PARAG must still resolve to the
+ * same <li> appended at the end of the full article_html).
+ *
+ * Returns { bodyHtml, paragraphs } where paragraphs is
+ * [{ number, html }] — `number` is the PARAG's NO.PARAG text (e.g. "1"),
+ * or null for content that isn't inside a numbered PARAG (e.g. single-
+ * paragraph articles with no NO.PARAG at all, or introductory text/lists
+ * before the first PARAG).
+ */
+function buildArticleBodyAndParagraphs(articleEl, idPrefix, lang) {
   const ctx = { idPrefix, footnotes: [] };
-  let html = "";
-  for (const child of el.childNodes) {
-    if (shouldSkip(child)) continue;
-    html += fmxToHtml(child, ctx);
+  const paragraphs = [];
+  let bodyHtmlRaw = "";
+  let implicitBuffer = [];
+
+  const flushImplicit = () => {
+    if (implicitBuffer.length === 0) return;
+    const html = implicitBuffer.join("");
+    implicitBuffer = [];
+    if (html.trim()) {
+      paragraphs.push({ number: null, html: injectCrossRefLinks(html, lang) });
+    }
+  };
+
+  for (const node of articleEl.childNodes) {
+    const isElement = node.nodeType === Node.ELEMENT_NODE;
+    if (isElement && node.tagName === "TI.ART") continue;
+
+    const html = fmxToHtml(node, ctx);
+    bodyHtmlRaw += html;
+
+    if (isElement && node.tagName === "PARAG") {
+      flushImplicit();
+      const noP = node.querySelector("NO\\.PARAG");
+      const number = noP ? allText(noP).replace(/[.\s]+$/, "").trim() : String(paragraphs.length + 1);
+      paragraphs.push({ number, html: injectCrossRefLinks(html, lang) });
+    } else if (isElement && node.tagName === "STI.ART") {
+      // Subtitle heading — keep in bodyHtml for backward compat, but it's
+      // not article content, so don't surface it as a paragraph.
+    } else if (html.trim()) {
+      implicitBuffer.push(html);
+    }
   }
-  return appendFootnotes(html, ctx);
+  flushImplicit();
+
+  const bodyHtml = injectCrossRefLinks(appendFootnotes(bodyHtmlRaw, ctx), lang);
+  return { bodyHtml, paragraphs };
 }
 
 function appendFootnotes(html, ctx) {
@@ -951,17 +994,18 @@ export function parseFmxToCombined(xmlText) {
         const article_number = m ? m[1] : idAttr.replace(/^0+/, "") || String(articles.length + 1);
         const article_title = stiArt ? allText(stiArt) : "";
 
-        // Build HTML from article body (skip TI.ART, keep STI.ART as subtitle)
-        let bodyHtml = renderChildrenWithFootnotes(
+        // Build HTML from article body (skip TI.ART, keep STI.ART as subtitle),
+        // plus a structured paragraph breakdown (step 6: paragraph-level linking).
+        const { bodyHtml, paragraphs } = buildArticleBodyAndParagraphs(
           child,
           `article-${article_number}`,
-          (node) => node.nodeType === Node.ELEMENT_NODE && node.tagName === "TI.ART"
+          lang
         );
-        bodyHtml = injectCrossRefLinks(bodyHtml, lang);
 
         articles.push({
           article_number,
           article_title,
+          paragraphs,
           division: {
             chapter: { number: currentChapter.number, title: currentChapter.title },
             section: currentSection.number ? { number: currentSection.number, title: currentSection.title } : null,

@@ -154,6 +154,14 @@ test("extractExcerptFromXml resolves to an empty string for XML with no recitals
   assert.equal(excerpt, "");
 });
 
+test("extractExcerptFromXml skips (does not parse) oversized XML to protect the heap", async () => {
+  // A >6MB blob must return "" without building a DOM — guards against the
+  // annex-heavy acts that OOM'd the harvest workers.
+  const huge = `<ACT><FILLER>${"x".repeat(6 * 1024 * 1024 + 16)}</FILLER></ACT>`;
+  const excerpt = await extractExcerptFromXml(huge);
+  assert.equal(excerpt, "");
+});
+
 test("enrichSearchRecord defaults excerpt to an empty string when absent (old cache records)", () => {
   const record = enrichSearchRecord({
     celex: "32020R0123",

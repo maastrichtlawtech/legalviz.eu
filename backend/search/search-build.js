@@ -23,7 +23,14 @@ const DEFAULT_CHALLENGE_RETRY_CAP_MS = 30_000;
 // bounded. ~3KB is enough prose to carry the conceptual vocabulary of an act
 // (recitals restate the act's purpose in plain language; Art. 1/2 give
 // subject-matter/scope) without ballooning the ~thousands-of-records cache.
+// Article 1/2 is the highest-signal, lowest-boilerplate section, so it goes
+// FIRST with a reserved budget: a large act's recitals run to tens of KB and
+// would otherwise crowd the subject-matter/scope text out of the truncated
+// excerpt entirely — exactly the big laws we most want findable by topic.
+// The article text is itself capped so a stray long "scope" article can't eat
+// the whole budget; recitals then fill whatever remains.
 const EXCERPT_MAX_LENGTH = 3000;
+const EXCERPT_ARTICLE_BUDGET = 1200;
 const EXCERPT_ARTICLE_NUMBERS = ["1", "2"];
 
 function normalizeTitle(value) {
@@ -299,19 +306,27 @@ function buildExcerptFromCombined(combined) {
   const recitalsText = (combined?.recitals || [])
     .map((recital) => recital?.recital_text || "")
     .filter(Boolean)
-    .join(" ");
+    .join(" ")
+    .replace(/\s+/g, " ")
+    .trim();
 
   const articleText = EXCERPT_ARTICLE_NUMBERS
     .map((number) => (combined?.articles || []).find((article) => article?.article_number === number))
     .filter(Boolean)
     .map((article) => stripXmlTags(article.article_html || ""))
-    .join(" ");
-
-  return [recitalsText, articleText]
-    .filter(Boolean)
     .join(" ")
     .replace(/\s+/g, " ")
     .trim()
+    .slice(0, EXCERPT_ARTICLE_BUDGET);
+
+  // Article 1/2 first, so it always survives truncation; recitals fill the rest.
+  const separatorLength = articleText && recitalsText ? 1 : 0;
+  const recitalBudget = EXCERPT_MAX_LENGTH - articleText.length - separatorLength;
+  const trimmedRecitals = recitalBudget > 0 ? recitalsText.slice(0, recitalBudget) : "";
+
+  return [articleText, trimmedRecitals]
+    .filter(Boolean)
+    .join(" ")
     .slice(0, EXCERPT_MAX_LENGTH);
 }
 

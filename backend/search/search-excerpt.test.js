@@ -66,6 +66,25 @@ test("buildExcerptFromCombined truncates to EXCERPT_MAX_LENGTH", () => {
   assert.ok(excerpt.length <= EXCERPT_MAX_LENGTH, `excerpt too long: ${excerpt.length}`);
 });
 
+test("buildExcerptFromCombined keeps Article 1/2 text even when recitals overflow the budget", () => {
+  // Regression: a large act's recitals (tens of KB) must not crowd the
+  // subject-matter/scope articles out of the truncated excerpt.
+  const hugeRecitals = "boilerplate ".repeat(5000); // ~60KB, far exceeds EXCERPT_MAX_LENGTH
+  const combined = {
+    recitals: [{ recital_number: "1", recital_text: hugeRecitals }],
+    articles: [
+      { article_number: "1", article_html: "<p>SUBJECTMATTERSENTINEL lays down harmonised rules</p>" },
+      { article_number: "2", article_html: "<p>SCOPESENTINEL applies to providers in the Union</p>" },
+    ],
+  };
+
+  const excerpt = buildExcerptFromCombined(combined);
+  assert.match(excerpt, /SUBJECTMATTERSENTINEL/, "Article 1 subject-matter text must survive");
+  assert.match(excerpt, /SCOPESENTINEL/, "Article 2 scope text must survive");
+  assert.match(excerpt, /boilerplate/, "recitals still fill the remaining budget");
+  assert.ok(excerpt.length <= EXCERPT_MAX_LENGTH, `excerpt too long: ${excerpt.length}`);
+});
+
 test("buildExcerptFromCombined only pulls Article 1 and Article 2, skipping other articles", () => {
   const combined = {
     recitals: [],

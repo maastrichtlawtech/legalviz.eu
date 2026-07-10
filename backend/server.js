@@ -107,19 +107,26 @@ function hasParsedLawContent(parsed) {
   );
 }
 
+// fetchEurlexHtmlLaw always fetches the English EUR-Lex HTML page regardless of the
+// requested language (see shared/eurlex-html-parser.js). Cache lookups/writes must key
+// on the language actually served, not the requested one, so we don't store identical
+// English HTML redundantly under every language code or mislabel it as translated.
+const HTML_FALLBACK_SERVED_LANG = 'ENG';
+
 /**
  * On-demand HTML law fetcher with disk caching.
  *
  * Caches raw HTML so parser improvements apply without re-fetching.
  * Parses on each request (JSDOM is fast; the network/Playwright fetch is the bottleneck).
  *
- * 1. Check disk cache for raw HTML
+ * 1. Check disk cache for raw HTML (keyed by the language actually served, always English)
  * 2. If miss, fetch from EUR-Lex (plain fetch first, Playwright on WAF challenge)
- * 3. Store raw HTML to disk cache
- * 4. Parse and return
+ * 3. Store raw HTML to disk cache (same served-language key)
+ * 4. Parse and return, including the requested `lang` and the honest `servedLang`
  */
 async function fetchAndParseHtmlLawCached(celex, lang) {
-  let rawHtml = await htmlCache.get(celex, lang);
+  let servedLang = HTML_FALLBACK_SERVED_LANG;
+  let rawHtml = await htmlCache.get(celex, servedLang);
   let fromCache = Boolean(rawHtml);
 
   async function fetchFreshHtml() {
@@ -131,6 +138,7 @@ async function fetchAndParseHtmlLawCached(celex, lang) {
       usePlaywrightOnChallenge: true,
       closeBrowserAfterFetch: true,
     });
+    servedLang = fetched.servedLang || HTML_FALLBACK_SERVED_LANG;
     return fetched.rawHtml;
   }
 
@@ -141,29 +149,30 @@ async function fetchAndParseHtmlLawCached(celex, lang) {
 
   let parsed;
   try {
-    parsed = await parseEurlexHtmlToCombined(rawHtml, lang);
+    parsed = await parseEurlexHtmlToCombined(rawHtml, servedLang);
   } catch (err) {
     if (fromCache && err?.code === 'law_not_found') {
-      htmlCache.remove(celex, lang);
+      htmlCache.remove(celex, servedLang);
       rawHtml = await fetchFreshHtml();
       fromCache = false;
-      parsed = await parseEurlexHtmlToCombined(rawHtml, lang);
+      parsed = await parseEurlexHtmlToCombined(rawHtml, servedLang);
     } else {
       throw err;
     }
   }
 
   if (!fromCache && hasParsedLawContent(parsed)) {
-    htmlCache.put(celex, lang, rawHtml).catch((err) => {
-      console.error(`[HtmlCache] Failed to cache ${celex}_${lang}:`, err.message);
+    htmlCache.put(celex, servedLang, rawHtml).catch((err) => {
+      console.error(`[HtmlCache] Failed to cache ${celex}_${servedLang}:`, err.message);
     });
   } else if (!fromCache) {
-    console.warn(`[HtmlCache] Skipping cache for ${celex}_${lang}: parsed HTML did not yield law content`);
+    console.warn(`[HtmlCache] Skipping cache for ${celex}_${servedLang}: parsed HTML did not yield law content`);
   }
 
   return {
     celex,
     lang,
+    servedLang,
     source: 'eurlex-html',
     format: 'combined-v1',
     ...parsed,

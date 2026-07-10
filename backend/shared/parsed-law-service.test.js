@@ -27,3 +27,28 @@ test('resolveParsedLaw uses the HTML fallback path when skipFmxProbe is set and 
   await resolveParsedLaw('32016R0679', 'FRA', { skipFmxProbe: true });
   assert.equal(htmlCalls, 2);
 });
+
+test('resolveParsedLaw propagates servedLang from the HTML fallback without overriding the requested lang', async () => {
+  // Simulates the real fetchAndParseHtmlLawCached in server.js, which always serves
+  // English HTML (servedLang) even when a different language was requested (lang),
+  // so callers can tell the two apart instead of the content being silently mislabeled.
+  const resolveParsedLaw = createParsedLawResolver({
+    prepareLawPayload: async () => { throw new Error('prepareLawPayload should not be called'); },
+    fetchAndParseHtmlLaw: async (celex, lang) => ({
+      celex,
+      lang,
+      servedLang: 'ENG',
+      source: 'eurlex-html',
+      title: `Law ${celex}`,
+      articles: [],
+      recitals: [],
+      annexes: [],
+      definitions: [],
+      crossReferences: {},
+    }),
+  });
+
+  const result = await resolveParsedLaw('32016R0679', 'FRA', { skipFmxProbe: true });
+  assert.equal(result.lang, 'FRA', 'top-level lang should stay the requested language for routing/URL state');
+  assert.equal(result.servedLang, 'ENG', 'servedLang should surface the language actually served');
+});

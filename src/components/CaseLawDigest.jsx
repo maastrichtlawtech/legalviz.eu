@@ -78,10 +78,10 @@ export function CaseLawDigest({ celex, currentLang = "EN" }) {
       >
         <span className="inline-flex min-w-0 items-center gap-2 font-medium text-teal-900 dark:text-teal-100">
           <Sparkles size={14} className="shrink-0 text-teal-700 dark:text-teal-300" />
-          <span>Generate case-law digest</span>
+          <span>{t("caseLawDigest.generate")}</span>
         </span>
         <span className="shrink-0 rounded bg-teal-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-teal-800 dark:bg-teal-900/50 dark:text-teal-200">
-          AI
+          {t("common.ai")}
         </span>
       </button>
     );
@@ -96,13 +96,13 @@ export function CaseLawDigest({ celex, currentLang = "EN" }) {
       {loading && !loaded ? (
         <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
           <Loader2 size={14} className="animate-spin" />
-          Generating case-law digest
+          {t("caseLawDigest.generating")}
         </div>
       ) : null}
 
       {error ? (
         <div className="flex flex-wrap items-center justify-between gap-3 border-l-2 border-amber-300 pl-3 text-sm text-amber-800 dark:border-amber-700 dark:text-amber-200">
-          <span>Case-law digest is not available yet.</span>
+          <span>{t("caseLawDigest.unavailable")}</span>
           <Button type="button" variant="outline" size="sm" onClick={retry}>
             <RefreshCw size={14} />
             {t("common.retry")}
@@ -137,8 +137,8 @@ export function CaseLawDigest({ celex, currentLang = "EN" }) {
 
           {metadata?.generatedAt ? (
             <div className="pl-6 text-[11px] text-gray-400 dark:text-gray-500">
-              Static digest generated {new Date(metadata.generatedAt).toLocaleDateString("en-GB")}
-              {metadata.cached ? " from cache" : ""}
+              {t("caseLawDigest.generatedOn", { date: new Date(metadata.generatedAt).toLocaleDateString("en-GB") })}
+              {metadata.cached ? ` ${t("caseLawDigest.fromCache")}` : ""}
             </div>
           ) : null}
         </div>

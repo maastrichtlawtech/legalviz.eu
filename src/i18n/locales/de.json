@@ -21,7 +21,10 @@
     "articles": "Artikel",
     "recitals": "Erwägungsgründe",
     "annexes": "Anhänge",
-    "noSelection": "Keine Auswahl"
+    "noSelection": "Keine Auswahl",
+    "beta": "Beta",
+    "ai": "KI",
+    "noneFoundSuffix": "— keine gefunden"
   },
   "seo": {
     "defaultDescription": "Interaktive Visualisierung von EU-Gesetzen. Navigieren Sie mühelos durch Artikel, Präambeln und Anhänge.",
@@ -183,6 +186,33 @@
     "description": "Diese Präambeln scheinen mit diesem Artikel verbunden zu sein, basierend auf Textanalyse unter Verwendung einfacher KI (<a href=\"https://ebooks.iospress.nl/volumearticle/56169\" target=\"_blank\" rel=\"noopener noreferrer\">TF-IDF-Ähnlichkeit</a> (Nanda et al.)). Sortiert nach Relevanzbewertung.",
     "match": "{score}% Übereinstimmung",
     "read": "Lesen →"
+  },
+  "relatedCaseLaw": {
+    "title": "Zugehörige Rechtsprechung",
+    "loading": "Wird geladen",
+    "showAllJudgments": "Alle {count} Urteile anzeigen",
+    "noMatchPrefix": "Diesem Artikel ist noch keine Rechtsprechung zugeordnet. {count} {judgmentWord} dieses Gesetz insgesamt — öffnen Sie",
+    "judgmentInterprets": "EuGH-Urteil legt aus",
+    "judgmentsInterpret": "EuGH-Urteile legen aus",
+    "sidebarLabel": "Rechtsprechung",
+    "noMatchSuffix": "in der Seitenleiste für die vollständige Liste und eine KI-Zusammenfassung."
+  },
+  "caseLawDigest": {
+    "generate": "Rechtsprechungsübersicht erstellen",
+    "generating": "Rechtsprechungsübersicht wird erstellt",
+    "unavailable": "Die Rechtsprechungsübersicht ist noch nicht verfügbar.",
+    "generatedOn": "Statische Übersicht erstellt am {date}",
+    "fromCache": "aus dem Cache"
+  },
+  "caseLawCard": {
+    "expandDecision": "Entscheidung ausklappen",
+    "collapse": "Einklappen",
+    "readFullJudgment": "Vollständiges Urteil lesen",
+    "decisionLabel": "Entscheidung:",
+    "moreArticles": "+{count} weitere"
+  },
+  "caseLawModal": {
+    "showMore": "{count} weitere anzeigen ({remaining} verbleibend)"
   },
   "crossReferences": {
     "title": "Kreuzverweise",

@@ -21,7 +21,10 @@
     "articles": "Artiklid",
     "recitals": "Põhjendused",
     "annexes": "Lisad",
-    "noSelection": "Valik puudub"
+    "noSelection": "Valik puudub",
+    "beta": "beeta",
+    "ai": "TI",
+    "noneFoundSuffix": "— ei leitud ühtegi"
   },
   "seo": {
     "defaultDescription": "EU seaduste interaktiivne visualiseerimine. Liikuge artiklite, preambuli ja lisade vahel hõlpsalt.",
@@ -183,6 +186,33 @@
     "description": "Need preambuuli osad paistuvad selle artikliga seotud olevat teksti analüüsi abil, kasutades lihtsat tehisintellekti (<a href=\"https://ebooks.iospress.nl/volumearticle/56169\" target=\"_blank\" rel=\"noopener noreferrer\">TF-IDF sarnasus</a> (Nanda jt.)). Sorteeritud asjaolulisuse astme järgi.",
     "match": "{score}% vaste",
     "read": "Loe →"
+  },
+  "relatedCaseLaw": {
+    "title": "Seotud kohtupraktika",
+    "loading": "Laadimine",
+    "showAllJudgments": "Näita kõiki {count} kohtuotsust",
+    "noMatchPrefix": "Selle artikliga ei ole veel kohtupraktikat seostatud. {count} {judgmentWord} seda õigusakti tervikuna — ava",
+    "judgmentInterprets": "Euroopa Kohtu otsus tõlgendab",
+    "judgmentsInterpret": "Euroopa Kohtu otsused tõlgendavad",
+    "sidebarLabel": "Kohtupraktika",
+    "noMatchSuffix": "külgribal, et näha täielikku loetelu ja TI koostatud kokkuvõtet."
+  },
+  "caseLawDigest": {
+    "generate": "Loo kohtupraktika kokkuvõte",
+    "generating": "Kohtupraktika kokkuvõtte loomine",
+    "unavailable": "Kohtupraktika kokkuvõte ei ole veel saadaval.",
+    "generatedOn": "Staatiline kokkuvõte loodud {date}",
+    "fromCache": "vahemälust"
+  },
+  "caseLawCard": {
+    "expandDecision": "Ava otsus",
+    "collapse": "Sulge",
+    "readFullJudgment": "Loe kogu kohtuotsust",
+    "decisionLabel": "Otsus:",
+    "moreArticles": "+{count} veel"
+  },
+  "caseLawModal": {
+    "showMore": "Näita {count} veel (jäänud {remaining})"
   },
   "crossReferences": {
     "title": "Ristviited",

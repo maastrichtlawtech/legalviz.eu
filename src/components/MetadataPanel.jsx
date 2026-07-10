@@ -45,7 +45,7 @@ export function CaseLawButton({ celex, currentLang = "EN" }) {
           <span className="flex items-center gap-2">
             <Scale size={16} />
             {t("metadata.caseLaw")} ({cases.length})
-            <span className="rounded bg-teal-200 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-teal-800 dark:bg-teal-800 dark:text-teal-200">beta</span>
+            <span className="rounded bg-teal-200 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-teal-800 dark:bg-teal-800 dark:text-teal-200">{t("common.beta")}</span>
           </span>
         </button>
         <CaseLawModal
@@ -63,7 +63,7 @@ export function CaseLawButton({ celex, currentLang = "EN" }) {
     return (
       <div className="flex w-full items-center gap-2 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-gray-400 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-500">
         <Scale size={16} />
-        {t("metadata.caseLaw")} — none found
+        {t("metadata.caseLaw")} {t("common.noneFoundSuffix")}
       </div>
     );
   }
@@ -79,7 +79,7 @@ export function CaseLawButton({ celex, currentLang = "EN" }) {
       <span className="flex items-center gap-2">
         {loading ? <Loader2 size={16} className="animate-spin" /> : <Scale size={16} />}
         {t("metadata.caseLaw")}
-        <span className="rounded bg-teal-200 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-teal-800 dark:bg-teal-800 dark:text-teal-200">beta</span>
+        <span className="rounded bg-teal-200 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-teal-800 dark:bg-teal-800 dark:text-teal-200">{t("common.beta")}</span>
       </span>
     </button>
   );
@@ -113,6 +113,7 @@ const TYPE_BADGE = {
  */
 // Renders with the same shell as Accordion so there's no layout shift on load
 function LoadButton({ label, count, loading, loaded, onClick }) {
+  const { t } = useI18n();
   return (
     <div className="rounded-xl border border-gray-200 bg-white dark:bg-gray-800 dark:border-gray-700">
       <button
@@ -125,7 +126,7 @@ function LoadButton({ label, count, loading, loaded, onClick }) {
           {loading && <Loader2 size={12} className="animate-spin text-gray-400" />}
           {label}
           {loaded && count === 0 && (
-            <span className="text-xs font-normal text-gray-400 dark:text-gray-500">— none found</span>
+            <span className="text-xs font-normal text-gray-400 dark:text-gray-500">{t("common.noneFoundSuffix")}</span>
           )}
         </span>
         {!loaded && !loading && <ChevronDown size={16} />}

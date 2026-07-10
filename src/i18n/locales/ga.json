@@ -21,7 +21,10 @@
     "articles": "Airteagail",
     "recitals": "Aithrisí",
     "annexes": "Iarscríbhinní",
-    "noSelection": "Gan roghnú"
+    "noSelection": "Gan roghnú",
+    "beta": "beite",
+    "ai": "AI",
+    "noneFoundSuffix": "— níor aimsíodh aon cheann"
   },
   "seo": {
     "defaultDescription": "Samhaltú idirghníomhach ar dhlithe EU. Nasáil altanna, réamhráití agus iatachán le fása.",
@@ -183,6 +186,33 @@
     "description": "Dealraítear go bhfuil na réamhráití seo a bheith gaolmhar don alt seo bunaithe ar anailís téacsa ag úsáid AI simplí (<a href=\"https://ebooks.iospress.nl/volumearticle/56169\" target=\"_blank\" rel=\"noopener noreferrer\">TF-IDF cosúlachta</a> (Nanda et al.)). Sórtáilte de réir scór ábharthachta.",
     "match": "{score}% meaitseáil",
     "read": "Léigh →"
+  },
+  "relatedCaseLaw": {
+    "title": "Cásdlí Gaolmhar",
+    "loading": "Ag lódáil",
+    "showAllJudgments": "Taispeáin gach ceann de na {count} breithiúnas",
+    "noMatchPrefix": "Níl aon chásdlí ceangailte leis an alt seo fós. Tá {count} {judgmentWord} an dlí seo trí chéile — oscail",
+    "judgmentInterprets": "breithiúnas ó CBBE ag léiriú",
+    "judgmentsInterpret": "breithiúnais ó CBBE ag léiriú",
+    "sidebarLabel": "Cásdlí",
+    "noMatchSuffix": "sa bharra taoibh don liosta iomlán agus achoimre AI."
+  },
+  "caseLawDigest": {
+    "generate": "Gin achoimre cásdlí",
+    "generating": "Ag giniúint achoimre cásdlí",
+    "unavailable": "Níl achoimre cásdlí ar fáil fós.",
+    "generatedOn": "Achoimre statach ginte {date}",
+    "fromCache": "ón taisce"
+  },
+  "caseLawCard": {
+    "expandDecision": "Leathnaigh an cinneadh",
+    "collapse": "Laghdaigh",
+    "readFullJudgment": "Léigh an breithiúnas iomlán",
+    "decisionLabel": "Cinneadh:",
+    "moreArticles": "+{count} eile"
+  },
+  "caseLawModal": {
+    "showMore": "Taispeáin {count} eile ({remaining} fágtha)"
   },
   "crossReferences": {
     "title": "Tagairtí Chrostacha",

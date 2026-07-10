@@ -21,7 +21,10 @@
     "articles": "Artículos",
     "recitals": "Considerandos",
     "annexes": "Anexos",
-    "noSelection": "Sin selección"
+    "noSelection": "Sin selección",
+    "beta": "beta",
+    "ai": "IA",
+    "noneFoundSuffix": "— no se encontraron"
   },
   "seo": {
     "defaultDescription": "Visualización interactiva de leyes de la UE. Navegue por artículos, considerandos y anexos con facilidad.",
@@ -183,6 +186,33 @@
     "description": "Estos considerandos parecen estar relacionados con este artículo según análisis de texto usando IA simple (<a href=\"https://ebooks.iospress.nl/volumearticle/56169\" target=\"_blank\" rel=\"noopener noreferrer\">similitud TF-IDF</a> (Nanda et al.)). Ordenado por puntuación de relevancia.",
     "match": "{score}% de coincidencia",
     "read": "Leer →"
+  },
+  "relatedCaseLaw": {
+    "title": "Jurisprudencia relacionada",
+    "loading": "Cargando",
+    "showAllJudgments": "Mostrar las {count} sentencias",
+    "noMatchPrefix": "Todavía no hay jurisprudencia asociada a este artículo. {count} {judgmentWord} esta ley en su conjunto — abra",
+    "judgmentInterprets": "sentencia del TJUE interpreta",
+    "judgmentsInterpret": "sentencias del TJUE interpretan",
+    "sidebarLabel": "Jurisprudencia",
+    "noMatchSuffix": "en la barra lateral para ver la lista completa y un resumen generado por IA."
+  },
+  "caseLawDigest": {
+    "generate": "Generar resumen de jurisprudencia",
+    "generating": "Generando resumen de jurisprudencia",
+    "unavailable": "El resumen de jurisprudencia aún no está disponible.",
+    "generatedOn": "Resumen estático generado el {date}",
+    "fromCache": "desde la caché"
+  },
+  "caseLawCard": {
+    "expandDecision": "Ampliar decisión",
+    "collapse": "Contraer",
+    "readFullJudgment": "Leer sentencia completa",
+    "decisionLabel": "Decisión:",
+    "moreArticles": "+{count} más"
+  },
+  "caseLawModal": {
+    "showMore": "Mostrar {count} más ({remaining} restantes)"
   },
   "crossReferences": {
     "title": "Referencias cruzadas",

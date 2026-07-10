@@ -21,7 +21,10 @@
     "articles": "Artigos",
     "recitals": "Considerandos",
     "annexes": "Anexos",
-    "noSelection": "Sem seleção"
+    "noSelection": "Sem seleção",
+    "beta": "beta",
+    "ai": "IA",
+    "noneFoundSuffix": "— nenhum encontrado"
   },
   "seo": {
     "defaultDescription": "Visualização interativa da legislação da UE. Navegue nos artigos, considerandos e anexos com facilidade.",
@@ -183,6 +186,33 @@
     "description": "Estes considerandos parecem estar relacionados a este artigo com base em análise de texto usando IA simples (<a href=\"https://ebooks.iospress.nl/volumearticle/56169\" target=\"_blank\" rel=\"noopener noreferrer\">similaridade TF-IDF</a> (Nanda et al.)). Classificado por pontuação de relevância.",
     "match": "{score}% de correspondência",
     "read": "Ler →"
+  },
+  "relatedCaseLaw": {
+    "title": "Jurisprudência relacionada",
+    "loading": "A carregar",
+    "showAllJudgments": "Mostrar todos os {count} acórdãos",
+    "noMatchPrefix": "Ainda não existe jurisprudência associada a este artigo. {count} {judgmentWord} esta lei no geral — abra",
+    "judgmentInterprets": "acórdão do TJUE interpreta",
+    "judgmentsInterpret": "acórdãos do TJUE interpretam",
+    "sidebarLabel": "Jurisprudência",
+    "noMatchSuffix": "na barra lateral para a lista completa e um resumo gerado por IA."
+  },
+  "caseLawDigest": {
+    "generate": "Gerar resumo da jurisprudência",
+    "generating": "A gerar resumo da jurisprudência",
+    "unavailable": "O resumo da jurisprudência ainda não está disponível.",
+    "generatedOn": "Resumo estático gerado em {date}",
+    "fromCache": "da cache"
+  },
+  "caseLawCard": {
+    "expandDecision": "Expandir decisão",
+    "collapse": "Recolher",
+    "readFullJudgment": "Ler acórdão completo",
+    "decisionLabel": "Decisão:",
+    "moreArticles": "+{count} mais"
+  },
+  "caseLawModal": {
+    "showMore": "Mostrar mais {count} (faltam {remaining})"
   },
   "crossReferences": {
     "title": "Referências cruzadas",

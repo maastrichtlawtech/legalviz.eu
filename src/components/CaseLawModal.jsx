@@ -22,6 +22,7 @@ function formatDate(isoDate) {
 const MAX_VISIBLE_ARTICLES = 5;
 
 function CaseCard({ c, currentLang }) {
+  const { t } = useI18n();
   const [expanded, setExpanded] = useState(false);
   const [showAllArticles, setShowAllArticles] = useState(false);
   const eurlexUrl = `https://eur-lex.europa.eu/legal-content/${currentLang || "EN"}/TXT/?uri=CELEX:${c.celex}`;
@@ -75,7 +76,7 @@ function CaseCard({ c, currentLang }) {
                 onClick={() => setShowAllArticles(true)}
                 className="inline-block rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-500 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-400 dark:hover:bg-gray-600 transition-colors"
               >
-                +{hiddenArticleCount} more
+                {t("caseLawCard.moreArticles", { count: hiddenArticleCount })}
               </button>
             )}
           </div>
@@ -90,13 +91,13 @@ function CaseCard({ c, currentLang }) {
                 onClick={() => setExpanded(true)}
                 className="w-full text-left"
               >
-                <span className="text-[10px] font-medium text-gray-500 dark:text-gray-400">Decision:</span>
+                <span className="text-[10px] font-medium text-gray-500 dark:text-gray-400">{t("caseLawCard.decisionLabel")}</span>
                 <p className="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400 leading-relaxed line-clamp-2">
                   {c.declarations.map((d) => `${d.number}. ${d.text}`).join(" ")}
                 </p>
                 <span className="mt-0.5 inline-flex items-center gap-0.5 text-[10px] font-medium text-teal-600 dark:text-teal-400 hover:text-teal-800 dark:hover:text-teal-300">
                   <ChevronDown size={10} />
-                  Expand decision
+                  {t("caseLawCard.expandDecision")}
                 </span>
               </button>
             ) : (
@@ -115,7 +116,7 @@ function CaseCard({ c, currentLang }) {
                   className="mt-0.5 inline-flex items-center gap-0.5 text-[10px] font-medium text-teal-600 dark:text-teal-400 hover:text-teal-800 dark:hover:text-teal-300"
                 >
                   <ChevronUp size={10} />
-                  Collapse
+                  {t("caseLawCard.collapse")}
                 </button>
               </div>
             )}
@@ -135,7 +136,7 @@ function CaseCard({ c, currentLang }) {
             rel="noopener noreferrer"
             className="ml-auto shrink-0 inline-flex items-center gap-1 rounded-md bg-teal-50 px-2.5 py-1 text-[11px] font-medium text-teal-700 hover:bg-teal-100 transition-colors dark:bg-teal-900/30 dark:text-teal-300 dark:hover:bg-teal-900/50"
           >
-            Read full judgment
+            {t("caseLawCard.readFullJudgment")}
             <ExternalLink size={10} />
           </a>
         </div>
@@ -265,7 +266,7 @@ export function CaseLawModal({ isOpen, onClose, cases, currentLang, celex }) {
               onClick={() => setVisibleCount((v) => v + PAGE_SIZE)}
               className="mt-3 w-full rounded-lg border border-gray-200 bg-gray-50 py-2 text-xs font-medium text-gray-600 hover:bg-gray-100 transition-colors dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700"
             >
-              Show {Math.min(PAGE_SIZE, remaining)} more ({remaining} remaining)
+              {t("caseLawModal.showMore", { count: Math.min(PAGE_SIZE, remaining), remaining })}
             </button>
           )}
         </div>

@@ -21,7 +21,10 @@
     "articles": "Членове",
     "recitals": "Съображения",
     "annexes": "Приложения",
-    "noSelection": "Няма избор"
+    "noSelection": "Няма избор",
+    "beta": "бета",
+    "ai": "ИИ",
+    "noneFoundSuffix": "— не са намерени"
   },
   "seo": {
     "defaultDescription": "Интерактивна визуализация на законодателството на ЕС. Навигирайте лесно между членове, съображения и приложения.",
@@ -183,6 +186,33 @@
     "description": "Тези съображения изглеждат свързани с този член въз основа на текстов анализ с проста AI техника (<a href=\"https://ebooks.iospress.nl/volumearticle/56169\" target=\"_blank\" rel=\"noopener noreferrer\">TF-IDF similarity</a> (Nanda et al.)). Подредени са по релевантност.",
     "match": "{score}% съвпадение",
     "read": "Прочети →"
+  },
+  "relatedCaseLaw": {
+    "title": "Свързана съдебна практика",
+    "loading": "Зареждане",
+    "showAllJudgments": "Покажи всички {count} решения",
+    "noMatchPrefix": "Все още няма съдебна практика, свързана с този член. {count} {judgmentWord} този закон като цяло — отвори",
+    "judgmentInterprets": "решение на СЕС тълкува",
+    "judgmentsInterpret": "решения на СЕС тълкуват",
+    "sidebarLabel": "Съдебна практика",
+    "noMatchSuffix": "в страничната лента за пълния списък и обобщение с ИИ."
+  },
+  "caseLawDigest": {
+    "generate": "Генерирай обобщение на съдебната практика",
+    "generating": "Генериране на обобщение на съдебната практика",
+    "unavailable": "Обобщението на съдебната практика все още не е налично.",
+    "generatedOn": "Статично обобщение, генерирано на {date}",
+    "fromCache": "от кеша"
+  },
+  "caseLawCard": {
+    "expandDecision": "Разгъни решението",
+    "collapse": "Свий",
+    "readFullJudgment": "Прочети цялото решение",
+    "decisionLabel": "Решение:",
+    "moreArticles": "+{count} още"
+  },
+  "caseLawModal": {
+    "showMore": "Покажи още {count} (остават {remaining})"
   },
   "crossReferences": {
     "title": "Препратки",

@@ -21,7 +21,10 @@
     "articles": "Straipsniai",
     "recitals": "Konstatuojamosios dalys",
     "annexes": "Priedai",
-    "noSelection": "Nieko nepasirinkta"
+    "noSelection": "Nieko nepasirinkta",
+    "beta": "beta",
+    "ai": "DI",
+    "noneFoundSuffix": "— nerasta"
   },
   "seo": {
     "defaultDescription": "Interaktyvi ES teisės aktų vizualizacija. Lengvai naršykite straipsnius, preambulės dalis ir priedus.",
@@ -183,6 +186,33 @@
     "description": "Šios preambulės dalys, atrodo, susijusios su šiuo straipsniu pagal teksto analizę naudojant paprastą AI (<a href=\"https://ebooks.iospress.nl/volumearticle/56169\" target=\"_blank\" rel=\"noopener noreferrer\">TF-IDF panašumas</a> (Nanda ir kt.)). Rūšiuota pagal aktualumo balą.",
     "match": "{score}% atitiktis",
     "read": "Skaityti →"
+  },
+  "relatedCaseLaw": {
+    "title": "Susijusi teismų praktika",
+    "loading": "Įkeliama",
+    "showAllJudgments": "Rodyti visus {count} sprendimus",
+    "noMatchPrefix": "Su šiuo straipsniu dar nesusieta jokia teismų praktika. {count} {judgmentWord} šį teisės aktą apskritai — atidarykite",
+    "judgmentInterprets": "ESTT sprendimas aiškina",
+    "judgmentsInterpret": "ESTT sprendimai aiškina",
+    "sidebarLabel": "Teismų praktika",
+    "noMatchSuffix": "šoninėje juostoje, kad pamatytumėte visą sąrašą ir DI parengtą santrauką."
+  },
+  "caseLawDigest": {
+    "generate": "Generuoti teismų praktikos santrauką",
+    "generating": "Generuojama teismų praktikos santrauka",
+    "unavailable": "Teismų praktikos santrauka dar nepasiekiama.",
+    "generatedOn": "Statinė santrauka sugeneruota {date}",
+    "fromCache": "iš talpyklos"
+  },
+  "caseLawCard": {
+    "expandDecision": "Išskleisti sprendimą",
+    "collapse": "Suskleisti",
+    "readFullJudgment": "Skaityti visą sprendimą",
+    "decisionLabel": "Sprendimas:",
+    "moreArticles": "+{count} daugiau"
+  },
+  "caseLawModal": {
+    "showMore": "Rodyti dar {count} (liko {remaining})"
   },
   "crossReferences": {
     "title": "Tarpusavio nuorodos",

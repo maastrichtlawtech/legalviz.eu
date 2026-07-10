@@ -27,6 +27,8 @@ Backend CLI (`eurlex`) commands are documented in [backend/README.md](backend/RE
 
 Requires Node.js v24+.
 
+Subtree-specific guidance lives in nested memory files that Claude Code loads on demand when you work in them: [backend/CLAUDE.md](backend/CLAUDE.md) (API, CLI, MCP, AI services) and [src/CLAUDE.md](src/CLAUDE.md) (React frontend). Keep this root file for cross-cutting concerns; push backend-only or frontend-only detail down into those.
+
 ## Architecture
 
 **Monorepo split**: `src/` (React frontend) and `backend/` (Express API + `eurlex` CLI) share one parser: `backend/shared/formex-parser/fmxParser.mjs`. The frontend imports it directly to parse Formex XML client-side when running against static/offline data; the backend uses the same module to serve parsed JSON over HTTP. Don't fork parsing logic between the two — fix it once in `backend/shared/formex-parser/`.
@@ -39,10 +41,37 @@ Requires Node.js v24+.
 
 **CJEU case law**: judgments are fetched via SPARQL and parsed from three distinct historical HTML/XML shapes (post-2004 EUR-Lex Formex, pre-2004 OJ HTML, older Curia HTML) into structured `articleRefs` so the viewer can show cases citing a given article. This parsing lives in `backend/` and is one of the more fragile/format-sensitive parts of the codebase.
 
-**Optional AI features** (recital titles, static law overviews, per-article case-law digests, and a whole-law case-law digest) call OpenRouter only on cache misses — generated content is validated then cached to disk (`recital-title-cache-v1.json`, `law-summary-cache-v1.json`, `article-digest-cache-v1.json`, `case-law-digest-cache-v1.json`), each versioned with a source-content hash, model, and timestamp so cache invalidation is explicit. The case-law digests additionally fold the enrichment cache version (`case-law-cache-v4`) into their source hash so they regenerate when judgment parsing improves. The web app additionally mirrors recital titles into IndexedDB so a warm cache never triggers a network call to the endpoint. Key resolution order: feature-specific key (`RECITAL_TITLE_OPENROUTER_API_KEY`, `LAW_SUMMARY_OPENROUTER_API_KEY`, `ARTICLE_QA_OPENROUTER_API_KEY`) → `OPENROUTER_API_KEY` fallback. When touching these code paths, preserve the cache-validate-before-write pattern rather than writing raw model output.
+**Optional AI features** (recital titles, static law overviews, per-article case-law digests, and a whole-law case-law digest) call OpenRouter only on cache misses — generated content is validated *before* it is written to the disk cache, so preserve that cache-validate-before-write pattern rather than writing raw model output. The web app also mirrors recital titles into IndexedDB so a warm cache never hits the endpoint. Each cache is versioned (see [Cache & version invalidation](#cache--version-invalidation)). Key resolution order: feature-specific key (`RECITAL_TITLE_OPENROUTER_API_KEY`, `LAW_SUMMARY_OPENROUTER_API_KEY`, `ARTICLE_QA_OPENROUTER_API_KEY`) → `OPENROUTER_API_KEY` fallback.
 
 **Routing/state**: the current reader position (law, article, recital, language) is synced to the URL (`src/utils/lawRouting.js`, `src/utils/url.js`) so every view is bookmarkable/shareable — treat URL state as the source of truth for navigation, not component state.
 
 **`extension/`** is a separate Chrome/Firefox browser extension package, not built by the root `npm run build`.
 
 **`scripts/`** contains build-time Node scripts (prerendering law pages, sitemap generation, 404 copy, `dev.js` which runs frontend + backend concurrently) — not application code.
+
+## Cache & version invalidation
+
+Nearly every expensive operation — Formex parsing, TF‑IDF recital mapping, CJEU enrichment, and the LLM features — is cached, and each cache is guarded by a **hand-maintained version constant**. The model id and source content are folded into a hash so those self-invalidate, but a *code* change (parser output, prompt wording, JSON schema, algorithm) does **not** — you must bump the constant yourself or the stale result is served indefinitely. Forgetting this is the most common way a change silently "doesn't take". When you touch any of the code below, bump the paired constant in the same commit.
+
+**Backend, on-disk** (written under `CACHE_DIR`, default `backend/law-cache`):
+
+| When you change… | Bump | In |
+|---|---|---|
+| Parser output (fields, shape, bug fix) | `PARSER_VERSION` | `backend/shared/formex-parser/fmxParser.mjs` |
+| CJEU enrichment shape (declarations, `articleRefs`) | `CASE_LAW_CACHE_FILE` → `case-law-cache-vN.json` (keep the legacy-migration path) | `backend/shared/law-queries.js` |
+| Recital-title prompt/output format | `CACHE_VERSION` | `backend/shared/recital-title-service.js` |
+| Law-summary JSON schema / prompt | `SCHEMA_VERSION` / `PROMPT_VERSION` | `backend/shared/law-summary-service.js` |
+| Article-digest JSON schema / prompt | `SCHEMA_VERSION` / `PROMPT_VERSION` | `backend/shared/article-digest-service.js` |
+| Whole-law digest JSON schema / prompt | `SCHEMA_VERSION` / `PROMPT_VERSION` | `backend/shared/case-law-digest-service.js` |
+
+`PARSER_VERSION` is **shared with the frontend** (imported into `src/utils/formexApi.js`), so bumping it re-parses the browser IndexedDB cache too. When you bump `CASE_LAW_CACHE_FILE`, also update `CASE_LAW_CACHE_VERSION` in `article-digest-service.js` **and** `case-law-digest-service.js` — they are kept in lock-step so digests regenerate when enrichment shape changes.
+
+**Frontend, browser** (`src/`):
+
+| When you change… | Bump | In |
+|---|---|---|
+| Recital→article NLP algorithm | `NLP_VERSION` | `src/utils/nlp.js` (localStorage keys are `nlp_v<N>_…`) |
+| IndexedDB store shape (DB `formex-cache`) | `CACHE_VERSION` | `src/utils/formexApi.js` |
+| Cached recital-title envelope shape | `RECITAL_TITLE_CACHE_VERSION` | `src/utils/formexApi.js` |
+| Cached API-JSON payload shape | `API_JSON_CACHE_VERSION` | `src/utils/formexApi.js` |
+| Force every client to wipe local data once | `CURRENT_MIGRATION_VERSION` | `src/utils/resetApp.js` |

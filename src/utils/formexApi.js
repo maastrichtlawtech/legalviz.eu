@@ -682,7 +682,9 @@ export async function getCachedLawPayload(celex, lang = "EN") {
  */
 export function cacheParsedLaw(celex, lang, payload, rawXml) {
   const cacheKey = makeCacheKey(celex, lang);
-  cacheSet(cacheKey, createCombinedLawEnvelope(payload, rawXml));
+  // Fire-and-forget: callers don't await this, so failures must not become
+  // unhandled promise rejections. Matches cacheSet's own silent-ignore policy.
+  cacheSet(cacheKey, createCombinedLawEnvelope(payload, rawXml)).catch(() => {});
 }
 
 export async function resolveOfficialReference(reference, lang = "EN") {

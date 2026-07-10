@@ -203,17 +203,30 @@ function extractUris(rdf) {
   return [...String(rdf || "").matchAll(/rdf:resource="([^"]+)"/g)].map((match) => match[1]);
 }
 
+// Any FMX manifestation carries the parsed act; the exact URL shape varies by
+// era and we should accept all of them (previously we only matched the
+// post-2016 `/oj/L_<9 digits>` and a too-strict `/oj/JOL_<year>_<num>_R_<num>`
+// form, which missed ~90% of pre-2016 acts). Observed shapes, all ending in
+// `.<LANG>.fmx4`:
+//   post-2016  .../oj/L_012345678.ENG.fmx4
+//   pre-2016   .../oj/JOL_2014_002_R_0001_01.ENG.fmx4   (extra trailing _NN)
+//   some acts  .../celex/32010D0001.ENG.fmx4            (celex path, not oj)
+// Acts with no `.fmx4` at all (e.g. REACH, many pre-~2000 acts) legitimately
+// have no FMX and still throw "No FMX URI found".
+const FMX4_ANY_LANG = /\.[A-Z]{3}\.fmx4$/;
+
 async function findFmx4Uri(celex, lang = "ENG") {
   const rdf = await fetchText(`${CELLAR_BASE}/celex/${celex}`, { "Accept-Language": "eng" });
   const uris = extractUris(rdf);
-  const pattern = new RegExp(`\\/oj\\/(JOL_\\d{4}_\\d+_R_\\d+|L_\\d{9})\\.${lang}\\.fmx4$`);
+  const wantSuffix = `.${lang}.fmx4`;
 
-  let fmx4Uri = uris.find((uri) => pattern.test(uri));
+  // Prefer the requested language, else take any language's FMX manifestation
+  // and swap the language segment (works for both the /oj/ and /celex/ shapes).
+  let fmx4Uri = uris.find((uri) => uri.endsWith(wantSuffix));
   if (!fmx4Uri) {
-    const engPattern = /\/oj\/(JOL_\d{4}_\d+_R_\d+|L_\d{9})\.ENG\.fmx4$/;
-    const engUri = uris.find((uri) => engPattern.test(uri));
-    if (engUri) {
-      fmx4Uri = engUri.replace(".ENG.fmx4", `.${lang}.fmx4`);
+    const anyLangUri = uris.find((uri) => FMX4_ANY_LANG.test(uri));
+    if (anyLangUri) {
+      fmx4Uri = anyLangUri.replace(FMX4_ANY_LANG, wantSuffix);
     }
   }
 

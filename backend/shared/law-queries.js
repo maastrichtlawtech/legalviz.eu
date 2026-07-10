@@ -231,7 +231,7 @@ async function fetchCaseLaw(celex, runSparqlQuery, {
     loadCookiesFromDisk(cacheDir);
   }
   if (!detailsFetcher) {
-    detailsFetcher = (caseCelex) => fetchCaseDetails(caseCelex, { timeoutMs: fetchTimeoutMs });
+    detailsFetcher = (caseCelex, opts) => fetchCaseDetails(caseCelex, { ...opts, timeoutMs: fetchTimeoutMs });
   }
   const cache = cacheDir ? loadCaseLawCache(cacheDir) : {};
   const celexUri = `http://publications.europa.eu/resource/celex/${celex}`;

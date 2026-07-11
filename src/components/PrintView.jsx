@@ -13,8 +13,8 @@ export function PrintView({ data, options, uiLocale = "en", labels }) {
   // Compute related recitals if needed.
   const relatedRecitalsMap = useMemo(() => {
     if (!includeRelatedRecitals || !articles || !recitals) return new Map();
-    return mapRecitalsToArticles(recitals, articles);
-  }, [includeRelatedRecitals, articles, recitals]);
+    return mapRecitalsToArticles(recitals, articles, data?.langCode);
+  }, [includeRelatedRecitals, articles, recitals, data?.langCode]);
 
   if (!data) return null;
 

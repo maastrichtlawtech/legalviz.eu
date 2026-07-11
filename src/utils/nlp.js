@@ -1,5 +1,5 @@
 // NLP Algorithm Version - bump this when algorithm changes to invalidate cache
-export const NLP_VERSION = 13;
+export const NLP_VERSION = 14;
 
 const MONOTONICITY_BETA = 0.9;
 const MONOTONICITY_GAMMA = 2;
@@ -125,18 +125,20 @@ const stripTags = (html) => {
  * 
  * @param {Array} recitals - Array of { recital_number, recital_text, ... }
  * @param {Array} articles - Array of { article_number, article_title, article_html, ... }
+ * @param {string} [langCode] - Language of the law's text (e.g. "DE"), used to pick
+ *   the right stop-word list. Defaults to English when omitted.
  * @returns {Map} - Map where key is article_number, value is array of matching recitals.
  *                  Unmapped recital numbers are exposed under the reserved null key.
  */
-export function mapRecitalsToArticles(recitals, articles) {
+export function mapRecitalsToArticles(recitals, articles, langCode) {
   // Configuration
   const TITLE_WEIGHT = 3; // How many times to repeat title tokens for weighting
 
   // 1. Prepare Article Documents (Corpus)
   // Weight article titles more heavily by repeating their tokens
   const articleDocs = articles.map(a => {
-    const titleTokens = tokenize(a.article_title || "");
-    const bodyTokens = tokenize(stripTags(a.article_html));
+    const titleTokens = tokenize(a.article_title || "", langCode);
+    const bodyTokens = tokenize(stripTags(a.article_html), langCode);
     // Repeat title tokens for increased weight
     const weightedTitleTokens = [];
     for (let i = 0; i < TITLE_WEIGHT; i++) {
@@ -168,7 +170,7 @@ export function mapRecitalsToArticles(recitals, articles) {
   // 4. Process Recitals
   recitals.forEach((r, recitalIndex) => {
     const recitalText = r.recital_text || stripTags(r.recital_html) || "";
-    const tokens = tokenize(recitalText);
+    const tokens = tokenize(recitalText, langCode);
     const recitalVec = computeTFIDFVector(tokens, idf);
 
     // Extract top keywords based on TF-IDF scores

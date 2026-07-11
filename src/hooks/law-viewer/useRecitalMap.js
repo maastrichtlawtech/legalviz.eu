@@ -6,7 +6,7 @@ function withOrphanRecitals(map) {
   return map;
 }
 
-export function useRecitalMap({ data, currentLaw, formexLang }) {
+export function useRecitalMap({ data, currentLaw }) {
   const [recitalMap, setRecitalMap] = useState(() => withOrphanRecitals(new Map()));
 
   useEffect(() => {
@@ -26,9 +26,13 @@ export function useRecitalMap({ data, currentLaw, formexLang }) {
         console.warn("Error cleaning up old NLP cache", error);
       }
 
+      // The map is keyed on article/recital numbers, which are identical across
+      // every language version of a law, so the relationship is language-invariant.
+      // Cache it once per law (no language in the key) and reuse it for every
+      // language instead of recomputing the same mapping per translation.
       let cacheKey = null;
       if (currentLaw?.slug) {
-        cacheKey = `nlp_v${NLP_VERSION}_${currentLaw.slug}_fmx_${formexLang}`;
+        cacheKey = `nlp_v${NLP_VERSION}_${currentLaw.slug}`;
       }
 
       if (cacheKey) {
@@ -60,7 +64,7 @@ export function useRecitalMap({ data, currentLaw, formexLang }) {
 
     setRecitalMap(withOrphanRecitals(new Map()));
     return undefined;
-  }, [currentLaw, data.articles, data.recitals, data.langCode, formexLang]);
+  }, [currentLaw, data.articles, data.recitals, data.langCode]);
 
   return recitalMap;
 }

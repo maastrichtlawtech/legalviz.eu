@@ -113,7 +113,6 @@ export function LawViewer() {
   const recitalMap = useRecitalMap({
     data: primaryDocument.data,
     currentLaw: source.currentLaw,
-    formexLang: preferences.formexLang,
   });
   const primarySelectedEntry = useMemo(
     () => getSelectedEntry(primaryDocument.data, selection.selected),

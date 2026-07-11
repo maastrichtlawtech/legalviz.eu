@@ -21,7 +21,10 @@
     "articles": "Články",
     "recitals": "Body odůvodnění",
     "annexes": "Přílohy",
-    "noSelection": "Nic není vybráno"
+    "noSelection": "Nic není vybráno",
+    "beta": "beta",
+    "ai": "AI",
+    "noneFoundSuffix": "— žádné nenalezeny"
   },
   "seo": {
     "defaultDescription": "Interaktivní vizualizace práva EU. Snadno procházejte články, body odůvodnění a přílohy.",
@@ -183,6 +186,33 @@
     "description": "Tyto body odůvodnění se zdají být s tímto článkem spojeny na základě textové analýzy pomocí jednoduché AI (<a href=\"https://ebooks.iospress.nl/volumearticle/56169\" target=\"_blank\" rel=\"noopener noreferrer\">TF-IDF similarity</a> (Nanda et al.)). Jsou seřazeny podle relevance.",
     "match": "Shoda {score} %",
     "read": "Číst →"
+  },
+  "relatedCaseLaw": {
+    "title": "Související judikatura",
+    "loading": "Načítání",
+    "showAllJudgments": "Zobrazit všech {count} rozsudků",
+    "noMatchPrefix": "K tomuto článku zatím není přiřazena žádná judikatura. {count} {judgmentWord} tento právní předpis jako celek — otevřete",
+    "judgmentInterprets": "rozsudek SDEU vykládá",
+    "judgmentsInterpret": "rozsudky SDEU vykládají",
+    "sidebarLabel": "Judikatura",
+    "noMatchSuffix": "na bočním panelu, kde najdete úplný seznam a shrnutí vytvořené AI."
+  },
+  "caseLawDigest": {
+    "generate": "Vygenerovat shrnutí judikatury",
+    "generating": "Generování shrnutí judikatury",
+    "unavailable": "Shrnutí judikatury zatím není k dispozici.",
+    "generatedOn": "Statické shrnutí vygenerováno {date}",
+    "fromCache": "z mezipaměti"
+  },
+  "caseLawCard": {
+    "expandDecision": "Rozbalit rozhodnutí",
+    "collapse": "Sbalit",
+    "readFullJudgment": "Přečíst celý rozsudek",
+    "decisionLabel": "Rozhodnutí:",
+    "moreArticles": "+{count} další"
+  },
+  "caseLawModal": {
+    "showMore": "Zobrazit dalších {count} (zbývá {remaining})"
   },
   "crossReferences": {
     "title": "Křížové odkazy",

@@ -21,7 +21,10 @@
     "articles": "Panti",
     "recitals": "Apsvērumi",
     "annexes": "Pielikumi",
-    "noSelection": "Nav izvēles"
+    "noSelection": "Nav izvēles",
+    "beta": "beta",
+    "ai": "MI",
+    "noneFoundSuffix": "— nekas nav atrasts"
   },
   "seo": {
     "defaultDescription": "ES likumu interaktīva vizualizācija. Pārlūkojiet artikulus, preambulu un pielikumus viegli.",
@@ -183,6 +186,33 @@
     "description": "Šīs preambulas daļas šķiet saistītas ar šo rakstu, pamatojoties uz teksta analīzi, izmantojot vienkāršu AI (<a href=\"https://ebooks.iospress.nl/volumearticle/56169\" target=\"_blank\" rel=\"noopener noreferrer\">TF-IDF līdzība</a> (Nanda et al.)). Sakārtots pēc atbilstības reitinga.",
     "match": "{score}% atbilstība",
     "read": "Lasīt →"
+  },
+  "relatedCaseLaw": {
+    "title": "Saistītā judikatūra",
+    "loading": "Ielādē",
+    "showAllJudgments": "Rādīt visus {count} spriedumus",
+    "noMatchPrefix": "Šim pantam vēl nav piesaistīta judikatūra. {count} {judgmentWord} šo tiesību aktu kopumā — atveriet",
+    "judgmentInterprets": "EST spriedums interpretē",
+    "judgmentsInterpret": "EST spriedumi interpretē",
+    "sidebarLabel": "Judikatūra",
+    "noMatchSuffix": "sānjoslā, lai skatītu pilnu sarakstu un MI veidotu kopsavilkumu."
+  },
+  "caseLawDigest": {
+    "generate": "Ģenerēt judikatūras kopsavilkumu",
+    "generating": "Notiek judikatūras kopsavilkuma ģenerēšana",
+    "unavailable": "Judikatūras kopsavilkums vēl nav pieejams.",
+    "generatedOn": "Statisks kopsavilkums ģenerēts {date}",
+    "fromCache": "no kešatmiņas"
+  },
+  "caseLawCard": {
+    "expandDecision": "Izvērst lēmumu",
+    "collapse": "Sakļaut",
+    "readFullJudgment": "Lasīt pilnu spriedumu",
+    "decisionLabel": "Lēmums:",
+    "moreArticles": "+{count} vairāk"
+  },
+  "caseLawModal": {
+    "showMore": "Rādīt vēl {count} (atlikuši {remaining})"
   },
   "crossReferences": {
     "title": "Savstarpējās atsauces",

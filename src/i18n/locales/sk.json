@@ -21,7 +21,10 @@
     "articles": "Články",
     "recitals": "Odôvodnenia",
     "annexes": "Prílohy",
-    "noSelection": "Žiadny výber"
+    "noSelection": "Žiadny výber",
+    "beta": "beta",
+    "ai": "AI",
+    "noneFoundSuffix": "— žiadne nenájdené"
   },
   "seo": {
     "defaultDescription": "Interaktívna vizualizácia zákonov EÚ. Navigujte článkami, preamblami a prílohami s ľahkosťou.",
@@ -183,6 +186,33 @@
     "description": "Zdá sa, že tieto preambuly súvisia s týmto článkom na základe analýzy textu pomocou jednoduchej AI (<a href=\"https://ebooks.iospress.nl/volumearticle/56169\" target=\"_blank\" rel=\"noopener noreferrer\">TF-IDF podobnosť</a> (Nanda et al.)). Zoradené podľa skóre relevantnosti.",
     "match": "{score}% zhoda",
     "read": "Čítaj →"
+  },
+  "relatedCaseLaw": {
+    "title": "Súvisiaca judikatúra",
+    "loading": "Načítava sa",
+    "showAllJudgments": "Zobraziť všetkých {count} rozsudkov",
+    "noMatchPrefix": "K tomuto článku zatiaľ nie je priradená žiadna judikatúra. {count} {judgmentWord} tento právny predpis ako celok — otvorte",
+    "judgmentInterprets": "rozsudok Súdneho dvora EÚ vykladá",
+    "judgmentsInterpret": "rozsudky Súdneho dvora EÚ vykladajú",
+    "sidebarLabel": "Judikatúra",
+    "noMatchSuffix": "na bočnom paneli, kde nájdete úplný zoznam a zhrnutie vytvorené AI."
+  },
+  "caseLawDigest": {
+    "generate": "Vygenerovať zhrnutie judikatúry",
+    "generating": "Generovanie zhrnutia judikatúry",
+    "unavailable": "Zhrnutie judikatúry zatiaľ nie je k dispozícii.",
+    "generatedOn": "Statické zhrnutie vygenerované {date}",
+    "fromCache": "z vyrovnávacej pamäte"
+  },
+  "caseLawCard": {
+    "expandDecision": "Rozbaliť rozhodnutie",
+    "collapse": "Zbaliť",
+    "readFullJudgment": "Prečítať celý rozsudok",
+    "decisionLabel": "Rozhodnutie:",
+    "moreArticles": "+{count} ďalších"
+  },
+  "caseLawModal": {
+    "showMore": "Zobraziť ďalších {count} (zostáva {remaining})"
   },
   "crossReferences": {
     "title": "Skrížené Odkazy",

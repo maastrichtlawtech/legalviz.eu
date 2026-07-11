@@ -1,37 +1,56 @@
 import React, { createContext, useEffect, useState } from "react";
 
-const ThemeContext = createContext({
-    theme: "system",
-    setTheme: () => null,
-});
+const ThemeContext = createContext(null);
 
 export function ThemeProvider({ children, defaultTheme = "system", storageKey = "vite-ui-theme" }) {
     const [theme, setTheme] = useState(() => {
-        return localStorage.getItem(storageKey) || defaultTheme;
+        try {
+            return localStorage.getItem(storageKey) || defaultTheme;
+        } catch {
+            return defaultTheme;
+        }
     });
 
     useEffect(() => {
         const root = window.document.documentElement;
 
-        root.classList.remove("light", "dark");
+        const applyTheme = () => {
+            root.classList.remove("light", "dark");
 
-        if (theme === "system") {
-            const systemTheme = window.matchMedia("(prefers-color-scheme: dark)")
-                .matches
-                ? "dark"
-                : "light";
+            if (theme === "system") {
+                const systemTheme = window.matchMedia("(prefers-color-scheme: dark)")
+                    .matches
+                    ? "dark"
+                    : "light";
 
-            root.classList.add(systemTheme);
+                root.classList.add(systemTheme);
+                return;
+            }
+
+            root.classList.add(theme);
+        };
+
+        applyTheme();
+
+        if (theme !== "system") {
             return;
         }
 
-        root.classList.add(theme);
+        const media = window.matchMedia("(prefers-color-scheme: dark)");
+        media.addEventListener("change", applyTheme);
+        return () => {
+            media.removeEventListener("change", applyTheme);
+        };
     }, [theme]);
 
     const value = {
         theme,
         setTheme: (theme) => {
-            localStorage.setItem(storageKey, theme);
+            try {
+                localStorage.setItem(storageKey, theme);
+            } catch {
+                // ignore persistence failures
+            }
             setTheme(theme);
         },
     };

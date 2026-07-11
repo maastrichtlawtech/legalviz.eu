@@ -22,6 +22,16 @@
     <meta name="twitter:description" content="Read EU laws like the GDPR, AI Act, DMA, DSA and Data Act with ease. Navigate articles, recitals, annexes and cross-references, side by side." />
     <meta name="twitter:image" content="https://legalviz.eu/preview.png" />
     <title>LegalViz.EU — Read EU law: GDPR, AI Act, DMA, DSA &amp; more</title>
+    <script>
+      try {
+        var storedTheme = localStorage.getItem("vite-ui-theme") || "system";
+        var resolvedTheme =
+          storedTheme === "system"
+            ? (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")
+            : storedTheme;
+        document.documentElement.classList.add(resolvedTheme === "dark" ? "dark" : "light");
+      } catch (e) {}
+    </script>
   </head>
   <body>
     <div id="root"></div>

@@ -87,7 +87,9 @@ export function useAddLawImport({ locale, navigate, t }) {
       return;
     }
 
-    if (!parsedUrl.hostname.includes("eur-lex.europa.eu")) {
+    const host = parsedUrl.hostname.toLowerCase();
+    const isEurlexHost = host === "eur-lex.europa.eu" || host.endsWith(".eur-lex.europa.eu");
+    if (!isEurlexHost) {
       setEurlexError(t("landing.invalidEurlexUrl"));
       return;
     }

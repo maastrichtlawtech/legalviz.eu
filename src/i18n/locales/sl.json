@@ -21,7 +21,10 @@
     "articles": "Členi",
     "recitals": "Uvodne izjave",
     "annexes": "Priloge",
-    "noSelection": "Ni izbire"
+    "noSelection": "Ni izbire",
+    "beta": "beta",
+    "ai": "UI",
+    "noneFoundSuffix": "— ni najdenih"
   },
   "seo": {
     "defaultDescription": "Interaktivna vizualizacija zakonodaje EU. Navigirajte po členih, preamblah in prilogah z lahkoto.",
@@ -183,6 +186,33 @@
     "description": "Zdi se, da so te preambule povezane s tem členom na podlagi analize besedila z uporabo preproste AI (<a href=\"https://ebooks.iospress.nl/volumearticle/56169\" target=\"_blank\" rel=\"noopener noreferrer\">TF-IDF podobnost</a> (Nanda et al.)). Razvrščeno po rezultatu relevantnosti.",
     "match": "{score}% ujemanje",
     "read": "Preberi →"
+  },
+  "relatedCaseLaw": {
+    "title": "Povezana sodna praksa",
+    "loading": "Nalaganje",
+    "showAllJudgments": "Prikaži vseh {count} sodb",
+    "noMatchPrefix": "Temu členu še ni pripisana nobena sodna praksa. {count} {judgmentWord} ta zakon kot celoto — odprite",
+    "judgmentInterprets": "sodba Sodišča EU razlaga",
+    "judgmentsInterpret": "sodbe Sodišča EU razlagajo",
+    "sidebarLabel": "Sodna praksa",
+    "noMatchSuffix": "v stranski vrstici za celoten seznam in povzetek, ki ga ustvari UI."
+  },
+  "caseLawDigest": {
+    "generate": "Ustvari povzetek sodne prakse",
+    "generating": "Ustvarjanje povzetka sodne prakse",
+    "unavailable": "Povzetek sodne prakse še ni na voljo.",
+    "generatedOn": "Statični povzetek ustvarjen {date}",
+    "fromCache": "iz predpomnilnika"
+  },
+  "caseLawCard": {
+    "expandDecision": "Razširi odločbo",
+    "collapse": "Strni",
+    "readFullJudgment": "Preberi celotno sodbo",
+    "decisionLabel": "Odločba:",
+    "moreArticles": "+{count} več"
+  },
+  "caseLawModal": {
+    "showMore": "Prikaži še {count} (preostane {remaining})"
   },
   "crossReferences": {
     "title": "Medsebojni Sklici",

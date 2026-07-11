@@ -21,7 +21,10 @@
     "articles": "Articoli",
     "recitals": "Considerando",
     "annexes": "Allegati",
-    "noSelection": "Nessuna selezione"
+    "noSelection": "Nessuna selezione",
+    "beta": "beta",
+    "ai": "IA",
+    "noneFoundSuffix": "— nessuno trovato"
   },
   "seo": {
     "defaultDescription": "Visualizzazione interattiva della normativa UE. Navigare negli articoli, considerando e allegati con facilità.",
@@ -183,6 +186,33 @@
     "description": "Questi considerando sembrano essere correlati a questo articolo in base all'analisi del testo utilizzando un'IA semplice (<a href=\"https://ebooks.iospress.nl/volumearticle/56169\" target=\"_blank\" rel=\"noopener noreferrer\">somiglianza TF-IDF</a> (Nanda et al.)). Ordinato per punteggio di pertinenza.",
     "match": "{score}% di corrispondenza",
     "read": "Leggi →"
+  },
+  "relatedCaseLaw": {
+    "title": "Giurisprudenza correlata",
+    "loading": "Caricamento",
+    "showAllJudgments": "Mostra tutte le {count} sentenze",
+    "noMatchPrefix": "Nessuna giurisprudenza è ancora associata a questo articolo. {count} {judgmentWord} questa legge nel complesso — apri",
+    "judgmentInterprets": "sentenza della CGUE interpreta",
+    "judgmentsInterpret": "sentenze della CGUE interpretano",
+    "sidebarLabel": "Giurisprudenza",
+    "noMatchSuffix": "nella barra laterale per l'elenco completo e una sintesi generata dall'IA."
+  },
+  "caseLawDigest": {
+    "generate": "Genera sintesi della giurisprudenza",
+    "generating": "Generazione della sintesi della giurisprudenza",
+    "unavailable": "La sintesi della giurisprudenza non è ancora disponibile.",
+    "generatedOn": "Sintesi statica generata il {date}",
+    "fromCache": "dalla cache"
+  },
+  "caseLawCard": {
+    "expandDecision": "Espandi decisione",
+    "collapse": "Comprimi",
+    "readFullJudgment": "Leggi la sentenza completa",
+    "decisionLabel": "Decisione:",
+    "moreArticles": "+{count} altri"
+  },
+  "caseLawModal": {
+    "showMore": "Mostra altri {count} ({remaining} rimanenti)"
   },
   "crossReferences": {
     "title": "Riferimenti incrociati",

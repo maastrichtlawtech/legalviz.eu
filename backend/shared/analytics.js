@@ -1,12 +1,13 @@
 const fs = require('fs');
 const path = require('path');
+const { CASE_LAW_CACHE_FILE } = require('./law-queries');
 
 const FLUSH_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 const DAY_RETENTION = 90;
 const COUNTER_CAP = 1000;
 
 function getClientIp(req) {
-  return req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket?.remoteAddress || 'unknown';
+  return req.ip || req.socket?.remoteAddress || 'unknown';
 }
 
 function truncateIp(ip) {
@@ -210,7 +211,7 @@ function createAnalytics({ cacheDir } = {}) {
     if (!cacheDir) return null;
     try {
       const cache = JSON.parse(
-        fs.readFileSync(path.join(cacheDir, 'case-law-cache-v3.json'), 'utf8')
+        fs.readFileSync(path.join(cacheDir, CASE_LAW_CACHE_FILE), 'utf8')
       );
       const entries = Object.values(cache);
       const total = entries.length;

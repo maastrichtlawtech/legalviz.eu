@@ -69,6 +69,39 @@ function mapChatError(err) {
 
 const CASE_LAW_ROUTE_CACHE_MS = 5 * 60 * 1000;
 
+function parsePaginationValue(value, name, { defaultValue, min, max = Infinity }) {
+  if (value === undefined || value === null || value === '') return defaultValue;
+  const raw = String(value);
+  const parsed = Number(raw);
+  if (!/^\d+$/.test(raw) || !Number.isSafeInteger(parsed) || parsed < min || parsed > max) {
+    const requirement = Number.isFinite(max) ? `between ${min} and ${max}` : `${min} or greater`;
+    throw new ClientError(`Query parameter "${name}" must be an integer ${requirement}`, 400, 'invalid_pagination');
+  }
+  return parsed;
+}
+
+function requireCitationGraph(store) {
+  if (!store || (typeof store.isReady === 'function' && !store.isReady())) {
+    throw new ClientError(
+      'The citation graph is not loaded on the server yet. Please try again shortly.',
+      503,
+      'citation_graph_unavailable'
+    );
+  }
+  return store;
+}
+
+function mapCitationGraphError(err) {
+  if (err?.code === 'citation_graph_unavailable') {
+    return new ClientError(
+      'The citation graph is not loaded on the server yet. Please try again shortly.',
+      503,
+      'citation_graph_unavailable'
+    );
+  }
+  return err;
+}
+
 function registerApiRoutes(app, deps) {
   const {
     analytics,
@@ -77,6 +110,7 @@ function registerApiRoutes(app, deps) {
     RESOLUTION_CACHE_MS,
     cacheGet,
     cacheSet,
+    citationGraphStore,
     findDownloadUrls,
     findFmx4Uri,
     parseReferenceText,
@@ -118,6 +152,36 @@ function registerApiRoutes(app, deps) {
       res.json({ laws });
     } catch (err) {
       safeErrorResponse(res, err, 'Failed to list cached laws');
+    }
+  });
+
+  app.get('/api/laws/:celex/articles/:n/cited-by', rateLimitMiddleware, (req, res) => {
+    try {
+      const { celex, n } = req.params;
+      if (!validateCelex(celex)) {
+        return res.status(400).json({ error: 'Invalid CELEX format', code: 'invalid_celex' });
+      }
+      const article = String(n || '').trim();
+      if (!article) {
+        return res.status(400).json({ error: 'Article number is required', code: 'invalid_article' });
+      }
+      const limit = parsePaginationValue(req.query.limit, 'limit', { defaultValue: 50, min: 1, max: 200 });
+      const offset = parsePaginationValue(req.query.offset, 'offset', { defaultValue: 0, min: 0 });
+      res.json(requireCitationGraph(citationGraphStore).getArticleCitations(celex, article, { limit, offset }));
+    } catch (err) {
+      safeErrorResponse(res, mapCitationGraphError(err), 'Failed to fetch citing provisions');
+    }
+  });
+
+  app.get('/api/laws/:celex/cited-by', rateLimitMiddleware, (req, res) => {
+    try {
+      const { celex } = req.params;
+      if (!validateCelex(celex)) {
+        return res.status(400).json({ error: 'Invalid CELEX format', code: 'invalid_celex' });
+      }
+      res.json(requireCitationGraph(citationGraphStore).getActCitations(celex));
+    } catch (err) {
+      safeErrorResponse(res, mapCitationGraphError(err), 'Failed to fetch citation counts');
     }
   });
 
@@ -640,6 +704,8 @@ function registerApiRoutes(app, deps) {
         'GET /api/laws/:celex/info': 'Get metadata only',
         'GET /api/laws/by-reference?actType=directive&year=2018&number=1972&lang=ENG': 'Resolve an official reference and fetch the matching FMX',
         'GET /api/laws/:celex/case-law': 'List CJEU judgments that interpret this law',
+        'GET /api/laws/:celex/cited-by': 'Get reverse-citation counts for an act',
+        'GET /api/laws/:celex/articles/:n/cited-by?limit=50&offset=0': 'List provisions and judgments citing an article',
         'GET /api/laws/:celex/recital-titles?lang=ENG': 'Get cached AI-generated short titles for recitals',
         'GET /api/laws/:celex/summary': 'Get cached static summary of what this law does (English only)',
         'GET /api/laws/:celex/case-law-digest?lang=ENG': 'Get cached static digest of CJEU case law interpreting this law as a whole',
@@ -647,7 +713,7 @@ function registerApiRoutes(app, deps) {
         'GET /api/search?q=keyword&limit=10': 'Search cached primary-law metadata',
         'GET /api/resolve-reference?actType=directive&year=2018&number=1972&lang=ENG': 'Resolve an FMX-derived legal reference to CELEX via cache-first lookup with Cellar fallback',
         'GET /api/resolve-url?url=https://eur-lex.europa.eu/...&lang=ENG': 'Resolve a full EUR-Lex URL to a canonical CELEX',
-        'POST /mcp': 'Model Context Protocol endpoint (stateless Streamable HTTP). Tools: search_eu_law, resolve, get_law_part, get_case_law, get_law_relations. Add to an AI client, e.g. `claude mcp add --transport http eurlex <base-url>/mcp`'
+        'POST /mcp': 'Model Context Protocol endpoint (stateless Streamable HTTP). Tools include search_eu_law, resolve, get_law_part, get_citing_provisions, get_case_law, and get_law_relations. Add to an AI client, e.g. `claude mcp add --transport http eurlex <base-url>/mcp`'
       },
       celexExamples: {
         '32016R0679': 'GDPR',

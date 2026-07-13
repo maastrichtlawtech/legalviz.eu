@@ -93,6 +93,17 @@ function jsonResult(obj) {
   return { content: [{ type: 'text', text: JSON.stringify(obj, null, 2) }] };
 }
 
+function requireCitationGraph(store) {
+  if (!store || (typeof store.isReady === 'function' && !store.isReady())) {
+    throw new ClientError(
+      'The citation graph is not loaded on the server yet. Please try again shortly.',
+      503,
+      'citation_graph_unavailable'
+    );
+  }
+  return store;
+}
+
 /** Wrap a tool handler so any error becomes a model-readable isError result. */
 function makeHandler(fn) {
   return async (args) => {
@@ -165,6 +176,7 @@ function registerTools(server, deps) {
     resolveParsedLaw,
     FMX_DIR,
     analytics,
+    citationGraphStore,
   } = deps;
 
   const record = (tool, meta) => {
@@ -358,6 +370,40 @@ function registerTools(server, deps) {
         text: htmlToText(annex.annex_html),
         crossReferences: law.crossReferences?.[`annex_${annex.annex_id}`] || [],
       });
+    })
+  );
+
+  server.registerTool(
+    'get_citing_provisions',
+    {
+      title: 'Get provisions citing an EU law article',
+      description:
+        'Find legislation provisions and CJEU judgments that cite a law or one of its articles. Pass an article number for paginated citation details; omit it for act-level citation counts.',
+      inputSchema: {
+        celex: z.string().describe('CELEX id of the cited law, e.g. 32016R0679'),
+        article: z.string().min(1).optional().describe('Cited article number; omit for act-level counts'),
+        limit: z.number().int().min(1).max(200).optional().describe('Maximum detailed results (default 50)'),
+        offset: z.number().int().min(0).optional().describe('Number of detailed results to skip (default 0)'),
+      },
+    },
+    makeHandler(async ({ celex, article, limit = 50, offset = 0 }) => {
+      requireCelex(celex);
+      record('get_citing_provisions', { celex, ...(article ? { article } : {}) });
+      const store = requireCitationGraph(citationGraphStore);
+      try {
+        return jsonResult(article
+          ? store.getArticleCitations(celex, article, { limit, offset })
+          : store.getActCitations(celex));
+      } catch (err) {
+        if (err?.code === 'citation_graph_unavailable') {
+          throw new ClientError(
+            'The citation graph is not loaded on the server yet. Please try again shortly.',
+            503,
+            'citation_graph_unavailable'
+          );
+        }
+        throw err;
+      }
     })
   );
 

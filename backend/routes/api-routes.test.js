@@ -87,6 +87,11 @@ function registerTestRoutes(overrides = {}) {
     RESOLUTION_CACHE_MS: 60_000,
     cacheGet,
     cacheSet,
+    citationGraphStore: {
+      isReady: () => true,
+      getArticleCitations: (celex, article, pagination) => ({ celex, article, pagination, citingProvisions: [], citingJudgments: [], counts: { total: 0 } }),
+      getActCitations: (celex) => ({ celex, byArticle: [], counts: { total: 0 } }),
+    },
     findDownloadUrls: async () => ({ type: "xml", urls: [] }),
     findFmx4Uri: async () => "unused",
     legalCacheStore: store,
@@ -193,6 +198,48 @@ test("GET /api/resolve-reference returns cache-backed resolution payload", async
   assert.equal(res.statusCode, 200);
   assert.equal(res.payload.resolved.celex, "32015L2366");
   assert.equal(res.payload.resolved.source, "search-cache");
+});
+
+test('GET article cited-by passes validated pagination to the citation graph', async () => {
+  const calls = [];
+  const { app } = registerTestRoutes({
+    citationGraphStore: {
+      isReady: () => true,
+      getArticleCitations: (celex, article, pagination) => {
+        calls.push({ celex, article, pagination });
+        return { celex, article, citingProvisions: [{ celex: '32024R1689', unit: '6' }], citingJudgments: [], counts: { total: 1 }, pagination };
+      },
+    },
+  });
+  const handler = app.routes.get('/api/laws/:celex/articles/:n/cited-by');
+  const res = createResponseRecorder();
+  await handler({ params: { celex: '32016R0679', n: '6' }, query: {} }, res);
+
+  assert.equal(res.statusCode, 200);
+  assert.deepEqual(calls, [{ celex: '32016R0679', article: '6', pagination: { limit: 50, offset: 0 } }]);
+  assert.equal(res.payload.counts.total, 1);
+});
+
+test('GET article cited-by rejects pagination outside its bounds', async () => {
+  const { app } = registerTestRoutes();
+  const handler = app.routes.get('/api/laws/:celex/articles/:n/cited-by');
+  const res = createResponseRecorder();
+  await handler({ params: { celex: '32016R0679', n: '6' }, query: { limit: '201' } }, res);
+
+  assert.equal(res.statusCode, 400);
+  assert.equal(res.payload.code, 'invalid_pagination');
+});
+
+test('GET act cited-by maps an unavailable graph to 503', async () => {
+  const { app } = registerTestRoutes({
+    citationGraphStore: { isReady: () => false, getStatus: () => ({ ready: false, reason: 'missing' }) },
+  });
+  const handler = app.routes.get('/api/laws/:celex/cited-by');
+  const res = createResponseRecorder();
+  await handler({ params: { celex: '32016R0679' }, query: {} }, res);
+
+  assert.equal(res.statusCode, 503);
+  assert.equal(res.payload.code, 'citation_graph_unavailable');
 });
 
 test("GET /api/laws/by-reference serves FMX after cache-backed resolution", async () => {

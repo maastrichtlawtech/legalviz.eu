@@ -52,6 +52,7 @@ for (const entry of manifest.fixtures) {
     const articles = combined.articles?.length || 0;
     const recitals = combined.recitals?.length || 0;
     const definitions = combined.definitions?.length || 0;
+    const annexes = combined.annexes?.length || 0;
 
     assert.ok(
       articles >= entry.expect.minArticles,
@@ -64,6 +65,10 @@ for (const entry of manifest.fixtures) {
     assert.ok(
       definitions >= entry.expect.minDefinitions,
       `${entry.celex}: expected >= ${entry.expect.minDefinitions} definitions, got ${definitions}`,
+    );
+    assert.ok(
+      annexes >= (entry.expect.minAnnexes || 0),
+      `${entry.celex}: expected >= ${entry.expect.minAnnexes || 0} annexes, got ${annexes}`,
     );
     // The enacting formula must never leak into a recital in any era.
     assert.ok(

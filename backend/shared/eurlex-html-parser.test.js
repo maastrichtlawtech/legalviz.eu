@@ -271,6 +271,46 @@ test("parseEurlexHtmlToCombined parses '(N) Whereas' numbered recitals without a
   assert.equal(parsed.articles.length, 2);
 });
 
+// Old <TXT_TE> acts carry annexes after the articles; the plaintext branch used
+// to drop them (annexes: []) and let their content bleed into the last article.
+const ANNEX_HTML = `<!DOCTYPE html>
+<html lang="EN">
+<head><meta name="DC.description" content="Council Regulation with annexes"></head>
+<body>
+  <div id="TexteOnly">
+    <TXT_TE>
+      <p>THE COUNCIL OF THE EUROPEAN COMMUNITIES,</p>
+      <p>Whereas measures are needed;</p>
+      <p>HAS ADOPTED THIS REGULATION:</p>
+      <p>Article 1</p>
+      <p>The scope is defined in Annex I.</p>
+      <p>Article 2</p>
+      <p>This Regulation shall enter into force on the third day.</p>
+      <p>ANNEX I</p>
+      <p>LIST OF PRODUCTS</p>
+      <p>Product A, Product B, Product C.</p>
+      <p>ANNEX II</p>
+      <p>Correlation table for the repealed Regulation.</p>
+    </TXT_TE>
+  </div>
+</body>
+</html>`;
+
+test("parseEurlexHtmlToCombined extracts annexes and keeps them out of the last article", async () => {
+  const parsed = await parseEurlexHtmlToCombined(ANNEX_HTML, "ENG");
+
+  // Two articles, two annexes; annex content is not swallowed into Article 2.
+  assert.equal(parsed.articles.length, 2);
+  assert.equal(parsed.annexes.length, 2);
+  assert.equal(parsed.annexes[0].annex_id, "I");
+  assert.match(parsed.annexes[0].annex_title, /ANNEX I/);
+  assert.match(parsed.annexes[0].annex_html, /Product A/);
+  assert.equal(parsed.annexes[1].annex_id, "II");
+  assert.match(parsed.annexes[1].annex_html, /Correlation table/);
+  const lastArticle = parsed.articles[parsed.articles.length - 1];
+  assert.doesNotMatch(lastArticle.article_html, /LIST OF PRODUCTS|Correlation table/);
+});
+
 test("parseEurlexHtmlToCombined keeps flat chapter and section headings out of article bodies", async () => {
   const parsed = await parseEurlexHtmlToCombined(FLAT_DIVISION_HTML, "ENG");
 

@@ -81,6 +81,15 @@
       "format": "EUR-Lex HTML — <TXT_TE>, numbered '(N) Whereas …' recitals",
       "note": "Directive 95/46/EC. 1990s acts number recitals '(N) Whereas …' under a 'Having regard to …' block with no standalone 'Whereas:' heading; the whole preamble must be scanned. This is the regression that motivated the fixture library.",
       "expect": { "minArticles": 34, "minRecitals": 72, "minDefinitions": 1 }
+    },
+    {
+      "file": "html-txtte-annex-1968-31968R0459.html.gz",
+      "kind": "html",
+      "celex": "31968R0459",
+      "year": 1968,
+      "format": "EUR-Lex HTML — <TXT_TE> with TITLE divisions and a trailing ANNEX",
+      "note": "Regulation with TITLE I–IV chapter structure and an annex after the articles. Guards annex extraction in the plaintext branch (which previously dropped annexes and let their content bleed into the last article) plus TITLE-level division parsing.",
+      "expect": { "minArticles": 29, "minRecitals": 18, "minDefinitions": 0, "minAnnexes": 1 }
     }
   ]
 }

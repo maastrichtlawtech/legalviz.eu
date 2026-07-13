@@ -546,6 +546,52 @@ function parseArticles(paragraphs) {
   return articles;
 }
 
+// The plaintext/<TXT_TE> branch previously discarded annexes (annexes: []), so
+// annex content (schedules, forms, product lists) leaked into the last article's
+// body. Split the run of paragraphs after the articles by each "ANNEX"/"ANNEX I"
+// heading into a distinct annex, mirroring the { annex_id, annex_title,
+// annex_html } shape the structured branches emit. `startIndex` is the first
+// annex heading; everything before it is articles.
+function parseTxtTeAnnexes(paragraphs, startIndex, langConfig, injectFn) {
+  const annexCapture = langConfig?.annexCapture || /^ANNEX\s*([IVXLCDM]+|\d+)?/i;
+  const collected = [];
+  let current = null;
+
+  for (let index = startIndex; index < paragraphs.length; index += 1) {
+    const paragraph = normalizeText(paragraphs[index]);
+    if (!paragraph) continue;
+
+    if (isAnnexHeading(paragraph)) {
+      if (current) collected.push(current);
+      const match = paragraph.match(annexCapture);
+      current = {
+        heading: paragraph,
+        annex_id: (match && normalizeText(match[1] || "")) || paragraph,
+        subtitle: "",
+        body: [],
+      };
+      continue;
+    }
+    if (!current) continue;
+
+    // A short, non-sentence line immediately under the heading is the annex
+    // subtitle; everything else is body content.
+    if (!current.subtitle && current.body.length === 0
+        && isLikelyArticleTitle(paragraph) && !isLikelyDivisionTitle(paragraph)) {
+      current.subtitle = paragraph;
+      continue;
+    }
+    current.body.push(paragraph);
+  }
+  if (current) collected.push(current);
+
+  return collected.map((annex) => ({
+    annex_id: annex.annex_id,
+    annex_title: annex.subtitle ? `${annex.heading} — ${annex.subtitle}` : annex.heading,
+    annex_html: injectFn(paragraphsToHtml(annex.body), langConfig),
+  }));
+}
+
 function parseLegacyXhtmlToCombined(document, langCode, langConfig, injectCrossRefLinks) {
   const metaTitle = document.querySelector('meta[name="WT.z_docTitle"]')?.getAttribute("content")
     || document.querySelector('meta[name="DC.description"]')?.getAttribute("content");
@@ -986,7 +1032,14 @@ async function parseEurlexHtmlToCombined(htmlText, lang = "ENG") {
     recitals = parseWhereasRecitals(paragraphs, preambleEnd);
   }
 
-  let rawArticles = parseArticles(paragraphs.slice(articleStartIndex >= 0 ? articleStartIndex : paragraphs.length));
+  // Annexes follow the articles. Cut the article body at the first "ANNEX"
+  // heading so annex content isn't swallowed into the last article, and parse
+  // the remainder as annexes.
+  const annexStartIndex = paragraphs.findIndex((paragraph) => isAnnexHeading(normalizeText(paragraph)));
+  const articleSliceEnd = annexStartIndex > articleStartIndex ? annexStartIndex : paragraphs.length;
+  let rawArticles = parseArticles(
+    paragraphs.slice(articleStartIndex >= 0 ? articleStartIndex : paragraphs.length, articleSliceEnd),
+  );
   // Single-provision acts have no "Article N" heading — recover the operative
   // text after the enacting formula as a lone Article 1 so it isn't dropped.
   if (rawArticles.length === 0) {
@@ -1022,11 +1075,15 @@ async function parseEurlexHtmlToCombined(htmlText, lang = "ENG") {
 
   const definitions = articles.flatMap((article) => parseDefinitions(article));
 
+  const annexes = annexStartIndex >= 0
+    ? parseTxtTeAnnexes(paragraphs, annexStartIndex, langConfig, injectCrossRefLinks)
+    : [];
+
   return {
     title,
     articles: articles.map(({ bodyParagraphs, ...article }) => article),
     recitals,
-    annexes: [],
+    annexes,
     definitions,
     langCode,
     crossReferences: {},

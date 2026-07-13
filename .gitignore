@@ -27,7 +27,9 @@ backend/html-fallback-downloads/
 # harvest. The corpus can grow to hundreds of MB / tens of thousands of files;
 # only the derived search-cache.json is committed, never the raw XML.
 backend/search/data/laws/
+backend/search/data/laws-html/
 backend/search/data/shards/
+backend/search/data/html-shards/
 backend/search/data/search-build-state*.json
 backend/search/data/search-cache-historical*.json
 backend/search/data/*.backup

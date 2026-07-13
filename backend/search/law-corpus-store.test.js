@@ -8,10 +8,14 @@ const path = require("path");
 const {
   celexShard,
   corpusPathFor,
+  corpusHtmlPathFor,
   hasCorpusXml,
+  hasCorpusHtml,
   readCorpusXml,
+  readCorpusHtml,
   sanitizeCelex,
   writeCorpusXml,
+  writeCorpusHtml,
 } = require("./law-corpus-store");
 
 async function withTempDir(run) {
@@ -64,6 +68,26 @@ test("writeCorpusXml skips empty payloads and readCorpusXml misses gracefully", 
   await withTempDir(async (dir) => {
     assert.equal(await writeCorpusXml(dir, "32016R0679", ""), false);
     assert.equal(await readCorpusXml(dir, "32016R0679"), null);
+  });
+});
+
+test("HTML variant round-trips in a separate laws-html/ tree", async () => {
+  await withTempDir(async (dir) => {
+    const celex = "31995L0046";
+    const html = "<html><body>Directive 95/46/EC</body></html>";
+
+    assert.equal(hasCorpusHtml(dir, celex), false);
+    assert.equal(await readCorpusHtml(dir, celex), null);
+
+    assert.equal(await writeCorpusHtml(dir, celex, html), true);
+    assert.equal(hasCorpusHtml(dir, celex), true);
+    assert.equal(await readCorpusHtml(dir, celex), html);
+
+    // HTML lives under laws-html/, XML under laws/ — separate trees.
+    assert.match(corpusHtmlPathFor(dir, celex), /\/laws-html\/1995\/31995L0046\.html\.gz$/);
+    assert.match(corpusPathFor(dir, celex), /\/laws\/1995\/31995L0046\.xml\.gz$/);
+    // Writing HTML must not create an XML entry (and vice versa).
+    assert.equal(hasCorpusXml(dir, celex), false);
   });
 });
 

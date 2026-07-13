@@ -70,23 +70,45 @@ function print(d) {
   console.log(`Backend: ${base}`);
   console.log(`Uptime:  ${fmtUptime(d.uptimeSec || 0)}`);
   console.log(
-    `Today:   ${d.today?.date}  requests=${d.today?.requests}  uniqueUsers=${d.today?.uniqueUsers}`
+    `Today:   ${d.today?.date}  requests=${d.today?.requests}  uniqueUsers~=${d.today?.uniqueUsers}`
   );
 
-  const days = Object.keys({ ...(d.dayCounts || {}), ...(d.dayUniques || {}) }).sort();
-  const recent = days.slice(-14);
+  const daily = { ...(d.days || {}) };
+  if (d.today?.date) daily[d.today.date] = d.today;
+  if (!d.days) {
+    for (const date of Object.keys({ ...(d.dayCounts || {}), ...(d.dayUniques || {}) })) {
+      daily[date] = {
+        requests: d.dayCounts?.[date] ?? 0,
+        uniqueUsersEstimate: d.dayUniques?.[date] ?? 0,
+      };
+    }
+  }
+  const end = new Date(`${d.today?.date || new Date().toISOString().slice(0, 10)}T00:00:00Z`);
+  const cutoff = new Date(end);
+  cutoff.setUTCDate(cutoff.getUTCDate() - 13);
+  const recent = Object.keys(daily).sort().filter((date) => new Date(`${date}T00:00:00Z`) >= cutoff);
   if (recent.length) {
     console.log('\nLast 14 days:');
     table(
       recent.map((date) => ({
         date,
-        requests: d.dayCounts?.[date] ?? 0,
-        unique: d.dayUniques?.[date] ?? 0,
+        requests: daily[date].requests ?? 0,
+        unique: daily[date].uniqueUsersEstimate ?? daily[date].uniqueUsers ?? 0,
+        web: daily[date].channels?.web ?? 0,
+        api: daily[date].channels?.api ?? 0,
+        mcp: daily[date].channels?.mcp ?? 0,
+        errors: (daily[date].statusCodes?.['4xx'] || 0) + (daily[date].statusCodes?.['5xx'] || 0),
+        searches: daily[date].searches ?? 0,
       })),
       [
         { label: 'date', get: (r) => r.date },
         { label: 'requests', get: (r) => r.requests },
-        { label: 'unique', get: (r) => r.unique },
+        { label: 'unique~', get: (r) => r.unique },
+        { label: 'web', get: (r) => r.web },
+        { label: 'api', get: (r) => r.api },
+        { label: 'mcp', get: (r) => r.mcp },
+        { label: 'errors', get: (r) => r.errors },
+        { label: 'searches', get: (r) => r.searches },
       ]
     );
   }
@@ -105,10 +127,7 @@ function print(d) {
     { label: 'celex', get: (r) => r.celex },
     { label: 'count', get: (r) => r.count },
   ]);
-  section('Top searches', d.topSearches, [
-    { label: 'q', get: (r) => r.q },
-    { label: 'count', get: (r) => r.count },
-  ]);
+  if (Number.isFinite(d.totalSearches)) console.log(`\nSearches: ${d.totalSearches} total (query text is not stored)`);
 
   if (d.caseLawCache) {
     console.log('\nCase-law cache:');

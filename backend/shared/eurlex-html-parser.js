@@ -386,8 +386,17 @@ function parseRecitals(paragraphs, articleStartIndex) {
 
   for (let index = 0; index < articleStartIndex; index += 1) {
     const paragraph = paragraphs[index];
+    // Recitals always precede the enacting formula; stop before it so the
+    // "HAS ADOPTED …" line is never folded into the last recital (relevant when
+    // the caller scans the whole preamble rather than a "Whereas:"-delimited block).
+    if (ENACTING_FORMULA.test(normalizeText(paragraph))) break;
     const match = paragraph.match(/^\((\d+)\)\s*(.*)$/);
     if (match) {
+      // Skip "(N) OJ No L …" footnote-citation lines — they carry a numbered
+      // marker like a recital but are Official-Journal references, not recitals.
+      // Treating them as recitals both fabricates junk and suppresses the
+      // unnumbered-"Whereas" fallback for acts whose real recitals aren't numbered.
+      if (/^OJ\b/i.test(match[2])) continue;
       if (current) recitals.push(current);
       current = {
         recital_number: match[1],
@@ -961,17 +970,20 @@ async function parseEurlexHtmlToCombined(htmlText, lang = "ENG") {
 
   const whereasIndex = paragraphs.findIndex((paragraph) => /^Whereas:?$/i.test(paragraph));
   const articleStartIndex = paragraphs.findIndex((paragraph) => isArticleHeading(paragraph));
-  const recitalParagraphs = whereasIndex >= 0 && articleStartIndex > whereasIndex
-    ? paragraphs.slice(whereasIndex + 1, articleStartIndex)
-    : [];
+  const preambleEnd = articleStartIndex >= 0 ? articleStartIndex : paragraphs.length;
+  // With a standalone "Whereas:" heading, recitals are the block after it. Older
+  // 1990s acts instead number their recitals "(N) Whereas …" with no such heading
+  // and a "Having regard to …" citation block above — so scan the whole preamble;
+  // parseRecitals only latches onto "(N)"-marked paragraphs and stops at the
+  // enacting formula, ignoring the title/citation lines before the first recital.
+  const recitalParagraphs = whereasIndex >= 0 && preambleEnd > whereasIndex
+    ? paragraphs.slice(whereasIndex + 1, preambleEnd)
+    : paragraphs.slice(0, preambleEnd);
   let recitals = parseRecitals(recitalParagraphs, recitalParagraphs.length);
   // Fall back to old-style unnumbered "Whereas …" recitals (pre-1990s acts),
   // which have no "(N)" markers for parseRecitals to latch onto.
   if (recitals.length === 0) {
-    recitals = parseWhereasRecitals(
-      paragraphs,
-      articleStartIndex >= 0 ? articleStartIndex : paragraphs.length,
-    );
+    recitals = parseWhereasRecitals(paragraphs, preambleEnd);
   }
 
   let rawArticles = parseArticles(paragraphs.slice(articleStartIndex >= 0 ? articleStartIndex : paragraphs.length));

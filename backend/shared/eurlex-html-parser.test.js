@@ -230,6 +230,47 @@ test("parseEurlexHtmlToCombined recovers a single article from a 'SOLE ARTICLE' 
   assert.equal(parsed.recitals.length, 1);
 });
 
+// 1990s directives number their recitals "(N) Whereas …" with a "Having regard
+// to …" citation block above and no standalone "Whereas:" heading (e.g. Directive
+// 95/46/EC). The preamble must be scanned for "(N)" markers, and the enacting
+// formula must not be swallowed into the last recital.
+const NUMBERED_WHEREAS_HTML = `<!DOCTYPE html>
+<html lang="EN">
+<head><meta name="DC.description" content="Directive 95/46/EC"></head>
+<body>
+  <div id="TexteOnly">
+    <TXT_TE>
+      <p>DIRECTIVE 95/46/EC OF THE EUROPEAN PARLIAMENT AND OF THE COUNCIL of 24 October 1995</p>
+      <p>THE EUROPEAN PARLIAMENT AND THE COUNCIL OF THE EUROPEAN UNION,</p>
+      <p>Having regard to the Treaty establishing the European Community, and in particular Article 100a thereof,</p>
+      <p>Having regard to the proposal from the Commission (1),</p>
+      <p>(1) Whereas the objectives of the Community include establishing an internal market;</p>
+      <p>(2) Whereas data-processing systems are designed to serve man;</p>
+      <p>(3) Whereas the establishment of an internal market requires the free movement of personal data;</p>
+      <p>HAVE ADOPTED THIS DIRECTIVE:</p>
+      <p>Article 1</p>
+      <p>Member States shall protect the fundamental rights of natural persons.</p>
+      <p>Article 2</p>
+      <p>This Directive is addressed to the Member States.</p>
+    </TXT_TE>
+  </div>
+</body>
+</html>`;
+
+test("parseEurlexHtmlToCombined parses '(N) Whereas' numbered recitals without a 'Whereas:' heading", async () => {
+  const parsed = await parseEurlexHtmlToCombined(NUMBERED_WHEREAS_HTML, "ENG");
+
+  // Three "(N) Whereas …" paragraphs → three numbered recitals; the "Having
+  // regard to …" citation lines above must not be mistaken for recitals.
+  assert.equal(parsed.recitals.length, 3);
+  assert.deepEqual(parsed.recitals.map((r) => r.recital_number), ["1", "2", "3"]);
+  assert.match(parsed.recitals[0].recital_text, /objectives of the Community/);
+  // The enacting formula sits between the last recital and Article 1 — it must
+  // never be folded into recital 3.
+  assert.ok(parsed.recitals.every((r) => !/HAVE ADOPTED/i.test(r.recital_text)));
+  assert.equal(parsed.articles.length, 2);
+});
+
 test("parseEurlexHtmlToCombined keeps flat chapter and section headings out of article bodies", async () => {
   const parsed = await parseEurlexHtmlToCombined(FLAT_DIVISION_HTML, "ENG");
 

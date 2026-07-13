@@ -12,15 +12,35 @@ Railway.
 ## Where things stand now
 - **FMX corpus complete**: 27,916 acts at `backend/search/data/laws/<year>/<CELEX>.xml.gz` (mostly ≥2000; near-100% of 2010–2026, ~48% of 2000–2009, very little pre-2000 — those have no FMX).
 - **Live search cache rebuilt** for 2010–2026: `backend/search/data/search-cache.json`, 13,493 records, ~99.5% excerpts. ⚠️ **modified but uncommitted.**
-- **HTML corpus downloading now** (raw only, no parsing): the ~137k FMX-less acts → `backend/search/data/laws-html/<year>/<CELEX>.html.gz` via `backend/search/html-harvest.js` (warm-cookie plain fetch). ~62% save, ~38% are 404 (no HTML rendition). Sidecars: `html-shards/state-*.json.misses.txt` / `.fails.txt`.
+- **HTML corpus downloading now** (raw only, no parsing): the ~137k FMX-less acts → `backend/search/data/laws-html/<year>/<CELEX>.html.gz` via `backend/search/html-harvest.js` (warm-cookie plain fetch). Sidecars: `html-shards/state-*.json.misses.txt` / `.fails.txt`. **Most old acts have no HTML rendition** — EUR-Lex returns a chrome-only "does not exist" shell, now detected and skipped (see §1). So the real content corpus is much smaller than the target count (hundreds of content files across the 1950s–70s so far, growing as the crawl advances into later decades).
 
 ---
 
 ## 1. Fix / extend the HTML parser for old laws
 The download gives us raw HTML; parsing older shapes is the deferred work.
-- [ ] Point `backend/shared/eurlex-html-parser.js` (`parseStructuredHtmlToCombined`) at the `laws-html/` corpus and see where it breaks. It targets the modern `.oj-*` OJ HTML; expect degradation on pre-~2004 OJ HTML and very old layouts.
-- [ ] Add fixtures from a spread of eras (2000s, 1990s, 1970s, 1960s) and extend the parser to handle the older `class="oj-font*"` / legacy OJ shapes (same era-split already handled for case law in `backend/shared/law-queries.js`).
-- [ ] Iterate **offline against the corpus** — no re-scraping. Success = it yields `{ articles, recitals, definitions, title }` for old acts so `buildExcerptFromCombined` can run.
+
+> **Update (diagnostic run against the corpus):** the parser was *less* broken than
+> assumed. Where old HTML actually contains law text, the existing `<TXT_TE>`/plaintext
+> path already extracts articles fine. Two real issues were found and fixed in
+> `5e88258`:
+> - **~67% of "saved" HTML was empty EUR-Lex chrome** — a 200 "requested document does
+>   not exist" shell served instead of a 404 for acts with no HTML rendition. Now
+>   detected on download (`isEmptyShellHtml`) and recorded as a miss; the ~1,186 already
+>   saved were pruned. So the FMX-less corpus is far smaller than the ~137k target list —
+>   most of those acts simply have no HTML.
+> - **Old unnumbered "Whereas …" recitals** (pre-1990s EEC/ECSC) weren't parsed
+>   (`parseRecitals` only matched "(N)"). Now extracted via `parseWhereasRecitals`,
+>   roughly doubling/tripling the excerpt for old laws.
+
+- [x] ~~Point the parser at the corpus and see where it breaks~~ — done; the break was
+  mostly empty shells, not parser bugs (see above).
+- [x] ~~Add old-era fixtures + extend the parser~~ — added the unnumbered-Whereas fixture/test;
+  the `txt_te` path covers 1950s–70s content-bearing acts.
+- [ ] Still open: spot-check **1980s–1990s** FMX-less HTML once the crawl reaches those
+  year-bands (may use `.oj-font*`/legacy OJ shapes the current paths don't cover). Definitions
+  stay 0 for old acts — usually correct (no "Definitions" article), not a bug to force.
+- [ ] When shipping: review the frontend **`API_JSON_CACHE_VERSION`** (`src/utils/formexApi.js`) —
+  the improved recital output changes the cached per-law API JSON for FMX-less laws.
 
 ## 2. Rebuild the search cache from the FULL corpus (offline)
 - [ ] Add an offline "excerpt from corpus" path so `search-build.js` can enrich a record from the local FMX **or** HTML corpus (no network). FMX is already corpus-first; add an HTML fallback that runs `parseStructuredHtmlToCombined` → `buildExcerptFromCombined`.

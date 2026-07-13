@@ -15,7 +15,6 @@
 
 const fs = require("fs");
 const fsp = require("fs/promises");
-const path = require("path");
 
 const { hasCorpusHtml, writeCorpusHtml } = require("./law-corpus-store");
 const { ensureWarmHeaders, getWarmHeaders, invalidateCookies, warmCookies } = require("../shared/eurlex-cookies");

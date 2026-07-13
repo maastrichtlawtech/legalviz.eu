@@ -1,0 +1,86 @@
+{
+  "description": "Real EUR-Lex captures, one per format era we parse, frozen as gzipped fixtures. This file is the map of the EU document-format versions LegalViz has to handle; the paired corpus-fixtures.test.js asserts each still parses into articles/recitals so a parser change can't silently regress an era. Counts below are the parse output at freeze time; tests assert `>=` these floors, so parser improvements are free but regressions fail. To refresh or extend, drop a new `<kind>-<era>-<CELEX>.<ext>.gz` here (FMX: xml, EUR-Lex HTML: html) and add an entry. Sourced from the gitignored local corpus (backend/search/data/laws{,-html}); HTML fixtures are the raw EUR-Lex HTML the live viewer reparses.",
+  "fixtures": [
+    {
+      "file": "fmx-v2-2004-32004R0097.xml.gz",
+      "kind": "fmx",
+      "celex": "32004R0097",
+      "year": 2004,
+      "format": "Formex v2 — schema 02.00, <GENERAL>/<BIB.INSTANCE> root",
+      "note": "Earliest bulk-FMX era (pre-2005). isFmxDocument() returns false for the bare <GENERAL> shape, but wrapForParsing() normalises it and recitals + articles parse. Large annex-heavy v2 acts (e.g. 32004L0018) parse recitals but not articles — a known partial gap kept out of this floor.",
+      "expect": { "minArticles": 3, "minRecitals": 6, "minDefinitions": 0 }
+    },
+    {
+      "file": "fmx-v4-2009-32009L0004.xml.gz",
+      "kind": "fmx",
+      "celex": "32009L0004",
+      "year": 2009,
+      "format": "Formex v4 — schema 04.00, <ACT> root",
+      "note": "Single-root <ACT> document; the canonical mid-era FMX shape.",
+      "expect": { "minArticles": 4, "minRecitals": 6, "minDefinitions": 0 }
+    },
+    {
+      "file": "fmx-v5-2015-32015L0412.xml.gz",
+      "kind": "fmx",
+      "celex": "32015L0412",
+      "year": 2015,
+      "format": "Formex v5 — schema 05.55, multi-root <ACT>+<ACT>",
+      "note": "A CELLAR download can ship the act as multiple concatenated top-level <ACT> documents (invalid XML on its own). wrapForParsing() wraps them in <FMX.COLLECTION> so the streaming parser accepts them — this fixture guards that path.",
+      "expect": { "minArticles": 4, "minRecitals": 56, "minDefinitions": 0 }
+    },
+    {
+      "file": "fmx-v6-2024-32024D0190.xml.gz",
+      "kind": "fmx",
+      "celex": "32024D0190",
+      "year": 2024,
+      "format": "Formex v6 — schema 06.00, <PUBLICATION>/<OJ> wrapper",
+      "note": "Newest FMX wrapper: the ACT is nested under an <OJ>/<PUBLICATION> envelope. Parser must descend past the envelope to the ACT.",
+      "expect": { "minArticles": 2, "minRecitals": 6, "minDefinitions": 0 }
+    },
+    {
+      "file": "html-txtte-ecsc-1953-31953D0030.html.gz",
+      "kind": "html",
+      "celex": "31953D0030",
+      "year": 1953,
+      "format": "EUR-Lex HTML — <TXT_TE> plaintext, ECSC High Authority decision",
+      "note": "Oldest HTML shape: <TXT_TE> body with numbered articles and unnumbered preamble. No FMX exists for these acts.",
+      "expect": { "minArticles": 8, "minRecitals": 5, "minDefinitions": 0 }
+    },
+    {
+      "file": "html-txtte-unnumbered-1964-31964L0221.html.gz",
+      "kind": "html",
+      "celex": "31964L0221",
+      "year": 1964,
+      "format": "EUR-Lex HTML — <TXT_TE>, unnumbered 'Whereas …' recitals",
+      "note": "Pre-1990s directives with a run of unnumbered 'Whereas …' paragraphs between the 'Having regard to …' citations and 'HAS ADOPTED THIS DIRECTIVE:'. Parsed by parseWhereasRecitals.",
+      "expect": { "minArticles": 11, "minRecitals": 4, "minDefinitions": 0 }
+    },
+    {
+      "file": "html-txtte-soleart-1972-31972R2681.html.gz",
+      "kind": "html",
+      "celex": "31972R2681",
+      "year": 1972,
+      "format": "EUR-Lex HTML — <TXT_TE>, 'SOLE ARTICLE' single-provision act",
+      "note": "Amending regulation with a 'SOLE ARTICLE' label instead of a numbered 'Article N' heading. Recovered as a lone Article 1 by the single-provision fallback.",
+      "expect": { "minArticles": 1, "minRecitals": 3, "minDefinitions": 0 }
+    },
+    {
+      "file": "html-txtte-noheading-1963-31963D0002.html.gz",
+      "kind": "html",
+      "celex": "31963D0002",
+      "year": 1963,
+      "format": "EUR-Lex HTML — <TXT_TE>, single-provision decision, no article heading",
+      "note": "Operative text follows the enacting formula directly with no article heading at all; salvaged as Article 1. Has no recitals (correct — none in the source).",
+      "expect": { "minArticles": 1, "minRecitals": 0, "minDefinitions": 0 }
+    },
+    {
+      "file": "html-txtte-numbered-1995-31995L0046.html.gz",
+      "kind": "html",
+      "celex": "31995L0046",
+      "year": 1995,
+      "format": "EUR-Lex HTML — <TXT_TE>, numbered '(N) Whereas …' recitals",
+      "note": "Directive 95/46/EC. 1990s acts number recitals '(N) Whereas …' under a 'Having regard to …' block with no standalone 'Whereas:' heading; the whole preamble must be scanned. This is the regression that motivated the fixture library.",
+      "expect": { "minArticles": 34, "minRecitals": 72, "minDefinitions": 1 }
+    }
+  ]
+}

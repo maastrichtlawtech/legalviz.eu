@@ -997,5 +997,6 @@ module.exports = {
   normalizeYearQueryActTypes,
   reEnrichCurrentCache,
   requestWithRetry,
-  runSparql
+  runSparql,
+  wrapForParsing
 };

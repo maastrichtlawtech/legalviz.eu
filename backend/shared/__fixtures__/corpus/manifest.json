@@ -25,8 +25,8 @@
       "celex": "32015L0412",
       "year": 2015,
       "format": "Formex v5 — schema 05.55, multi-root <ACT>+<ACT>",
-      "note": "A CELLAR download can ship the act as multiple concatenated top-level <ACT> documents (invalid XML on its own). wrapForParsing() wraps them in <FMX.COLLECTION> so the streaming parser accepts them — this fixture guards that path.",
-      "expect": { "minArticles": 4, "minRecitals": 56, "minDefinitions": 0 }
+      "note": "A CELLAR download can ship the act as multiple concatenated top-level <ACT> documents (invalid XML on its own). wrapForParsing() wraps them in <FMX.COLLECTION> so the streaming parser accepts them — this fixture guards that path. It also references Directive 2001/18/EC and the TFEU, so it guards external-law + treaty cross-reference extraction.",
+      "expect": { "minArticles": 4, "minRecitals": 56, "minDefinitions": 0, "minCrossRefKeys": 10, "minTreatyRefs": 1 }
     },
     {
       "file": "fmx-v6-2024-32024D0190.xml.gz",
@@ -79,8 +79,8 @@
       "celex": "31995L0046",
       "year": 1995,
       "format": "EUR-Lex HTML — <TXT_TE>, numbered '(N) Whereas …' recitals",
-      "note": "Directive 95/46/EC. 1990s acts number recitals '(N) Whereas …' under a 'Having regard to …' block with no standalone 'Whereas:' heading; the whole preamble must be scanned. This is the regression that motivated the fixture library.",
-      "expect": { "minArticles": 34, "minRecitals": 72, "minDefinitions": 1 }
+      "note": "Directive 95/46/EC. 1990s acts number recitals '(N) Whereas …' under a 'Having regard to …' block with no standalone 'Whereas:' heading; the whole preamble must be scanned. This is the regression that motivated the fixture library. Also the guard for HTML cross-reference extraction: recital preambles get cross-ref links injected, the crossReferences map is populated, and trailing '(N) OJ No L …' footnote lines are captured as OJ references.",
+      "expect": { "minArticles": 34, "minRecitals": 72, "minDefinitions": 1, "minCrossRefKeys": 15, "minOjRefs": 5, "minTreatyRefs": 1 }
     },
     {
       "file": "html-txtte-annex-1968-31968R0459.html.gz",

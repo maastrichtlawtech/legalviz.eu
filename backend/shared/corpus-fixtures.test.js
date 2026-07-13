@@ -70,6 +70,44 @@ for (const entry of manifest.fixtures) {
       annexes >= (entry.expect.minAnnexes || 0),
       `${entry.celex}: expected >= ${entry.expect.minAnnexes || 0} annexes, got ${annexes}`,
     );
+
+    // Cross-reference / citation extraction floors. These guard that older HTML
+    // laws populate a crossReferences map (recital preambles + articles), capture
+    // "(N) OJ No …" footnote citations, and that treaty (TFEU/TEU) references are
+    // detected — the recurring gaps being an empty map or dropped citations.
+    const crossReferences = combined.crossReferences || {};
+    const crossRefKeys = Object.keys(crossReferences).length;
+    const allRefs = Object.values(crossReferences).flat();
+    const ojRefs = allRefs.filter((ref) => ref.type === "oj_ref").length;
+    const treatyRefs = allRefs.filter((ref) => ref.treaty).length;
+
+    assert.ok(
+      crossRefKeys >= (entry.expect.minCrossRefKeys || 0),
+      `${entry.celex}: expected >= ${entry.expect.minCrossRefKeys || 0} crossReferences keys, got ${crossRefKeys}`,
+    );
+    assert.ok(
+      ojRefs >= (entry.expect.minOjRefs || 0),
+      `${entry.celex}: expected >= ${entry.expect.minOjRefs || 0} OJ footnote refs, got ${ojRefs}`,
+    );
+    assert.ok(
+      treatyRefs >= (entry.expect.minTreatyRefs || 0),
+      `${entry.celex}: expected >= ${entry.expect.minTreatyRefs || 0} treaty refs, got ${treatyRefs}`,
+    );
+
+    if (entry.celex === "31972R2681") {
+      const legacy = allRefs.find((ref) => ref.target === "2306/70");
+      assert.deepEqual(
+        legacy && { articleNumber: legacy.articleNumber, year: legacy.year, number: legacy.number, actCelex: legacy.actCelex },
+        { articleNumber: "10", year: "1970", number: "2306", actCelex: "31970R2306" },
+      );
+    }
+
+    if (entry.celex === "32004R0097") {
+      const refsTo2299 = (crossReferences["2"] || [])
+        .filter((ref) => ref.target === "2299/2003")
+        .map((ref) => ref.articleNumber);
+      assert.deepEqual(refsTo2299, ["1"], "the Article 2 heading must not bind to Regulation 2299/2003");
+    }
     // The enacting formula must never leak into a recital in any era.
     assert.ok(
       (combined.recitals || []).every(

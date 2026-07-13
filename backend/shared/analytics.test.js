@@ -65,13 +65,13 @@ test('persists channel counters across a flush/reload cycle', () => {
   second.shutdown();
 });
 
-test('getStats reads case-law cache stats from the current (v4) cache filename', () => {
+test('getStats reads case-law cache stats from the current cache filename', () => {
   const os = require('node:os');
   const fs = require('node:fs');
   const path = require('node:path');
   const cacheDir = fs.mkdtempSync(path.join(os.tmpdir(), 'analytics-caselaw-'));
 
-  assert.equal(CASE_LAW_CACHE_FILE, 'case-law-cache-v4.json');
+  assert.equal(CASE_LAW_CACHE_FILE, 'case-law-cache-v5.json');
   fs.writeFileSync(
     path.join(cacheDir, CASE_LAW_CACHE_FILE),
     JSON.stringify({

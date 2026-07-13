@@ -55,12 +55,40 @@ test("parseEurlexHtmlToCombined extracts title, recitals, articles, and definiti
   assert.match(parsed.definitions[0].definition, /natural person using a service/i);
 });
 
+test("parseEurlexHtmlToCombined retains unnumbered legacy decision measures", async () => {
+  const html = `<!DOCTYPE html><html lang="EN"><head><meta name="DC.description" content="Council Decision" /></head><body><div id="TexteOnly"><p><TXT_TE>
+    <p>****</p><p>COUNCIL DECISION</p><p>OF 25 JUNE 1979</p>
+    <p>THE COUNCIL DECIDES TO TAKE INTERIM MEASURES UNDER ARTICLE 102 OF THE ACT OF ACCESSION.</p>
+    <p>1. Member States shall conduct their fishery accordingly.</p><p>2. The measures apply until 31 October 1979.</p>
+  </TXT_TE></p></div></body></html>`;
+  const parsed = await parseEurlexHtmlToCombined(html, "ENG");
+
+  assert.equal(parsed.articles.length, 1);
+  assert.equal(parsed.articles[0].article_number, "text");
+  assert.equal(parsed.articles[0].display_label, "Decision text");
+  assert.equal(parsed.articles[0].is_unnumbered, true);
+  assert.match(parsed.articles[0].article_html, /Member States shall conduct their fishery/);
+  assert.match(parsed.articles[0].article_html, /Article 102/i);
+});
+
+test("parseEurlexHtmlToCombined retains unnumbered European Parliament decisions", async () => {
+  const html = `<!DOCTYPE html><html lang="EN"><body><div id="TexteOnly"><p><TXT_TE>
+    <p>DECISION OF THE EUROPEAN PARLIAMENT</p><p>OF 16 NOVEMBER 1979</p>
+    <p>1. Grants a discharge to the Commission.</p><p>2. Instructs its President to communicate this Decision.</p>
+  </TXT_TE></p></div></body></html>`;
+  const parsed = await parseEurlexHtmlToCombined(html, "ENG");
+
+  assert.equal(parsed.articles.length, 1);
+  assert.equal(parsed.articles[0].display_label, "Decision text");
+  assert.match(parsed.articles[0].article_html, /Grants a discharge/i);
+});
+
 const STRUCTURED_HTML = `<!DOCTYPE html>
 <html lang="EN">
 <body>
   <p class="oj-doc-ti">Directive (EU) 2015/2366 of the European Parliament and of the Council</p>
   <div class="eli-subdivision" id="rct_1">
-    <table><tr><td>(1)</td><td>First recital text.</td></tr></table>
+    <table><tr><td>(1)</td><td>First recital text. Article 99 applies.</td></tr></table>
   </div>
   <div class="eli-subdivision" id="art_1">
     <div class="eli-title">
@@ -80,6 +108,8 @@ test("parseEurlexHtmlToCombined reuses the legacy structured EUR-Lex HTML layout
   assert.equal(parsed.articles[0].article_title, "Subject matter");
   assert.equal(parsed.recitals.length, 1);
   assert.equal(parsed.recitals[0].recital_number, "1");
+  assert.equal(parsed.crossReferences.recital_1, undefined);
+  assert.doesNotMatch(parsed.recitals[0].recital_html, /data-ref-article="99"/);
 });
 
 const FLAT_DIVISION_HTML = `<!DOCTYPE html>
@@ -221,8 +251,11 @@ test("parseEurlexHtmlToCombined recovers a single article from a 'SOLE ARTICLE' 
   // formula is salvaged as a lone Article 1.
   assert.equal(parsed.articles.length, 1);
   assert.equal(parsed.articles[0].article_number, "1");
-  // The "SOLE ARTICLE" label is dropped; the operative sentence is kept.
-  assert.match(parsed.articles[0].article_html, /Article 10 of Regulation/);
+  // The "SOLE ARTICLE" label is dropped; the operative sentence is kept. (The
+  // cross-ref linker wraps "Article 10" and "Regulation …" as separate links, so
+  // compare the de-tagged text rather than the raw HTML.)
+  const soleText = parsed.articles[0].article_html.replace(/<[^>]+>/g, "");
+  assert.match(soleText, /Article 10 of Regulation/);
   assert.doesNotMatch(parsed.articles[0].article_html, /SOLE ARTICLE/i);
   // The closing/binding formula and signature must not leak into the body.
   assert.doesNotMatch(parsed.articles[0].article_html, /SHALL BE BINDING|DONE AT/i);
@@ -269,6 +302,65 @@ test("parseEurlexHtmlToCombined parses '(N) Whereas' numbered recitals without a
   // never be folded into recital 3.
   assert.ok(parsed.recitals.every((r) => !/HAVE ADOPTED/i.test(r.recital_text)));
   assert.equal(parsed.articles.length, 2);
+});
+
+// Cross-reference + footnote extraction in the plaintext branch. Recital
+// preambles used to get no cross-ref injection at all, the crossReferences map
+// was hardcoded empty, and "(N) OJ No …" footnote lines were dropped.
+const CROSSREF_HTML = `<!DOCTYPE html>
+<html lang="EN">
+<head><meta name="DC.description" content="Test Directive"></head>
+<body>
+  <div id="TexteOnly">
+    <TXT_TE>
+      <p>COUNCIL DIRECTIVE of 1 January 1990</p>
+      <p>THE COUNCIL OF THE EUROPEAN COMMUNITIES,</p>
+      <p>Having regard to the Treaty on the Functioning of the European Union,</p>
+      <p>(1) Whereas Directive 87/373/EEC (1) laid down a procedure that applies here;</p>
+      <p>(2) Whereas Article 3 of this Directive should be read together with Regulation 1408/71/EEC and the TFEU;</p>
+      <p>HAS ADOPTED THIS DIRECTIVE:</p>
+      <p>Article 1</p>
+      <p>The scope is defined in Article 2 and by Directive 89/552/EEC.</p>
+      <p>Article 2</p>
+      <p>This Directive is addressed to the Member States.</p>
+      <p>(1) OJ No L 281, 23.11.1995, p. 31.</p>
+    </TXT_TE>
+  </div>
+</body>
+</html>`;
+
+test("parseEurlexHtmlToCombined injects cross-refs into recitals and builds a crossReferences map", async () => {
+  const parsed = await parseEurlexHtmlToCombined(CROSSREF_HTML, "ENG");
+
+  // P1: recital preambles get cross-ref links injected (previously zero links).
+  const recitalHtml = parsed.recitals.map((r) => r.recital_html).join("");
+  assert.match(recitalHtml, /class="external-ref"[^>]*data-ref-year="1987"/);
+  assert.doesNotMatch(recitalHtml, /data-ref-article="3"/);
+
+  // P2: the crossReferences map is populated for recitals and articles.
+  assert.ok(Object.keys(parsed.crossReferences).length > 0, "crossReferences should not be empty");
+  const article1Refs = parsed.crossReferences["1"] || [];
+  assert.ok(
+    article1Refs.some((r) => r.type === "article" && r.target === "2"),
+    "Article 1 should reference Article 2",
+  );
+  assert.ok(
+    article1Refs.some((r) => r.type === "external" && r.year === "1989"),
+    "Article 1 should reference Directive 89/552/EEC",
+  );
+
+  // P3: the "(1) OJ No L 281 …" footnote line is captured as an OJ reference and
+  // reattached to recital 1 (which carries the matching "(1)" marker), not dropped.
+  const recital1Refs = parsed.crossReferences.recital_1 || [];
+  const ojRef = recital1Refs.find((r) => r.type === "oj_ref");
+  assert.ok(ojRef, "recital 1 should carry the OJ footnote reference");
+  assert.equal(ojRef.ojColl, "L");
+  assert.equal(ojRef.ojNo, "281");
+  assert.equal(ojRef.ojYear, "1995");
+
+  // P4: treaty references (TFEU) are detected as external refs.
+  const treatyRef = Object.values(parsed.crossReferences).flat().find((r) => r.treaty);
+  assert.ok(treatyRef, "the TFEU reference should be captured as a treaty ref");
 });
 
 // Old <TXT_TE> acts carry annexes after the articles; the plaintext branch used

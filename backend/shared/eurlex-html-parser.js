@@ -2,6 +2,7 @@ const { JSDOM } = require("jsdom");
 const { createRequire } = require("module");
 
 const { ClientError } = require("./api-utils");
+const { referenceDedupeKey } = require("./legal-reference-core.cjs");
 
 const LANG_3_TO_2 = {
   BUL: "BG",
@@ -475,6 +476,12 @@ function parseSoleArticleBody(paragraphs, startIndex) {
   return body;
 }
 
+function hasUnnumberedDecisionBody(paragraphs) {
+  return paragraphs.some((paragraph) =>
+    /^(?:(?:COUNCIL|COMMISSION|HIGH AUTHORITY)\s+(?:DECISION|RECOMMENDATION)|DECISION OF THE EUROPEAN PARLIAMENT)$/i.test(normalizeText(paragraph)),
+  ) && paragraphs.some((paragraph) => /^\d+\s*\./.test(normalizeText(paragraph)));
+}
+
 function parseArticles(paragraphs) {
   const articles = [];
   let currentArticle = null;
@@ -925,6 +932,129 @@ function parseLegisWriteToCombined(document, langCode, langConfig, injectCrossRe
   };
 }
 
+function htmlToPlainText(html) {
+  return normalizeText(String(html || "").replace(/<[^>]+>/g, " "));
+}
+
+// Parse a trailing footnote-citation line into an OJ reference, e.g.
+// "OJ No L 281, 23.11.1995, p. 31" → { ojColl: "L", ojNo: "281", ojYear: "1995", … }.
+// Pre-1968 acts cite "OJ No 30, 20.4.1962, p. 964" with no series letter; those
+// can't be turned into a resolvable OJ URL, so they're skipped (return null).
+function parseOjCitation(text) {
+  const idMatch = String(text || "").match(/OJ\s+No\.?\s*([A-Z])\s*(\d+)/i);
+  if (!idMatch) return null;
+  const yearMatch = text.match(/\b(?:19|20)\d{2}\b/);
+  const pageMatch = text.match(/p\.?\s*(\d+)/i);
+  return {
+    type: "oj_ref",
+    ojColl: idMatch[1].toUpperCase(),
+    ojNo: idMatch[2],
+    ojYear: yearMatch ? yearMatch[0] : "",
+    ojPage: pageMatch ? pageMatch[1] : "",
+  };
+}
+
+// Old EUR-Lex HTML flattens footnotes to plain "(N) OJ No L …" lines at the end
+// of the body. parseRecitals skips them so they don't masquerade as recitals;
+// here we collect them as a number→OJ-reference map so their citation data can be
+// reattached to whichever article/recital carries the matching "(N)" marker.
+function parseOjFootnotes(paragraphs) {
+  const map = new Map();
+  for (const paragraph of paragraphs) {
+    const text = normalizeText(paragraph);
+    const match = text.match(/^\((\d+)\)\s+(OJ\b.*)$/i);
+    if (!match) continue;
+    const ojRef = parseOjCitation(match[2]);
+    if (ojRef) map.set(match[1], { ...ojRef, raw: match[2] });
+  }
+  return map;
+}
+
+// Attach OJ footnote references to a ref list by matching "(N)" markers present
+// in the item's own text against the document-level footnote map.
+function appendFootnoteRefs(refs, text, footnotesByNumber) {
+  if (!footnotesByNumber || footnotesByNumber.size === 0) return refs;
+  const out = refs.slice();
+  const seen = new Set();
+  const markerRe = /\((\d+)\)/g;
+  let match;
+  while ((match = markerRe.exec(text)) !== null) {
+    const number = match[1];
+    if (seen.has(number)) continue;
+    seen.add(number);
+    const footnote = footnotesByNumber.get(number);
+    if (footnote) out.push({ ...footnote });
+  }
+  return out;
+}
+
+// Build the crossReferences map (articleNumber / recital_N / annex_ID → [refs])
+// for HTML-parsed laws, mirroring the shape the FMX parser produces. Reuses the
+// shared extractCrossRefsFromText so the article/external/treaty patterns stay in
+// one place; folds in OJ footnote citations when a footnote map is supplied.
+function buildHtmlCrossReferences({
+  articles = [],
+  recitals = [],
+  annexes = [],
+  extractCrossRefsFromText,
+  langConfig,
+  footnotesByNumber = null,
+}) {
+  const crossReferences = {};
+  if (typeof extractCrossRefsFromText !== "function" || !langConfig) return crossReferences;
+
+  const attach = (key, text, selfArticle = null) => {
+    if (!text) return;
+    const baseRefs = extractCrossRefsFromText(text, langConfig) || [];
+    const withFootnotes = appendFootnoteRefs(baseRefs, text, footnotesByNumber);
+    const seen = new Set();
+    const unique = withFootnotes.filter((ref) => {
+      if (ref.type === "article" && selfArticle != null && ref.target === selfArticle) return false;
+      const dedupeKey = referenceDedupeKey(ref);
+      if (seen.has(dedupeKey)) return false;
+      seen.add(dedupeKey);
+      return true;
+    });
+    if (unique.length) crossReferences[key] = unique;
+  };
+
+  for (const article of articles) {
+    attach(article.article_number, htmlToPlainText(article.article_html), article.article_number);
+  }
+  for (const recital of recitals) {
+    attach(`recital_${recital.recital_number}`, recital.recital_text || htmlToPlainText(recital.recital_html));
+  }
+  for (const annex of annexes) {
+    attach(`annex_${annex.annex_id}`, htmlToPlainText(annex.annex_html));
+  }
+  return crossReferences;
+}
+
+function stripInvalidArticleLinks(html, validArticles) {
+  return String(html || "").replace(
+    /<a\b(?=[^>]*\bclass="cross-ref")(?=[^>]*\bdata-ref-article="([^"]+)")[^>]*>([\s\S]*?)<\/a>/gi,
+    (match, target, label) => validArticles.has(target) ? match : label,
+  );
+}
+
+// HTML fallbacks can flatten a citation to an external predecessor act into a
+// bare "Article N".  As in the Formex parser, a bare article reference is
+// internal only when that article exists in the parsed current act.  Keep the
+// source text, but remove the unsafe internal edge and anchor.
+function enforceInternalReferenceIntegrity(parsed) {
+  const validArticles = new Set((parsed.articles || []).map((article) => String(article.article_number)));
+  const cleanHtml = (html) => stripInvalidArticleLinks(html, validArticles);
+  for (const article of parsed.articles || []) article.article_html = cleanHtml(article.article_html);
+  for (const recital of parsed.recitals || []) recital.recital_html = cleanHtml(recital.recital_html);
+  for (const annex of parsed.annexes || []) annex.annex_html = cleanHtml(annex.annex_html);
+  for (const [location, refs] of Object.entries(parsed.crossReferences || {})) {
+    const validRefs = refs.filter((ref) => ref.type !== "article" || validArticles.has(String(ref.target)));
+    if (validRefs.length) parsed.crossReferences[location] = validRefs;
+    else delete parsed.crossReferences[location];
+  }
+  return parsed;
+}
+
 async function loadHelpers() {
   if (!helperPromise) {
     helperPromise = (async () => {
@@ -942,6 +1072,7 @@ async function loadHelpers() {
 
       return {
         injectCrossRefLinks: parserMod.injectCrossRefLinks,
+        extractCrossRefsFromText: parserMod.extractCrossRefsFromText,
         getLangConfig: langMod.getLangConfig,
       };
     })();
@@ -954,8 +1085,21 @@ async function parseEurlexHtmlToCombined(htmlText, lang = "ENG") {
   const dom = new JSDOM(htmlText, { url: "https://eur-lex.europa.eu/" });
   const document = dom.window.document;
   const langCode = normalizeText(document.documentElement.getAttribute("lang") || LANG_3_TO_2[lang] || "EN").toUpperCase();
-  const { injectCrossRefLinks, getLangConfig } = await loadHelpers();
+  const { injectCrossRefLinks, extractCrossRefsFromText, getLangConfig } = await loadHelpers();
   const langConfig = getLangConfig(langCode);
+
+  // Populate the crossReferences map (empty as built by each branch) so the
+  // CrossReferences panel works for HTML laws, not just FMX ones.
+  const withCrossReferences = (parsed) => {
+    parsed.crossReferences = buildHtmlCrossReferences({
+      articles: parsed.articles,
+      recitals: parsed.recitals,
+      annexes: parsed.annexes,
+      extractCrossRefsFromText,
+      langConfig,
+    });
+    return enforceInternalReferenceIntegrity(parsed);
+  };
 
   const hasStructuredLayout = Boolean(
     document.querySelector(".eli-subdivision, .oj-ti-art, .title-article-norm, .oj-ti-annex, .title-annex-norm")
@@ -963,7 +1107,7 @@ async function parseEurlexHtmlToCombined(htmlText, lang = "ENG") {
   if (hasStructuredLayout) {
     const parsedStructured = parseStructuredHtmlToCombined(document, langCode, langConfig, injectCrossRefLinks);
     if (parsedStructured.articles.length || parsedStructured.recitals.length || parsedStructured.annexes.length) {
-      return parsedStructured;
+      return withCrossReferences(parsedStructured);
     }
   }
 
@@ -973,7 +1117,7 @@ async function parseEurlexHtmlToCombined(htmlText, lang = "ENG") {
   if (hasLegacyXhtmlLayout) {
     const parsedLegacyXhtml = parseLegacyXhtmlToCombined(document, langCode, langConfig, injectCrossRefLinks);
     if (parsedLegacyXhtml.articles.length || parsedLegacyXhtml.recitals.length || parsedLegacyXhtml.annexes.length) {
-      return parsedLegacyXhtml;
+      return withCrossReferences(parsedLegacyXhtml);
     }
   }
 
@@ -983,7 +1127,7 @@ async function parseEurlexHtmlToCombined(htmlText, lang = "ENG") {
   if (hasLegisWriteLayout) {
     const parsedLegisWrite = parseLegisWriteToCombined(document, langCode, langConfig, injectCrossRefLinks);
     if (parsedLegisWrite.articles.length || parsedLegisWrite.recitals.length || parsedLegisWrite.annexes.length) {
-      return parsedLegisWrite;
+      return withCrossReferences(parsedLegisWrite);
     }
   }
 
@@ -1057,6 +1201,20 @@ async function parseEurlexHtmlToCombined(htmlText, lang = "ENG") {
       }
     }
   }
+  // A small set of old EUR-Lex decisions has no Article heading or enacting
+  // formula: its operative measures are simply numbered "1.", "2.", etc.
+  // Keep the source as a labelled unnumbered section rather than dropping it
+  // or fabricating Article 1.
+  if (rawArticles.length === 0 && recitals.length === 0 && hasUnnumberedDecisionBody(paragraphs)) {
+    rawArticles = [{
+      article_number: "text",
+      article_title: "",
+      display_label: "Decision text",
+      is_unnumbered: true,
+      division: { chapter: { number: "", title: "" }, section: null },
+      bodyParagraphs: paragraphs.filter((paragraph) => normalizeText(paragraph) !== "****"),
+    }];
+  }
 
   const articles = rawArticles
     .map((article) => {
@@ -1064,6 +1222,8 @@ async function parseEurlexHtmlToCombined(htmlText, lang = "ENG") {
       return {
         article_number: article.article_number,
         article_title: article.article_title,
+        display_label: article.display_label,
+        is_unnumbered: article.is_unnumbered,
         division: article.division || {
           chapter: { number: "", title: "" },
           section: null,
@@ -1079,15 +1239,34 @@ async function parseEurlexHtmlToCombined(htmlText, lang = "ENG") {
     ? parseTxtTeAnnexes(paragraphs, annexStartIndex, langConfig, injectCrossRefLinks)
     : [];
 
-  return {
+  // The plaintext branch builds recital_html as a raw <p> — inject cross-ref
+  // links so preamble citations (article + external-law + treaty) become
+  // navigable, matching what articles/annexes already get.
+  recitals = recitals.map((recital) => ({
+    ...recital,
+    recital_html: injectCrossRefLinks(recital.recital_html, langConfig),
+  }));
+
+  const strippedArticles = articles.map(({ bodyParagraphs, ...article }) => article);
+  const footnotesByNumber = parseOjFootnotes(paragraphs);
+  const crossReferences = buildHtmlCrossReferences({
+    articles: strippedArticles,
+    recitals,
+    annexes,
+    extractCrossRefsFromText,
+    langConfig,
+    footnotesByNumber,
+  });
+
+  return enforceInternalReferenceIntegrity({
     title,
-    articles: articles.map(({ bodyParagraphs, ...article }) => article),
+    articles: strippedArticles,
     recitals,
     annexes,
     definitions,
     langCode,
-    crossReferences: {},
-  };
+    crossReferences,
+  });
 }
 
 async function loadPlaywrightModule(modulePath = null) {

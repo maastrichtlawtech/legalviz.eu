@@ -2,7 +2,7 @@ import { beforeAll, describe, it, expect } from "vitest";
 import { readFileSync } from "fs";
 import { dirname, resolve } from "path";
 import { fileURLToPath } from "url";
-import { isFmxDocument, parseFmxToCombined, injectCrossRefLinks } from "./fmxParser.mjs";
+import { isFmxDocument, parseFmxToCombined, injectCrossRefLinks, extractCrossRefsFromText } from "./fmxParser.mjs";
 import { getLangConfig } from "./languages.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -136,9 +136,11 @@ describe("parseFmxToCombined — DGA", () => {
 
 describe("parseFmxToCombined — GDPR", () => {
   let result;
+  // Parsing a full-size act is jsdom-heavy (~seconds); give the hook headroom so
+  // it doesn't flake against the 10s default under parallel-test CPU contention.
   beforeAll(() => {
     result = parseFmxToCombined(GDPR_XML);
-  });
+  }, 60000);
 
   it("extracts 99 articles", () => {
     expect(result.articles).toHaveLength(99);
@@ -196,6 +198,13 @@ describe("parseFmxToCombined — GDPR", () => {
     const p2 = art5.paragraphs.find((p) => p.number === "2");
     expect(p1.html).not.toBe(p2.html);
   });
+
+  it("binds competition articles in recital 150 to the TFEU", () => {
+    const refs = result.crossReferences.recital_150 || [];
+    const treatyArticles = refs.filter((ref) => ref.actCelex === "12012E" && ref.articleNumber);
+    expect(treatyArticles.map((ref) => ref.articleNumber)).toEqual(["101", "102"]);
+    expect(refs.some((ref) => ref.type === "article" && ["101", "102"].includes(ref.target))).toBe(false);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -204,9 +213,11 @@ describe("parseFmxToCombined — GDPR", () => {
 
 describe("parseFmxToCombined — AI Act", () => {
   let result;
+  // The AI Act is the largest fixture; jsdom-heavy parse can approach the 10s
+  // default hook timeout under parallel-test load, so give it headroom.
   beforeAll(() => {
     result = parseFmxToCombined(AIA_XML);
-  });
+  }, 60000);
 
   it("detects as valid FMX document (COMBINED.FMX format)", () => {
     expect(isFmxDocument(AIA_XML)).toBe(true);
@@ -316,6 +327,30 @@ describe("parseFmxToCombined — AI Act", () => {
       (r) => r.type === "external" && r.target && r.target.includes("2016/679")
     );
     expect(gdprRefs.length).toBeGreaterThan(0);
+  });
+
+  it("binds specific GDPR articles to the act, incl. the Article 6 edge", () => {
+    // The AI Act cites "Article 6(4) and Article 9(2), point (g), of Regulation
+    // (EU) 2016/679". Both articles must bind to GDPR as distinct edges — the old
+    // parser produced no AI-Act→GDPR-Article-6 edge (only the nearest article, if
+    // any, bound and the dedup key collapsed the rest).
+    const gdprArticleRefs = Object.values(result.crossReferences)
+      .flat()
+      .filter((r) => r.type === "external" && r.target?.includes("2016/679") && r.articleNumber);
+    const articleNumbers = new Set(gdprArticleRefs.map((r) => r.articleNumber));
+    expect(articleNumbers.has("6")).toBe(true);
+    // More than one distinct GDPR article should be linked (6 and 9 at minimum).
+    expect(articleNumbers.size).toBeGreaterThan(1);
+  });
+
+  it("preserves AI Act recital 40 paragraph ranges and named points", () => {
+    const refs = result.crossReferences.recital_40 || [];
+    const article5 = refs.filter((ref) => (
+      (ref.type === "article" && ref.target === "5") || ref.articleNumber === "5"
+    ));
+    expect(article5.some((ref) => ref.paragraph === "1" && ref.point === "g")).toBe(true);
+    expect(article5.filter((ref) => ["2", "3", "4", "5", "6"].includes(ref.paragraph)).map((ref) => ref.paragraph))
+      .toEqual(["2", "3", "4", "5", "6"]);
   });
 
   it("cross-references include annex references", () => {
@@ -435,6 +470,156 @@ describe("parseFmxToCombined — v2 CONTENTS body fallback", () => {
   });
 });
 
+describe("parseFmxToCombined — unnumbered PROLOG decisions", () => {
+  it("retains and cites a decision whose only published body is PROLOG", () => {
+    const xml =
+      `<FMX.COLLECTION><GENERAL><BIB.INSTANCE><LG.DOC>EN</LG.DOC></BIB.INSTANCE>` +
+      `<PROLOG><P>The Commission adopted a Decision under Council Regulation (EEC) No 4064/89, and in particular Article 8(2) of that Regulation.</P></PROLOG>` +
+      `</GENERAL></FMX.COLLECTION>`;
+    const result = parseFmxToCombined(xml);
+    const text = result.articles[0];
+
+    expect(result.articles).toHaveLength(1);
+    expect(text).toMatchObject({
+      article_number: "text",
+      display_label: "Decision text",
+      is_unnumbered: true,
+    });
+    expect(text.article_html).toContain('data-ref-act-type="regulation"');
+    expect(result.crossReferences.text.some((ref) => ref.actCelex === "31989R4064")).toBe(true);
+  });
+
+  it("retains direct CONTENTS when it has no ARTICLE children", () => {
+    const xml =
+      `<FMX.COLLECTION><GENERAL><BIB.INSTANCE><LG.DOC>EN</LG.DOC></BIB.INSTANCE>` +
+      `<CONTENTS><P>The Decision applies Article 81 of the EC Treaty and Article 9(1) of Council Regulation (EC) No 1/2003.</P></CONTENTS>` +
+      `</GENERAL></FMX.COLLECTION>`;
+    const result = parseFmxToCombined(xml);
+
+    expect(result.articles).toHaveLength(1);
+    expect(result.articles[0]).toMatchObject({ article_number: "text", is_unnumbered: true });
+    expect(result.crossReferences.text.some((ref) => ref.actCelex === "32003R0001")).toBe(true);
+    expect(result.crossReferences.text.some((ref) => ref.actCelex === "12002E")).toBe(true);
+  });
+});
+
+describe("extractCrossRefsFromText — multilingual instruments", () => {
+  it("resolves an accented French historical EEC regulation", () => {
+    const refs = extractCrossRefsFromText("voir le règlement (CEE) no 2782/76", getLangConfig("FR"));
+    expect(refs).toContainEqual(expect.objectContaining({
+      actType: "regulation",
+      actCelex: "31976R2782",
+    }));
+  });
+
+  it("keeps Joint Committee recommendations explicitly external", () => {
+    const refs = extractCrossRefsFromText(
+      "the amendment is the subject of recommendation 1/77 of the Joint Committee set up under that Agreement",
+      getLangConfig("EN"),
+    );
+    expect(refs).toContainEqual(expect.objectContaining({
+      target: "1/77",
+      actType: "recommendation",
+      actCelex: null,
+      externalInstitutional: true,
+    }));
+  });
+
+  it("keeps expressly regional instruments external to EU law", () => {
+    const refs = extractCrossRefsFromText(
+      "Law No 51 of the region of Lombardy and Decision No 11/21587 of the regional government",
+      getLangConfig("EN"),
+    );
+    expect(refs).toEqual(expect.arrayContaining([
+      expect.objectContaining({ raw: "Law No 51", nationalLaw: true, actCelex: null }),
+      expect.objectContaining({ raw: "Decision No 11/21587", externalNational: true, actCelex: null }),
+    ]));
+  });
+
+  it("repairs a footnote digit flattened onto a four-digit instrument year", () => {
+    const refs = extractCrossRefsFromText("Regulation (EC) No 1864/20042", getLangConfig("EN"));
+    expect(refs).toContainEqual(expect.objectContaining({
+      raw: "Regulation (EC) No 1864/20042",
+      target: "1864/2004",
+      actCelex: "32004R1864",
+    }));
+  });
+
+  it("repairs a two-digit year split across adjacent old HTML fragments", () => {
+    const refs = extractCrossRefsFromText("Council Regulation (EEC) No 2894/7 // 9 ,", getLangConfig("EN"));
+    expect(refs).toContainEqual(expect.objectContaining({
+      raw: "Regulation (EEC) No 2894/7",
+      target: "2894/79",
+      actCelex: "31979R2894",
+    }));
+  });
+
+  it("resolves an explicit High Authority recommendation as an ECSC act", () => {
+    const refs = extractCrossRefsFromText("High Authority recommendation 1/64", getLangConfig("EN"));
+    expect(refs).toContainEqual(expect.objectContaining({
+      actCelex: "31964S0001",
+      ecscAuthority: true,
+    }));
+  });
+
+  it("uses an explicit Council issuer to disambiguate number-first regulations", () => {
+    const refs = extractCrossRefsFromText("Council Regulation 2040/2000", getLangConfig("EN"));
+    expect(refs).toContainEqual(expect.objectContaining({
+      actCelex: "32000R2040",
+    }));
+  });
+});
+
+describe("parseFmxToCombined — amendment scope", () => {
+  it("attributes bare replacement-article references to the act named in the heading", () => {
+    const articles =
+      `<ARTICLE IDENTIFIER="001"><TI.ART>Article 1</TI.ART>` +
+      `<STI.ART>Amendments to Directive 2002/22/EC</STI.ART>` +
+      `<ALINEA><P>Directive 2002/22/EC is amended as follows: Article 7 is replaced; Article 23a is inserted.</P></ALINEA>` +
+      `</ARTICLE>` +
+      `<ARTICLE IDENTIFIER="002"><TI.ART>Article 2</TI.ART><ALINEA><P>Entry into force.</P></ALINEA></ARTICLE>`;
+    const xml = `<ACT xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://formex.publications.europa.eu/schema/formex-05.59-20170418.xd"><BIB.INSTANCE><LG.DOC>EN</LG.DOC></BIB.INSTANCE><ENACTING.TERMS><DIVISION>${articles}</DIVISION></ENACTING.TERMS></ACT>`;
+    const refs = parseFmxToCombined(xml).crossReferences["1"];
+    const scoped = refs.filter((ref) => ref.amendmentScope);
+    expect(scoped.map((ref) => ref.articleNumber)).toEqual(["7", "23a"]);
+    expect(scoped.every((ref) => ref.actCelex === "32002L0022")).toBe(true);
+    expect(refs.some((ref) => ref.type === "article" && ["7", "23a"].includes(ref.target))).toBe(false);
+  });
+});
+
+describe("parseFmxToCombined — correlation tables", () => {
+  it("does not turn ambiguous old-act cells into broken internal links", () => {
+    const xml =
+      `<ACT xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://formex.publications.europa.eu/schema/formex-05.59-20170418.xd">` +
+      `<BIB.INSTANCE><LG.DOC>EN</LG.DOC></BIB.INSTANCE>` +
+      `<ENACTING.TERMS><DIVISION><ARTICLE IDENTIFIER="001"><TI.ART>Article 1</TI.ART><ALINEA><P>Body.</P></ALINEA></ARTICLE></DIVISION></ENACTING.TERMS>` +
+      `<ANNEX><TITLE><TI><NP><TXT>ANNEX I</TXT></NP></TI><STI><P>Correlation table</P></STI></TITLE>` +
+      `<CONTENTS><P>Directive 89/552/EEC This Directive Article 10a Article 1</P></CONTENTS></ANNEX>` +
+      `</ACT>`;
+    const result = parseFmxToCombined(xml);
+    const refs = result.crossReferences.annex_I;
+    expect(refs.some((ref) => ref.type === "article" && ref.target === "10a")).toBe(false);
+    expect(refs.some((ref) => ref.actCelex === "31989L0552")).toBe(true);
+    expect(result.annexes[0].annex_html).toContain("Article 10a");
+    expect(result.annexes[0].annex_html).not.toContain('href="#article-10a"');
+    expect(result.annexes[0].annex_html).toContain('href="#article-1"');
+  });
+});
+
+describe("parseFmxToCombined — internal-link integrity", () => {
+  it("leaves absent article targets as plain text", () => {
+    const xml =
+      `<ACT xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://formex.publications.europa.eu/schema/formex-05.59-20170418.xd">` +
+      `<BIB.INSTANCE><LG.DOC>EN</LG.DOC></BIB.INSTANCE><ENACTING.TERMS><DIVISION>` +
+      `<ARTICLE IDENTIFIER="001"><TI.ART>Article 1</TI.ART><ALINEA><P>See Article 99.</P></ALINEA></ARTICLE>` +
+      `</DIVISION></ENACTING.TERMS></ACT>`;
+    const result = parseFmxToCombined(xml);
+    expect(result.articles[0].article_html).toContain("Article 99");
+    expect(result.articles[0].article_html).not.toContain('href="#article-99"');
+    expect(result.crossReferences["1"]).toBeUndefined();
+  });
+});
+
 // ---------------------------------------------------------------------------
 
 describe("injectCrossRefLinks", () => {
@@ -480,5 +665,331 @@ describe("injectCrossRefLinks", () => {
     const html = "<p>Siehe Artikel 12 für Details.</p>";
     const result = injectCrossRefLinks(html, deLang);
     expect(result).toContain('data-ref-article="12"');
+  });
+
+  const articleLinkTargets = (html) =>
+    [...injectCrossRefLinks(html, lang).matchAll(/data-ref-article="(\d+)"/g)].map((m) => m[1]);
+
+  it("links every member of a comma-separated article list to the act", () => {
+    const html = "<p>Articles 15, 16 and 17 of Regulation (EU) 2016/679 shall apply.</p>";
+    const result = injectCrossRefLinks(html, lang);
+    expect(articleLinkTargets(html).sort()).toEqual(["15", "16", "17"]);
+    // Each list member links to the external act, not an internal anchor.
+    expect(result).not.toContain('href="#article-15"');
+    expect(result).toContain('data-ref-year="2016"');
+  });
+
+  it("links both endpoints of an article range", () => {
+    const html = "<p>as set out in Articles 12 to 22 of Regulation (EU) 2016/679.</p>";
+    expect(articleLinkTargets(html).sort()).toEqual(["12", "22"]);
+  });
+
+  it("links each coordinated article bound to one act", () => {
+    const html = "<p>Article 6(4) and Article 9(2), point (g), of Regulation (EU) 2016/679.</p>";
+    const result = injectCrossRefLinks(html, lang);
+    expect(articleLinkTargets(html).sort()).toEqual(["6", "9"]);
+    expect(result).toContain('data-ref-point="g"');
+  });
+
+  it("links both coordinated internal articles (not just the first)", () => {
+    const html = "<p>governed by Article 5 and Article 6 of this Regulation.</p>";
+    const result = injectCrossRefLinks(html, lang);
+    expect(articleLinkTargets(html).sort()).toEqual(["5", "6"]);
+    // Internal references keep the in-document anchor.
+    expect(result).toContain('href="#article-5"');
+    expect(result).toContain('href="#article-6"');
+  });
+});
+
+describe("extractCrossRefsFromText — multi-article citations", () => {
+  const lang = getLangConfig("EN");
+
+  const gdprRefs = (text) =>
+    extractCrossRefsFromText(text, lang)
+      .filter((r) => r.type === "external" && r.target === "2016/679" && r.articleNumber);
+
+  it("binds every coordinated article to one external act (AI Act GDPR case)", () => {
+    const refs = gdprRefs(
+      "in accordance with Article 6(4) and Article 9(2), point (g), of Regulation (EU) 2016/679"
+    );
+    const byArticle = Object.fromEntries(refs.map((r) => [r.articleNumber, r]));
+    expect(Object.keys(byArticle).sort()).toEqual(["6", "9"]);
+    expect(byArticle["6"].paragraph).toBe("4");
+    expect(byArticle["9"].paragraph).toBe("2");
+    expect(byArticle["9"].point).toBe("g"); // ", point (g)" is captured
+    expect(refs.every((ref) => ref.actCelex === "32016R0679")).toBe(true);
+  });
+
+  it("expands comma lists to individual article edges", () => {
+    const refs = gdprRefs("Articles 15, 16 and 17 of Regulation (EU) 2016/679 shall apply");
+    expect(refs.map((r) => r.articleNumber).sort()).toEqual(["15", "16", "17"]);
+  });
+
+  it("expands article ranges", () => {
+    const refs = gdprRefs("as referred to in Articles 12 to 22 of Regulation (EU) 2016/679");
+    expect(refs).toHaveLength(11);
+    expect(refs.map((r) => r.articleNumber)).toContain("12");
+    expect(refs.map((r) => r.articleNumber)).toContain("22");
+  });
+
+  it("keeps distinct articles of the same act as separate edges (dedup key)", () => {
+    // Both bind to GDPR; the old dedup key omitted articleNumber and collapsed them.
+    const refs = gdprRefs("Article 6 and Article 9 of Regulation (EU) 2016/679");
+    expect(new Set(refs.map((r) => r.articleNumber)).size).toBe(2);
+  });
+
+  it("binds each article to its own act in 'Art A of X and Art B of Y'", () => {
+    const refs = extractCrossRefsFromText(
+      "Article 5 of Directive 2002/58/EC and Article 8 of Directive 95/46/EC",
+      lang
+    ).filter((r) => r.type === "external");
+    const map = Object.fromEntries(refs.map((r) => [r.articleNumber, r.target]));
+    expect(map["5"]).toBe("2002/58/EC");
+    expect(map["8"]).toBe("95/46/EC");
+    expect(refs.find((r) => r.articleNumber === "5")?.actCelex).toBe("32002L0058");
+    expect(refs.find((r) => r.articleNumber === "8")?.actCelex).toBe("31995L0046");
+  });
+
+  it("uses language grammar adapters for non-English lists and ranges", () => {
+    const german = extractCrossRefsFromText(
+      "Artikel 5 und 6 der Richtlinie 2002/58/EG",
+      getLangConfig("DE"),
+    ).filter((r) => r.type === "external" && r.articleNumber);
+    expect(german.map((r) => r.articleNumber)).toEqual(["5", "6"]);
+    expect(german.every((r) => r.actCelex === "32002L0058")).toBe(true);
+
+    const french = extractCrossRefsFromText(
+      "Articles 5 à 7 de la Directive 2002/58/CE",
+      getLangConfig("FR"),
+    ).filter((r) => r.type === "external" && r.articleNumber);
+    expect(french.map((r) => r.articleNumber)).toEqual(["5", "6", "7"]);
+    expect(french.every((r) => r.actCelex === "32002L0058")).toBe(true);
+
+    const additional = [
+      ["PL", "Artykuły 5 i 6 dyrektywy 2002/58/WE"],
+      ["CS", "Články 5 a 6 směrnice 2002/58/ES"],
+      ["SV", "Artiklar 5 och 6 i Direktiv 2002/58/EG"],
+      ["RO", "Articolele 5 și 6 din Directiva 2002/58/CE"],
+    ];
+    for (const [code, text] of additional) {
+      const refs = extractCrossRefsFromText(text, getLangConfig(code))
+        .filter((r) => r.type === "external" && r.articleNumber);
+      expect(refs.map((r) => r.articleNumber), code).toEqual(["5", "6"]);
+      expect(refs.every((r) => r.actCelex === "32002L0058"), code).toBe(true);
+    }
+  });
+
+  it("normalizes pre-1999 No number/year regulations without confusing the number for a year", () => {
+    const [ref] = extractCrossRefsFromText(
+      "Article 10 of Regulation (EEC) No 2306/70",
+      lang,
+    ).filter((item) => item.type === "external");
+
+    expect(ref.year).toBe("1970");
+    expect(ref.number).toBe("2306");
+    expect(ref.actCelex).toBe("31970R2306");
+  });
+
+  it("accepts spaced legacy parentheticals and the abbreviated N marker", () => {
+    const [ref] = extractCrossRefsFromText(
+      "ARTICLE 10 OF REGULATION ( EEC ) N 2306/70",
+      lang,
+    ).filter((item) => item.type === "external");
+    expect(ref).toMatchObject({
+      articleNumber: "10",
+      year: "1970",
+      number: "2306",
+      actCelex: "31970R2306",
+    });
+  });
+
+  it("uses the F descriptor for Framework Decisions", () => {
+    const [ref] = extractCrossRefsFromText(
+      "Article 2 of Framework Decision 2002/584/JHA",
+      lang,
+    ).filter((item) => item.type === "external");
+    expect(ref).toMatchObject({
+      articleNumber: "2",
+      actType: "framework decision",
+      actCelex: "32002F0584",
+    });
+  });
+
+  it("binds treaty and contextual articles instead of emitting broken internal targets", () => {
+    const treatyRefs = extractCrossRefsFromText("Articles 101 and 102 TFEU", lang);
+    expect(treatyRefs.filter((r) => r.type === "article")).toHaveLength(0);
+    expect(treatyRefs.filter((r) => r.articleNumber).map((r) => r.articleNumber)).toEqual(["101", "102"]);
+    expect(treatyRefs.filter((r) => r.articleNumber).every((r) => r.actCelex === "12012E")).toBe(true);
+
+    const contextual = extractCrossRefsFromText("Article 23 of that Directive", lang);
+    expect(contextual).toHaveLength(1);
+    expect(contextual[0]).toMatchObject({
+      type: "external",
+      articleNumber: "23",
+      actType: "directive",
+      contextual: true,
+    });
+  });
+
+  it("hydrates said-act references from an explicit antecedent in the same sentence", () => {
+    const refs = extractCrossRefsFromText(
+      "Article 21 of Directive 75/319/EEC applies in the procedures in Article 25 of the said Directive",
+      lang,
+    );
+    const article25 = refs.find((ref) => ref.articleNumber === "25");
+    expect(article25).toMatchObject({
+      type: "external",
+      actCelex: "31975L0319",
+      articleNumber: "25",
+      contextual: true,
+    });
+  });
+
+  it("binds repeated referred-to-in definitions to their trailing common act", () => {
+    const refs = extractCrossRefsFromText(
+      "the approach referred to in Article 143(1), the model referred to in Article 221, "
+      + "and the method referred to in Articles 283 and 363 of Regulation (EU) No 575/2013",
+      lang,
+    );
+    const articles = refs.filter((ref) => ref.actCelex === "32013R0575" && ref.articleNumber)
+      .map((ref) => ref.articleNumber);
+    expect(articles).toEqual(["143", "221", "283", "363"]);
+  });
+
+  it("classifies named national legislation as external instead of an internal article", () => {
+    const refs = extractCrossRefsFromText(
+      "Article 201 of Italian Legislative Decree No 58 of 24 February 1998",
+      lang,
+    );
+    expect(refs).toHaveLength(1);
+    expect(refs[0]).toMatchObject({
+      type: "external",
+      articleNumber: "201",
+      nationalLaw: true,
+    });
+  });
+
+  it("binds Charter articles to the Charter CELEX record", () => {
+    const refs = extractCrossRefsFromText(
+      "Articles 7, 8(1) and 21 of the Charter of Fundamental Rights of the European Union",
+      lang,
+    );
+    expect(refs.filter((r) => r.type === "article")).toHaveLength(0);
+    const charterRefs = refs.filter((r) => r.actCelex === "12012P" && r.articleNumber);
+    expect(charterRefs.map((r) => r.articleNumber)).toEqual(["7", "8", "21"]);
+    expect(charterRefs.find((r) => r.articleNumber === "8")?.paragraph).toBe("1");
+  });
+
+  it("keeps this act internal but treats that act as contextual", () => {
+    const current = extractCrossRefsFromText("Article 5 of this Regulation", lang);
+    expect(current).toHaveLength(1);
+    expect(current[0]).toMatchObject({ type: "article", target: "5" });
+
+    const other = extractCrossRefsFromText("Article 9 of that Regulation", lang);
+    expect(other).toHaveLength(1);
+    expect(other[0]).toMatchObject({
+      type: "external",
+      articleNumber: "9",
+      actType: "regulation",
+      contextual: true,
+    });
+  });
+
+  it("binds thereof to a nearby named act but not across a sentence boundary", () => {
+    const refs = extractCrossRefsFromText(
+      "Regulation (EU) 2019/1150 applies, including Article 24(3) thereof",
+      lang,
+    );
+    expect(refs.find((r) => r.articleNumber === "24")).toMatchObject({
+      type: "external",
+      target: "2019/1150",
+      actCelex: "32019R1150",
+      paragraph: "3",
+    });
+
+    const separated = extractCrossRefsFromText(
+      "Regulation (EU) 2019/1150 applies. Article 24(3) thereof",
+      lang,
+    );
+    expect(separated.find((r) => r.type === "external" && r.articleNumber === "24")).toBeFalsy();
+    expect(separated.find((r) => r.type === "article" && r.target === "24")).toBeTruthy();
+  });
+
+  it("resolves Recommendation articles used by a later thereof reference", () => {
+    const refs = extractCrossRefsFromText(
+      "Recommendation 2003/361/EC during the 12 months following loss of that status pursuant to Article 4(2) thereof",
+      lang,
+    );
+    expect(refs.find((r) => r.articleNumber === "4")).toMatchObject({
+      type: "external",
+      target: "2003/361/EC",
+      actType: "recommendation",
+      actCelex: "32003H0361",
+      paragraph: "2",
+    });
+  });
+
+  it("extracts plural instrument labels", () => {
+    const refs = extractCrossRefsFromText(
+      "Directives 89/686/EEC and 94/9/EC complement Regulations (EC) No 765/2008",
+      lang,
+    ).filter((ref) => ref.type === "external");
+    expect(refs.find((ref) => ref.target === "89/686/EEC")).toMatchObject({
+      actType: "directive",
+      actCelex: "31989L0686",
+    });
+    expect(refs.find((ref) => ref.target === "765/2008")).toMatchObject({
+      actType: "regulation",
+      actCelex: "32008R0765",
+    });
+  });
+
+  it("binds historical bare-Treaty citations instead of making internal links", () => {
+    const refs = extractCrossRefsFromText("rules laid down in Articles 81 and 82 of the Treaty", lang);
+    expect(refs.filter((ref) => ref.type === "article")).toHaveLength(0);
+    expect(refs.filter((ref) => ref.treaty && ref.articleNumber).map((ref) => ref.articleNumber))
+      .toEqual(["81", "82"]);
+  });
+
+  it("binds an ordinal paragraph citation through punctuation to TFEU", () => {
+    const refs = extractCrossRefsFromText("Article 263, first paragraph, TFEU", lang);
+    expect(refs).toHaveLength(1);
+    expect(refs[0]).toMatchObject({
+      type: "external",
+      articleNumber: "263",
+      paragraph: "1",
+      actCelex: "12012E",
+    });
+  });
+
+  it("binds protocol article lists to named Protocol targets", () => {
+    const refs = extractCrossRefsFromText("Articles 2 and 2a of Protocol No 22", lang);
+    expect(refs.filter((r) => r.type === "article")).toHaveLength(0);
+    const protocolRefs = refs.filter((r) => r.protocol && r.articleNumber);
+    expect(protocolRefs.map((r) => r.articleNumber)).toEqual(["2", "2a"]);
+    expect(protocolRefs.every((r) => r.target === "Protocol No 22")).toBe(true);
+  });
+
+  it("expands paragraph and point ranges and retains nested points", () => {
+    const refs = extractCrossRefsFromText(
+      "Article 5(2) to (6), Article 19(1)(a) to (e), and Article 4(2)(a)(i)",
+      lang,
+    );
+    expect(refs.filter((r) => r.target === "5").map((r) => r.paragraph)).toEqual(["2", "3", "4", "5", "6"]);
+    expect(refs.filter((r) => r.target === "19").map((r) => r.point)).toEqual(["a", "b", "c", "d", "e"]);
+    expect(refs.find((r) => r.target === "4")?.point).toBe("a(i)");
+  });
+
+  it("does not bind an article to an act across unrelated prose", () => {
+    // "Article 7 and take account of the objectives of Regulation 2018/1725":
+    // Article 7 must stay an internal ref, not bind to the regulation.
+    const refs = extractCrossRefsFromText(
+      "Member States shall apply Article 7 and take account of the objectives of Regulation (EU) 2018/1725",
+      lang
+    );
+    const article7 = refs.find((r) => r.type === "article" && r.target === "7");
+    expect(article7).toBeTruthy();
+    const boundTo1725 = refs.find((r) => r.type === "external" && r.articleNumber === "7");
+    expect(boundTo1725).toBeFalsy();
   });
 });

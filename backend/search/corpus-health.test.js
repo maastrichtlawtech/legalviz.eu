@@ -53,6 +53,7 @@ function evenSample(files, cap) {
 async function scan(files, parse) {
   let empty = 0;
   let errors = 0;
+  let invalidInternalRefs = 0;
   const errorSamples = [];
   for (const file of files) {
     let raw;
@@ -64,12 +65,23 @@ async function scan(files, parse) {
     try {
       const combined = await parse(raw);
       if (!(buildExcerptFromCombined(combined) || "")) empty += 1;
+      const validArticleNumbers = new Set((combined.articles || []).map((article) => String(article.article_number)));
+      for (const refs of Object.values(combined.crossReferences || {})) {
+        for (const ref of refs || []) {
+          if (ref.type === "article" && !validArticleNumbers.has(String(ref.target))) {
+            invalidInternalRefs += 1;
+            if (errorSamples.length < 10) {
+              errorSamples.push(`${path.basename(file)}: invalid internal Article ${ref.target}`);
+            }
+          }
+        }
+      }
     } catch (e) {
       errors += 1;
       if (errorSamples.length < 10) errorSamples.push(`${path.basename(file)}: ${e.message}`);
     }
   }
-  return { scanned: files.length, empty, errors, errorSamples };
+  return { scanned: files.length, empty, errors, invalidInternalRefs, errorSamples };
 }
 
 test("FMX corpus parses into non-empty excerpts", async (t) => {
@@ -83,6 +95,7 @@ test("FMX corpus parses into non-empty excerpts", async (t) => {
   const errorRate = r.errors / r.scanned;
   assert.ok(errorRate < 0.02, `FMX parse errors ${(errorRate * 100).toFixed(1)}% > 2% :: ${r.errorSamples.join(" | ")}`);
   assert.ok(emptyRate < 0.1, `FMX empty excerpts ${(emptyRate * 100).toFixed(1)}% > 10% (scanned ${r.scanned})`);
+  assert.equal(r.invalidInternalRefs, 0, `FMX invalid internal refs :: ${r.errorSamples.join(" | ")}`);
 });
 
 test("EUR-Lex HTML corpus parses into non-empty excerpts", async (t) => {
@@ -96,4 +109,5 @@ test("EUR-Lex HTML corpus parses into non-empty excerpts", async (t) => {
   const errorRate = r.errors / r.scanned;
   assert.ok(errorRate < 0.02, `HTML parse errors ${(errorRate * 100).toFixed(1)}% > 2% :: ${r.errorSamples.join(" | ")}`);
   assert.ok(emptyRate < 0.05, `HTML empty excerpts ${(emptyRate * 100).toFixed(1)}% > 5% (scanned ${r.scanned})`);
+  assert.equal(r.invalidInternalRefs, 0, `HTML invalid internal refs :: ${r.errorSamples.join(" | ")}`);
 });

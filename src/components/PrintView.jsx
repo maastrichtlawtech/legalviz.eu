@@ -61,7 +61,7 @@ export function PrintView({ data, options, uiLocale = "en", labels }) {
         {divs}
         <div className="article-block mb-4">
           <h5 className="font-bold text-gray-900 mb-1 text-sm break-after-avoid">
-            {labels.article} {article.article_number}
+            {article.display_label || `${labels.article} ${article.article_number}`}
             {article.article_title && <span className="font-normal text-gray-600 ml-2">— {article.article_title}</span>}
           </h5>
           <div

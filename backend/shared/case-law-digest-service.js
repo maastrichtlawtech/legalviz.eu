@@ -18,7 +18,7 @@ const PROMPT_VERSION = 1;
 // Kept in lock-step with law-queries' CASE_LAW_CACHE_FILE so the digest is
 // regenerated whenever the underlying enrichment (declarations, article refs)
 // changes shape.
-const CASE_LAW_CACHE_VERSION = 'case-law-cache-v4';
+const CASE_LAW_CACHE_VERSION = 'case-law-cache-v5';
 
 const MAX_CASES = 60;
 const MAX_DECLARATION_CHARS = 1200;

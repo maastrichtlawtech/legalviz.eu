@@ -15,12 +15,24 @@
 
 import { getLangConfig, buildMeansRegex, buildFallbackDefRegex } from "./languages.mjs";
 import { buildEurlexSearchUrl } from "./url.mjs";
+import legalReferenceCore from "../legal-reference-core.cjs";
+
+const {
+  ACT_CELEX_MAP,
+  MAX_ARTICLE_ACT_BRIDGE,
+  bindArticleRefsToExternalRefs,
+  bindThereofArticleRefs,
+  parseInstrumentIdentifier,
+  referenceDedupeKey,
+  resolveInstrumentCelex,
+  scanArticleEnumerations: scanSharedArticleEnumerations,
+} = legalReferenceCore;
 
 /**
  * Bump this whenever the parser output changes (new fields, bug fixes, etc.)
  * so that cached parsed results are automatically re-parsed from raw XML.
  */
-export const PARSER_VERSION = 2;
+export const PARSER_VERSION = 12;
 
 // ---------------------------------------------------------------------------
 // FMX → HTML conversion helpers
@@ -437,60 +449,183 @@ function buildRecitalRefRe(lang) {
  * consistently in EU legislation regardless of the document language).
  * Catches e.g. "Regulation (EU) 2016/679", "Directive 95/46/EC", "Decision 2013/755/EU"
  */
-const EXTERNAL_LAW_RE =
-  /(?:Regulation|Directive|Decision|Verordnung|Verordnung|Richtlinie|Beschluss|R\u00e8glement|Directive|D\u00e9cision|Reglamento|Directiva|Decisi\u00f3n|Regolamento|Direttiva|Decisione|Regulamento|Diretiva|Decis\u00e3o|Verordening|Richtlijn|Besluit|F\u00f6rordning|Direktiv|Beslut|Forordning|Direktiv|Asetus|Direktiivi|P\u00e4\u00e4t\u00f6s|Na\u0159\u00edzen\u00ed|Sm\u011brnice|Rozhodnut\u00ed|Nariadenie|Smernica|Rozhodnutie|Rendelet|Irányelv|Hat\u00e1rozat|Regulamentul|Directiva|Decizia|Regolamento|Naredba|Odluka|Uredba|Direktiva|Regula|Direktīva|Lēmums|Reglamentas|Direktyva|Sprendimas|Regul\u0101ci\u0101|Direktīva|Rendelet|\u039a\u03b1\u03bd\u03bf\u03bd\u03b9\u03c3\u03bc\u03cc\u03c2|\u039f\u03b4\u03b7\u03b3\u03af\u03b1|\u0391\u03c0\u03cc\u03c6\u03b1\u03c3\u03b7|Regolament|Direttiva|De\u010bizjoni|\u0420\u0435\u0433\u043b\u0430\u043c\u0435\u043d\u0442|\u0414\u0438\u0440\u0435\u043a\u0442\u0438\u0432\u0430|\u0420\u0435\u0448\u0435\u043d\u0438\u0435|Uredba|Direktiva|Odluka|Rialachán|Treoir|Cinneadh)\s+(?:\([A-Z]+\)\s+)?(?:No\.?\s+)?(\d{2,4}\/\d+(?:\/[A-Z]+)?)/gi;
+const EXTERNAL_LAW_RE_PATTERN =
+  /(?:(?:Framework|Implementing|Delegated)\s+)?(?:Rozporządzeni[ea]|Dyrektyw[ay]|Decyzj[ai]|Regulation|Directive|Decision|Recommendation|Verordnung|Richtlinie|Beschluss|R\u00e8glement|D\u00e9cision|Reglamento|Directiva|Decisi\u00f3n|Regolamento|Direttiva|Decisione|Regulamento|Diretiva|Decis\u00e3o|Verordening|Richtlijn|Besluit|F\u00f6rordning|Direktiv|Beslut|Forordning|Asetus|Direktiivi|P\u00e4\u00e4t\u00f6s|Na\u0159\u00edzen\u00ed|Sm\u011brnice|Rozhodnut\u00ed|Nariadenie|Smernica|Rozhodnutie|Rendelet|Irányelv|Hat\u00e1rozat|Regulamentul|Decizia|Naredba|Odluka|Uredba|Regula|Direktīva|Lēmums|Reglamentas|Direktyva|Sprendimas|Regul\u0101ci\u0101|\u039a\u03b1\u03bd\u03bf\u03bd\u03b9\u03c3\u03bc\u03cc\u03c2|\u039f\u03b4\u03b7\u03b3\u03af\u03b1|\u0391\u03c0\u03cc\u03c6\u03b1\u03c3\u03b7|Regolament|De\u010bizjoni|\u0420\u0435\u0433\u043b\u0430\u043c\u0435\u043d\u0442|\u0414\u0438\u0440\u0435\u043a\u0442\u0438\u0432\u0430|\u0420\u0435\u0448\u0435\u043d\u0438\u0435|Rialachán|Treoir|Cinneadh)s?\s+(?:\(\s*[A-Z]+\s*\)\s+)?(?:N(?:o)?\.?\s+)?(\d{2,4}\/\d+(?:\/[A-Z]+)?)/gi;
+
+// The publications include low-numbered acts such as Regulation (EC) No
+// 1/2003. Keep the multilingual vocabulary above intact while allowing that
+// valid one-digit identifier form.
+const EXTERNAL_LAW_RE = new RegExp(
+  EXTERNAL_LAW_RE_PATTERN.source.replace("\\d{2,4}", "\\d{1,4}"),
+  "gi",
+);
+
+const CONTEXTUAL_ACT_RE = /\b(this|that(?:\s+same)?|said|same|latter)\s+(Regulation|Directive|Decision)\b/gi;
+
+const NATIONAL_LAW_RE =
+  /\b((?:Italian\s+)?(?:Legislative\s+Decree|Decree-Law|Royal\s+Decree|Law)\s+(?:No\.?\s*)?[\d/]+(?:\s+of\s+\d{1,2}\s+[A-Za-z]+\s+\d{4})?)/gi;
+
+/**
+ * EU treaty references. These have no year/number so they can't resolve to a
+ * CELEX act page — they surface as external links to an EUR-Lex search. Kept
+ * deliberately narrow (named treaties + the TFEU/TEU acronyms) so a bare word
+ * like "Treaty" or "Charter" doesn't over-link. Language-independent enough to
+ * catch the common English forms that dominate cross-references.
+ */
+const TREATY_RE =
+  /\b(?:TFEU|TEU|Charter(?: of Fundamental Rights of the European Union)?|Treaty on the Functioning of the European Union|Treaty on European Union|Treaty establishing the European (?:Economic )?Community|Treaty establishing the European Atomic Energy Community|E(?:E)?C Treaty|Euratom Treaty)\b/gi;
+
+const PROTOCOL_RE = /\bProtocol\s+No\.?\s*(21|22)\b/gi;
+
+function findTreatyRefs(text) {
+  const refs = [];
+  TREATY_RE.lastIndex = 0;
+  let m;
+  while ((m = TREATY_RE.exec(text)) !== null) {
+    const treatyKey = /\bCharter\b/i.test(m[0])
+      ? "Charter"
+      : /\bTFEU\b|Functioning/i.test(m[0])
+      ? "TFEU"
+      : /\bTEU\b|Treaty on European Union/i.test(m[0])
+      ? "TEU"
+      : /\bEuratom\b|Atomic Energy/i.test(m[0])
+      ? "Euratom Treaty"
+      : /\bEEC Treaty\b|European Economic Community/i.test(m[0])
+      ? "EEC Treaty"
+      : /\bEC Treaty\b|European Community/i.test(m[0])
+      ? "EC Treaty"
+      : null;
+    refs.push({
+      type: "external",
+      target: m[0],
+      raw: m[0],
+      start: m.index,
+      end: m.index + m[0].length,
+      actType: null,
+      actCelex: treatyKey ? ACT_CELEX_MAP[treatyKey] : null,
+      identifier: m[0],
+      year: null,
+      number: null,
+      suffix: null,
+      treaty: true,
+      allowBareArticleBinding: true,
+    });
+  }
+
+  // Historical footnotes sometimes say only "Articles 81 and 82 of the
+  // Treaty". Keep the bare label contextual: it is emitted only when the
+  // article binder proves the explicit "of the Treaty" relationship.
+  const contextualTreatyRe = /\bthe Treaty\b/gi;
+  while ((m = contextualTreatyRe.exec(text)) !== null) {
+    refs.push({
+      type: "external",
+      target: m[0],
+      raw: m[0],
+      start: m.index,
+      end: m.index + m[0].length,
+      actType: null,
+      actCelex: null,
+      identifier: m[0],
+      year: null,
+      number: null,
+      suffix: null,
+      treaty: true,
+      contextual: true,
+    });
+  }
+  return refs;
+}
+
+function findProtocolRefs(text) {
+  const refs = [];
+  PROTOCOL_RE.lastIndex = 0;
+  let m;
+  while ((m = PROTOCOL_RE.exec(text)) !== null) {
+    refs.push({
+      type: "external",
+      target: `Protocol No ${m[1]}`,
+      raw: m[0],
+      start: m.index,
+      end: m.index + m[0].length,
+      actType: null,
+      actCelex: null,
+      identifier: `Protocol No ${m[1]}`,
+      year: null,
+      number: null,
+      suffix: null,
+      protocol: true,
+    });
+  }
+  return refs;
+}
 
 function inferExternalActType(raw = "") {
   if (!raw) return null;
   const value = raw.toLowerCase();
-  if (/\b(directive|directiva|direttiva|diretiva|richtlijn|direktiv|smernica|směrnice|treoir|οδηγία|директива|direktyva|direktīva|direktiva|irányelv)\b/i.test(value)) {
+  if (/\bframework\s+decision\b/i.test(value)) {
+    return "framework decision";
+  }
+  if (/\brecommendations?\b/i.test(value)) {
+    return "recommendation";
+  }
+  if (/\b(directives?|directiva|direttiva|diretiva|richtlinie|richtlijn|direktiv|dyrektyw[ay]|smernica|směrnice|treoir|οδηγία|директива|direktyva|direktīva|direktiva|irányelv)\b/i.test(value)) {
     return "directive";
   }
-  if (/\b(regulation|reglamento|regolamento|regulamento|verordnung|verordening|förordning|forordning|nariadenie|nařízení|rialachán|κανονισμός|регламент|reglamentas|regulamentul|uredba|asetus|rendelet)\b/i.test(value)) {
+  if (/\b(regulations?|règlement|reglamento|regolamento|regulamento|verordnung|verordening|förordning|forordning|rozporządzeni[ea]|nariadenie|nařízení|rialachán|κανονισμός|регламент|reglamentas|regulamentul|uredba|asetus|rendelet)\b/i.test(value)) {
     return "regulation";
   }
-  if (/\b(decision|decisión|decisione|decisão|beschluss|besluit|beslut|rozhodnutie|rozhodnutí|cinneadh|απόφαση|решение|sprendimas|lēmums|odluka|határozat)\b/i.test(value)) {
+  if (/\b(decisions?|decisión|decisione|decisão|decyzj[ai]|beschluss|besluit|beslut|rozhodnutie|rozhodnutí|cinneadh|απόφαση|решение|sprendimas|lēmums|odluka|határozat)\b/i.test(value)) {
     return "decision";
   }
   return null;
 }
 
-function normalizeExternalYear(yearPart) {
-  if (!yearPart) return null;
-  if (yearPart.length === 4) return yearPart;
-  if (yearPart.length !== 2) return null;
-  const year = parseInt(yearPart, 10);
-  if (Number.isNaN(year)) return null;
-  return String(year >= 50 ? 1900 + year : 2000 + year);
+function normalizeFlattenedFootnoteIdentifier(identifier = "", followingText = "") {
+  // Formex prose can flatten a footnote marker directly onto a four-digit year:
+  // "Regulation (EC) No 1864/2004" + note 2 becomes "1864/20042". A five-
+  // digit tail beginning with a plausible 19xx/20xx year has no valid EU
+  // identifier interpretation, so remove only that final marker.
+  const match = String(identifier).match(/^(\d{1,4})\/((?:19|20)\d{2})\d$/);
+  if (match) return `${match[1]}/${match[2]}`;
+
+  // Some old EUR-Lex HTML breaks a two-digit year across adjacent fragments:
+  // "No 2894/7" followed immediately by "9 ,". A one-digit EU year is not
+  // valid here, and the punctuation makes this a bounded continuation rather
+  // than a separate numbered provision.
+  const splitYear = String(identifier).match(/^(\d{1,4})\/(\d)$/);
+  const continuation = String(followingText).match(/^\s*(?:\/\/\s*)?(\d)(?=\s*[,.;)])/);
+  return splitYear && continuation ? `${splitYear[1]}/${splitYear[2]}${continuation[1]}` : identifier;
 }
 
-function parseExternalLawMeta(raw, target) {
+function isClearlyNationalInstrumentContext(text, index) {
+  const context = text.slice(Math.max(0, index - 120), index + 220);
+  return /\b(?:regional|national|federal|state|provincial|municipal)\s+(?:government|law|decision)\b|\b(?:law|decision)\s+of\s+(?:the\s+)?(?:region|state|province)\b/i.test(context);
+}
+
+function parseExternalLawMeta(raw, target, { ecscAuthority = false, institutionalIssuer = false } = {}) {
   const actType = inferExternalActType(raw);
-  const match = (target || "").match(/^(\d{2,4})\/(\d+)(?:\/([A-Z]+))?$/i);
-  if (!match) {
-    return { actType, identifier: target || null, year: null, number: null, suffix: null };
-  }
-
-  const first = match[1];
-  const second = match[2];
-  const suffix = match[3] || null;
-
-  let year = null;
-  let number = null;
-
-  if (first.length === 4) {
-    year = first;
-    number = second;
-  } else if (second.length === 4) {
-    year = second;
-    number = first;
-  } else if (first.length === 2) {
-    year = normalizeExternalYear(first);
-    number = second;
-  }
+  const hasNo = /\bN(?:o)?\.?\s/i.test(raw);
+  const allowHistoricalNoLabel = /\(\s*(?:EEC|EC|CEE)\s*\)/i.test(raw);
+  const actCelex = resolveInstrumentCelex({
+    actType,
+    identifier: target,
+    hasNo,
+    allowHistoricalNoLabel,
+    ecscAuthority,
+    institutionalIssuer,
+  });
+  const { year, number, suffix } = parseInstrumentIdentifier({
+    actType,
+    identifier: target,
+    hasNo,
+    allowHistoricalNoLabel,
+    ecscAuthority,
+    institutionalIssuer,
+  });
 
   return {
     actType,
+    actCelex,
     identifier: target || null,
     year,
     number,
@@ -498,60 +633,183 @@ function parseExternalLawMeta(raw, target) {
   };
 }
 
-function getArticleExternalConnectorRe(langCode = "EN") {
+// Canonical dedup key for a cross-reference. Crucially includes articleNumber so
+// distinct "Article 6 of Reg X" / "Article 9 of Reg X" edges are not collapsed
+// into one (the act identifier alone is not unique), plus OJ coordinates so
+// separate OJ citations stay distinct.
+export function crossRefDedupeKey(ref) {
+  return referenceDedupeKey(ref);
+}
+
+// The possessive word that links an article to the act it belongs to
+// ("Article 6 **of** Regulation …"). Language-specific; defaults to English.
+function getArticleExternalConnectorWord(langCode = "EN") {
   switch (String(langCode || "").toUpperCase()) {
-    case "DE":
-      return /^\s+der\s+$/i;
-    case "FR":
-      return /^\s+du\s+$/i;
-    case "ES":
-      return /^\s+del\s+$/i;
-    case "IT":
-      return /^\s+del\s+$/i;
-    case "PT":
-      return /^\s+do\s+$/i;
-    case "NL":
-      return /^\s+van\s+$/i;
-    default:
-      return /^\s+of\s+$/i;
+    case "DE": return "der|des";
+    case "FR": return "du|de\\s+la|de\\s+l[’']";
+    case "ES": return "del|de\\s+la";
+    case "IT": return "del|della";
+    case "PT": return "do|da";
+    case "NL": return "van";
+    case "SV": return "i";
+    case "DA": return "i";
+    case "RO": return "din";
+    default: return "of(?:\\s+the)?";
   }
 }
 
+const BARE_ARTICLE_ACT_LANGS = new Set([
+  "PL", "CS", "SK", "FI", "BG", "HR", "SL", "ET", "LV", "LT", "EL", "MT", "GA",
+]);
+
+// The shared scanner owns list/range mechanics; this adapter supplies the
+// language-specific article morphology and conjunctions used in legislation.
+// Keeping grammar here avoids teaching the runtime-neutral core about Formex
+// language configs while still giving every word-first EU language a useful
+// coordinated-reference path.
+const ARTICLE_GRAMMAR = {
+  EN: { article: "Articles?", list: "and|or", range: "to" },
+  PL: { article: "Artyku[łl](?:y|ów)?", list: "i|lub|albo|oraz", range: "do" },
+  DE: { article: "Artikel", list: "und|oder", range: "bis" },
+  FR: { article: "Articles?", list: "et|ou", range: "à|au" },
+  ES: { article: "Art[ií]culos?", list: "y|o", range: "a" },
+  IT: { article: "Articol[oi]", list: "e|o", range: "a" },
+  PT: { article: "Artigos?", list: "e|ou", range: "a" },
+  NL: { article: "Artikelen?", list: "en|of", range: "tot" },
+  SV: { article: "Artik(?:el|lar)", list: "och|eller", range: "till" },
+  DA: { article: "Artik(?:el|ler)", list: "og|eller", range: "til" },
+  FI: { article: "Artiklat?", list: "ja|tai", range: "–|-|artiklaan" },
+  CS: { article: "Člán(?:ek|ky|ků)", list: "a|nebo", range: "až" },
+  SK: { article: "Člán(?:ok|ky|kov)", list: "a|alebo", range: "až" },
+  RO: { article: "Articol(?:ul|ele)?", list: "și|sau", range: "până\\s+la" },
+  BG: { article: "Член(?:ове)?", list: "и|или", range: "до" },
+  HR: { article: "Član(?:ak|ci|aka)?", list: "i|ili", range: "do" },
+  SL: { article: "Člen(?:i|ov)?", list: "in|ali", range: "do" },
+  ET: { article: "Artik(?:kel|lid)", list: "ja|või", range: "kuni" },
+  LV: { article: "Panti?", list: "un|vai", range: "līdz" },
+  LT: { article: "Straipsn(?:is|iai|ių)", list: "ir|ar", range: "iki" },
+  EL: { article: "Άρθρ(?:ο|α|ων)", list: "και|ή", range: "έως" },
+  MT: { article: "Artikol[ui]", list: "u|jew", range: "sa" },
+  GA: { article: "Airteag(?:al|ail)", list: "agus|nó", range: "go" },
+};
+
+function getArticleGrammar(lang) {
+  const configured = ARTICLE_GRAMMAR[String(lang.code || "EN").toUpperCase()];
+  if (configured) return configured;
+  return {
+    article: `${lang.article.source.split(/\\s\+\(\\d/)[0]}s?`,
+    list: "and|or",
+    range: "to",
+  };
+}
+
+// True when the text between an article reference and a following external act is
+// an "article(s) … of <act>" bridge rather than unrelated prose. It must end in
+// the possessive word and contain only reference-list filler (commas, "and"/"or"/
+// "to", "point (x)"/"paragraph" phrases, repeated article words, digits). This is
+// what lets "Article 6(4) and Article 9(2), point (g), of Regulation (EU) 2016/679"
+// bind both articles to the act, instead of only the one directly before "of".
+// An "…of <act>" bridge is short by nature ("Article 6(4) and Article 9(2),
+// point (g), of "). Capping the gap keeps the merge from doing expensive string
+// work on far-apart article/act pairs (which made it O(n²) on long article text).
+function isArticleOfActBridge(gap, langCode) {
+  return legalReferenceCore.isArticleOfActBridge(
+    gap,
+    getArticleExternalConnectorWord(langCode),
+  );
+}
+
+// Scan a run of coordinated article references starting at each "Article(s)" word:
+// "Articles 15, 16 and 17", "Articles 12 to 22" (range → expanded), and
+// "Article 6(4) and Article 9(2), point (g)" (repeated word + trailing point).
+// Returns [{ start, end, items:[{articleNumber, paragraph, point}] }].
+function scanArticleEnumerations(text, lang) {
+  const src = lang.article.source;
+  const isNumFirst = /^\(\?:/.test(src) || /^\(\\d/.test(src) || src.startsWith("(\\d");
+  if (isNumFirst) return null; // num-first languages (e.g. HU) use the simple path
+  const grammar = getArticleGrammar(lang);
+  return scanSharedArticleEnumerations(text, {
+    articleWordSource: grammar.article,
+    listWordSource: grammar.list,
+    rangeWordSource: grammar.range,
+  });
+}
+
 function mergeArticleRefsWithExternalContext(text, articleRefs, externalRefs, langCode) {
-  const connectorRe = getArticleExternalConnectorRe(langCode);
-  const mergedExternalIndices = new Set();
-  const mergedArticles = new Set();
-  const contextualExternalRefs = [];
+  return bindArticleRefsToExternalRefs(text, articleRefs, externalRefs, {
+    connectorWord: getArticleExternalConnectorWord(langCode),
+    allowBare: BARE_ARTICLE_ACT_LANGS.has(String(langCode || "").toUpperCase()),
+  });
+}
 
-  for (let i = 0; i < articleRefs.length; i++) {
-    const articleRef = articleRefs[i];
-    const externalIndex = externalRefs.findIndex((externalRef, idx) => (
-      !mergedExternalIndices.has(idx)
-      && externalRef.start >= articleRef.end
-      && connectorRe.test(text.slice(articleRef.end, externalRef.start))
-    ));
+function hydrateContextualActAntecedents(text, externalRefs) {
+  return externalRefs.map((ref) => {
+    if (!ref.contextual || !ref.actType || ref.actCelex) return ref;
+    let antecedent = null;
+    for (const candidate of externalRefs) {
+      if (candidate.contextual || !candidate.actCelex || candidate.actType !== ref.actType) continue;
+      if (candidate.end > ref.start || ref.start - candidate.end > 400) continue;
+      const gap = text.slice(candidate.end, ref.start);
+      if (/[.!?]/.test(gap) || (antecedent && candidate.end <= antecedent.end)) continue;
+      antecedent = candidate;
+    }
+    if (!antecedent) return ref;
+    return {
+      ...ref,
+      target: antecedent.target,
+      actCelex: antecedent.actCelex,
+      identifier: antecedent.identifier,
+      year: antecedent.year,
+      number: antecedent.number,
+      suffix: antecedent.suffix,
+      antecedentRaw: antecedent.raw,
+    };
+  });
+}
 
-    if (externalIndex === -1) continue;
+/**
+ * Definitions often enumerate several approaches as "referred to in Article …"
+ * and name their shared Regulation only after the final member. Bind only the
+ * repeated formula within the same sentence; arbitrary intervening prose stays
+ * outside this narrow backward-propagation rule.
+ */
+function bindReferredToArticleSeries(text, articleRefs, externalRefs) {
+  const boundArticleIndices = new Set();
+  const boundRefs = [];
 
-    const externalRef = externalRefs[externalIndex];
-    mergedArticles.add(i);
-    mergedExternalIndices.add(externalIndex);
-    contextualExternalRefs.push({
-      ...externalRef,
-      start: articleRef.start,
-      raw: text.slice(articleRef.start, externalRef.end),
-      articleNumber: articleRef.target,
-      paragraph: articleRef.paragraph,
-      point: articleRef.point,
-    });
+  for (const act of externalRefs) {
+    if (act.contextual || !act.actCelex) continue;
+    const sentenceStart = Math.max(
+      text.lastIndexOf(".", act.start - 1),
+      text.lastIndexOf(";", act.start - 1),
+    ) + 1;
+    const candidates = [];
+    for (let index = 0; index < articleRefs.length; index++) {
+      const ref = articleRefs[index];
+      if (boundArticleIndices.has(index) || ref.start < sentenceStart || ref.end > act.start) continue;
+      if (act.start - ref.start > 1200) continue;
+      const lead = text.slice(Math.max(sentenceStart, ref.start - 80), ref.start);
+      if (!/\breferred\s+to\s+in\s*$/i.test(lead)) continue;
+      candidates.push({ index, ref });
+    }
+    if (candidates.length < 2) continue;
+    for (const { index, ref } of candidates) {
+      boundArticleIndices.add(index);
+      boundRefs.push({
+        ...act,
+        start: ref.start,
+        raw: text.slice(ref.start, act.end),
+        articleNumber: ref.target,
+        paragraph: ref.paragraph,
+        point: ref.point,
+        seriesContext: true,
+      });
+    }
   }
 
   return {
-    articleRefs: articleRefs.filter((_, index) => !mergedArticles.has(index)),
-    externalRefs: [
-      ...externalRefs.filter((_, index) => !mergedExternalIndices.has(index)),
-      ...contextualExternalRefs,
-    ],
+    articleRefs: articleRefs.filter((_, index) => !boundArticleIndices.has(index)),
+    externalRefs: [...externalRefs, ...boundRefs],
   };
 }
 
@@ -562,7 +820,7 @@ function mergeArticleRefsWithExternalContext(text, articleRefs, externalRefs, la
  * @param {string} text  Plain text to scan
  * @param {object} lang  Language config from getLangConfig()
  */
-function extractCrossRefsFromText(text, lang) {
+export function extractCrossRefsFromText(text, lang) {
   const refs = [];
   const seen = new Set();
   const articleRefs = [];
@@ -570,60 +828,45 @@ function extractCrossRefsFromText(text, lang) {
   const externalRefs = [];
 
   function addRef(ref) {
-    const key = `${ref.type}:${ref.target}:${ref.paragraph || ""}:${ref.point || ""}`;
+    const key = crossRefDedupeKey(ref);
     if (!seen.has(key)) {
       seen.add(key);
       refs.push(ref);
     }
   }
 
-  // Article references (language-specific word)
-  const artRe = buildArticleRefRe(lang);
-  artRe.lastIndex = 0;
   let m;
-  while ((m = artRe.exec(text)) !== null) {
-    // Group indices depend on whether num-first or word-first
-    // For word-first (standard): groups are (full, artNum, para, point, rangeTo)
-    // We just use the article regex to find the number
-    const artMatch = lang.article.exec(m[0]);
-    if (!artMatch) continue;
-    const artNum = artMatch[1];
-    // Try to find paragraph and point from the original match
-    const paraMatch = m[0].match(/\((\d+)\)/);
-    const pointMatch = m[0].match(/\(([a-z])\)/i);
-    const rangeMatch = m[0].match(/\s+(?:to|and)\s+(\d+[a-z]?\b)/i);
-    if (rangeMatch) {
-      const from = parseInt(artNum, 10);
-      const to = parseInt(rangeMatch[1], 10);
-      if (!isNaN(from) && !isNaN(to) && to >= from && to - from <= 50) {
-        for (let i = from; i <= to; i++) {
-          articleRefs.push({
-            type: "article",
-            target: String(i),
-            paragraph: null,
-            point: null,
-            raw: m[0],
-            start: m.index,
-            end: m.index + m[0].length,
-          });
-        }
-      } else {
+
+  // Article references: parse coordinated enumerations ("Articles 15, 16 and 17",
+  // "Articles 12 to 22", "Article 6(4) and Article 9(2), point (g)") into
+  // individual items so each can bind to its act and survive deduplication.
+  const enumerations = scanArticleEnumerations(text, lang);
+  if (enumerations) {
+    for (const enumeration of enumerations) {
+      for (const item of enumeration.items) {
         articleRefs.push({
           type: "article",
-          target: artNum,
-          paragraph: null,
-          point: null,
-          raw: m[0],
-          start: m.index,
-          end: m.index + m[0].length,
+          target: item.articleNumber,
+          paragraph: item.paragraph,
+          point: item.point,
+          raw: text.slice(enumeration.start, enumeration.end),
+          start: enumeration.start,
+          end: enumeration.end,
         });
       }
-    } else {
+    }
+  } else {
+    // Num-first languages (e.g. Hungarian "6. cikk") keep the simple scan.
+    const artRe = buildArticleRefRe(lang);
+    artRe.lastIndex = 0;
+    while ((m = artRe.exec(text)) !== null) {
+      const artMatch = lang.article.exec(m[0]);
+      if (!artMatch) continue;
       articleRefs.push({
         type: "article",
-        target: artNum,
-        paragraph: paraMatch ? paraMatch[1] : null,
-        point: pointMatch ? pointMatch[1] : null,
+        target: artMatch[1],
+        paragraph: null,
+        point: null,
         raw: m[0],
         start: m.index,
         end: m.index + m[0].length,
@@ -645,23 +888,117 @@ function extractCrossRefsFromText(text, lang) {
   // External law references (mostly language-independent abbreviations)
   EXTERNAL_LAW_RE.lastIndex = 0;
   while ((m = EXTERNAL_LAW_RE.exec(text)) !== null) {
+    const surroundingText = text.slice(m.index, m.index + 160);
+    const ecscAuthority = /\bHigh Authority\b/i.test(text.slice(Math.max(0, m.index - 80), m.index + 80));
+    const institutionalIssuer = /\b(?:Council|Commission)\s*$/i.test(text.slice(Math.max(0, m.index - 24), m.index));
+    const target = normalizeFlattenedFootnoteIdentifier(m[1], text.slice(m.index + m[0].length));
     externalRefs.push({
       type: "external",
-      target: m[1],
+      target,
       raw: m[0],
       start: m.index,
       end: m.index + m[0].length,
-      ...parseExternalLawMeta(m[0], m[1]),
+      // Decisions and recommendations of a Joint/Association Committee are
+      // instruments of an external agreement body, not CELEX sector-3 acts.
+      // Preserve them as explicit external citations rather than guessing a
+      // Commission/Council decision from the number alone.
+      externalInstitutional: /\bof\s+the\s+(?:Joint|Association)\s+Committee\b/i.test(surroundingText),
+      // A reference expressly tied to a regional/state government is a
+      // national instrument, not an unresolved EU act.
+      externalNational: isClearlyNationalInstrumentContext(text, m.index),
+      ecscAuthority,
+      ...parseExternalLawMeta(m[0], target, { ecscAuthority, institutionalIssuer }),
     });
   }
 
-  const mergedRefs = mergeArticleRefsWithExternalContext(text, articleRefs, externalRefs, lang.code);
+  NATIONAL_LAW_RE.lastIndex = 0;
+  while ((m = NATIONAL_LAW_RE.exec(text)) !== null) {
+    externalRefs.push({
+      type: "external",
+      target: m[1],
+      raw: m[1],
+      start: m.index,
+      end: m.index + m[0].length,
+      actType: null,
+      actCelex: null,
+      identifier: m[1],
+      nationalLaw: true,
+    });
+  }
+
+  CONTEXTUAL_ACT_RE.lastIndex = 0;
+  while ((m = CONTEXTUAL_ACT_RE.exec(text)) !== null) {
+    // In legislation, "this Regulation/Directive" means the current act and
+    // its article references must stay as internal anchors. "That …" points
+    // back to another act and remains a contextual external reference.
+    if (m[1].toLowerCase() === "this") continue;
+    externalRefs.push({
+      type: "external",
+      target: m[0],
+      raw: m[0],
+      start: m.index,
+      end: m.index + m[0].length,
+      actType: m[2].toLowerCase(),
+      actCelex: null,
+      contextual: true,
+    });
+  }
+
+  // Treaty references (TFEU/TEU and named treaties) — no year/number, so they
+  // resolve to an EUR-Lex search rather than an internal act page.
+  for (const ref of findTreatyRefs(text)) externalRefs.push(ref);
+  for (const ref of findProtocolRefs(text)) externalRefs.push(ref);
+
+  const hydratedExternalRefs = hydrateContextualActAntecedents(text, externalRefs);
+  const seriesRefs = bindReferredToArticleSeries(text, articleRefs, hydratedExternalRefs);
+  const thereofRefs = bindThereofArticleRefs(text, seriesRefs.articleRefs, seriesRefs.externalRefs);
+  const mergedRefs = mergeArticleRefsWithExternalContext(
+    text,
+    thereofRefs.articleRefs,
+    seriesRefs.externalRefs,
+    lang.code,
+  );
 
   for (const ref of mergedRefs.articleRefs) addRef(ref);
   for (const ref of recitalRefs) addRef(ref);
-  for (const ref of mergedRefs.externalRefs) addRef(ref);
+  for (const ref of mergedRefs.externalRefs) {
+    if (!ref.contextual || ref.articleNumber) addRef(ref);
+  }
+  for (const ref of thereofRefs.externalRefs) addRef(ref);
 
   return refs;
+}
+
+/**
+ * An amendment article establishes one target act in its heading and then uses
+ * bare article numbers throughout the replacement text. Those numbers belong
+ * to the amended act, not to the short amending instrument itself.
+ */
+function bindRefsToAmendmentScope(refs, articleTitle, lang) {
+  if (!/^Amendments?\s+(?:to|of)\b/i.test(String(articleTitle || "").trim())) return refs;
+  const scopes = extractCrossRefsFromText(articleTitle, lang)
+    .filter((ref) => ref.type === "external" && !ref.articleNumber && ref.actCelex);
+  const byAct = new Map(scopes.map((ref) => [ref.actCelex, ref]));
+  if (byAct.size !== 1) return refs;
+  const scope = [...byAct.values()][0];
+
+  return refs.map((ref) => ref.type !== "article" ? ref : {
+    ...scope,
+    raw: ref.raw,
+    start: ref.start,
+    end: ref.end,
+    articleNumber: ref.target,
+    paragraph: ref.paragraph,
+    point: ref.point,
+    amendmentScope: true,
+  });
+}
+
+function stripInvalidArticleLinks(html, validArticles) {
+  return String(html || "").replace(
+    /<a\b(?=[^>]*\bclass="cross-ref")(?=[^>]*\bdata-ref-article="([^"]+)")[^>]*>([\s\S]*?)<\/a>/gi,
+    (match, target, label) => validArticles.has(target) ? match : label,
+  );
 }
 
 /**
@@ -713,9 +1050,9 @@ export function injectCrossRefLinks(html, lang) {
   if (isNumFirst) {
     articleInjectRe = new RegExp(`(${src})`, "gi");
   } else {
-    const wordPart = src.split(/\\s\+\(\\d/)[0];
+    const wordPart = getArticleGrammar(lang).article;
     articleInjectRe = new RegExp(
-      `\\b(${wordPart}s?\\s+\\d+[a-z]?\\b(?:\\(\\d+\\))?(?:\\([a-z]\\))?)`,
+      `\\b(${wordPart}\\s+\\d+[a-z]?\\b(?:\\(\\d+\\))?(?:\\([a-z]\\))?)`,
       "gi"
     );
   }
@@ -735,70 +1072,131 @@ export function injectCrossRefLinks(html, lang) {
     const text = node.textContent;
     if (!text) continue;
 
-    const articleRefs = [];
     const externalRefs = [];
 
-    articleInjectRe.lastIndex = 0;
-    let match;
-    while ((match = articleInjectRe.exec(text)) !== null) {
-      const articleMatch = lang.article.exec(match[0]);
-      lang.article.lastIndex = 0;
-      if (!articleMatch) continue;
-      const paraMatch = match[0].match(/\((\d+)\)/);
-      const pointMatch = match[0].match(/\(([a-z])\)/i);
-      articleRefs.push({
-        start: match.index,
-        end: match.index + match[0].length,
-        kind: "article",
-        articleNumber: articleMatch[1],
-        paragraph: paraMatch ? paraMatch[1] : null,
-        point: pointMatch ? pointMatch[1] : null,
-        label: match[0],
-      });
-    }
-
     EXTERNAL_LAW_RE.lastIndex = 0;
+    let match;
     while ((match = EXTERNAL_LAW_RE.exec(text)) !== null) {
-      const meta = parseExternalLawMeta(match[0], match[1]);
+      const target = normalizeFlattenedFootnoteIdentifier(match[1], text.slice(match.index + match[0].length));
+      const ecscAuthority = /\bHigh Authority\b/i.test(text.slice(Math.max(0, match.index - 80), match.index + 80));
+      const institutionalIssuer = /\b(?:Council|Commission)\s*$/i.test(text.slice(Math.max(0, match.index - 24), match.index));
+      const meta = parseExternalLawMeta(match[0], target, { ecscAuthority, institutionalIssuer });
       externalRefs.push({
         start: match.index,
         end: match.index + match[0].length,
         kind: "external",
-        target: match[1],
+        target,
         label: match[0],
         ...meta,
       });
     }
 
-    const mergedRefs = mergeArticleRefsWithExternalContext(
-      text,
-      articleRefs.map((ref) => ({
-        start: ref.start,
-        end: ref.end,
-        target: ref.articleNumber,
-        paragraph: ref.paragraph,
-        point: ref.point,
-      })),
-      externalRefs,
-      lang.code
-    );
-
-    const refs = [
-      ...mergedRefs.articleRefs.map((ref) => ({
-        kind: "article",
-        start: ref.start,
-        end: ref.end,
-        articleNumber: ref.target,
-        paragraph: ref.paragraph,
-        point: ref.point,
-        label: text.slice(ref.start, ref.end),
-      })),
-      ...mergedRefs.externalRefs.map((ref) => ({
-        ...ref,
+    for (const treatyRef of findTreatyRefs(text)) {
+      externalRefs.push({
+        start: treatyRef.start,
+        end: treatyRef.end,
         kind: "external",
-        label: ref.raw || text.slice(ref.start, ref.end),
-      })),
-    ];
+        target: treatyRef.target,
+        label: treatyRef.raw,
+        actType: null,
+        year: null,
+        number: null,
+        suffix: null,
+      });
+    }
+
+    for (const protocolRef of findProtocolRefs(text)) {
+      externalRefs.push({
+        start: protocolRef.start,
+        end: protocolRef.end,
+        kind: "external",
+        target: protocolRef.target,
+        label: protocolRef.raw,
+        actType: null,
+        year: null,
+        number: null,
+        suffix: null,
+      });
+    }
+
+    const refs = [];
+
+    // Article references. Word-first languages use the enumeration scanner so
+    // every member of a list/range ("Articles 15, 16 and 17", "Articles 12 to 22")
+    // gets its own link; the enumeration binds as a whole to a following act, so
+    // each member links to that act's article rather than an internal anchor.
+    const enumerations = isNumFirst ? null : scanArticleEnumerations(text, lang);
+    if (enumerations) {
+      for (const enumeration of enumerations) {
+        let boundAct = null;
+        for (const ext of externalRefs) {
+          if (ext.start < enumeration.end || ext.start - enumeration.end > MAX_ARTICLE_ACT_BRIDGE) continue;
+          if (!isArticleOfActBridge(text.slice(enumeration.end, ext.start), lang.code)) continue;
+          if (!boundAct || ext.start < boundAct.start) boundAct = ext;
+        }
+        let isFirst = true;
+        for (const item of enumeration.items) {
+          if (item.tokenStart == null) continue; // range-fill item: no text to wrap
+          const start = isFirst ? enumeration.start : item.tokenStart;
+          isFirst = false;
+          const label = text.slice(start, item.tokenEnd);
+          if (boundAct) {
+            refs.push({
+              kind: "external", start, end: item.tokenEnd, label,
+              searchText: boundAct.label, target: boundAct.target,
+              articleNumber: item.articleNumber, paragraph: item.paragraph, point: item.point,
+              actType: boundAct.actType, year: boundAct.year, number: boundAct.number, suffix: boundAct.suffix,
+            });
+          } else {
+            refs.push({
+              kind: "article", start, end: item.tokenEnd, label,
+              articleNumber: item.articleNumber, paragraph: item.paragraph, point: item.point,
+            });
+          }
+        }
+      }
+    } else {
+      // Num-first languages (e.g. Hungarian "6. cikk") keep single-token
+      // detection plus the phrase-absorbing merge.
+      const articleRefs = [];
+      articleInjectRe.lastIndex = 0;
+      while ((match = articleInjectRe.exec(text)) !== null) {
+        const articleMatch = lang.article.exec(match[0]);
+        lang.article.lastIndex = 0;
+        if (!articleMatch) continue;
+        const paraMatch = match[0].match(/\((\d+)\)/);
+        const pointMatch = match[0].match(/\(([a-z])\)/i);
+        articleRefs.push({
+          start: match.index,
+          end: match.index + match[0].length,
+          target: articleMatch[1],
+          paragraph: paraMatch ? paraMatch[1] : null,
+          point: pointMatch ? pointMatch[1] : null,
+        });
+      }
+      const merged = mergeArticleRefsWithExternalContext(text, articleRefs, externalRefs, lang.code);
+      for (const ref of merged.articleRefs) {
+        refs.push({
+          kind: "article", start: ref.start, end: ref.end,
+          articleNumber: ref.target, paragraph: ref.paragraph, point: ref.point,
+          label: text.slice(ref.start, ref.end),
+        });
+      }
+      externalRefs.length = 0;
+      externalRefs.push(...merged.externalRefs);
+    }
+
+    // The external act names themselves (a bound article links to the act too, but
+    // the act name stays independently clickable).
+    for (const ext of externalRefs) {
+      const label = ext.raw || ext.label || text.slice(ext.start, ext.end);
+      refs.push({
+        kind: "external", start: ext.start, end: ext.end, label, searchText: label,
+        target: ext.target, articleNumber: ext.articleNumber || null,
+        paragraph: ext.paragraph || null, point: ext.point || null,
+        actType: ext.actType, year: ext.year, number: ext.number, suffix: ext.suffix,
+      });
+    }
 
     refs.sort((a, b) => a.start - b.start || b.end - a.end);
 
@@ -829,11 +1227,12 @@ export function injectCrossRefLinks(html, lang) {
         link.setAttribute("href", `#article-${ref.articleNumber}`);
         link.setAttribute("title", `Go to Article ${ref.articleNumber}`);
       } else {
-        link.setAttribute("href", buildEurlexSearchUrl(ref.label, lang.code));
+        const searchText = ref.searchText || ref.label;
+        link.setAttribute("href", buildEurlexSearchUrl(searchText, lang.code));
         link.setAttribute("target", "_blank");
         link.setAttribute("rel", "noopener noreferrer");
         link.setAttribute("title", `Open ${ref.target} on EUR-Lex`);
-        link.setAttribute("data-ref-raw", ref.label);
+        link.setAttribute("data-ref-raw", searchText);
         if (ref.articleNumber) link.setAttribute("data-ref-article", ref.articleNumber);
         if (ref.paragraph) link.setAttribute("data-ref-paragraph", ref.paragraph);
         if (ref.point) link.setAttribute("data-ref-point", ref.point);
@@ -889,10 +1288,15 @@ export function parseFmxToCombined(xmlText) {
 
   const docRoot = doc.documentElement; // <ACT> or <COMBINED.FMX>
 
-  // For combined documents, the ACT is a child element
-  const root = docRoot.tagName === "COMBINED.FMX"
-    ? docRoot.querySelector("ACT") || docRoot
-    : docRoot;
+  // Collection wrappers sometimes hold one legacy GENERAL document, but may
+  // also hold several ACT documents. Unwrap only the single-document form:
+  // selecting the first child of a multi-document collection would silently
+  // discard its later recitals and articles.
+  const isCollection = docRoot.tagName === "COMBINED.FMX" || docRoot.tagName === "FMX.COLLECTION";
+  const legalRoots = isCollection
+    ? Array.from(docRoot.children).filter((child) => child.tagName === "ACT" || child.tagName === "GENERAL")
+    : [];
+  const root = legalRoots.length === 1 ? legalRoots[0] : docRoot;
 
   // --- Language ---
   const lgDoc = root.querySelector("BIB\\.INSTANCE > LG\\.DOC");
@@ -1022,8 +1426,16 @@ export function parseFmxToCombined(xmlText) {
         });
 
         // Extract cross-references from the article's full text (language-aware)
-        const fullText = allText(child);
-        const textRefs = extractCrossRefsFromText(fullText, lang);
+        const fullText = Array.from(child.children)
+          .filter((element) => element.tagName !== "TI.ART")
+          .map((element) => allText(element))
+          .filter(Boolean)
+          .join(" ");
+        const textRefs = bindRefsToAmendmentScope(
+          extractCrossRefsFromText(fullText, lang),
+          article_title,
+          lang,
+        );
         // Also extract structural OJ references from the XML
         const ojRefs = extractOjRefsFromElement(child);
         const allRefs = [...textRefs, ...ojRefs];
@@ -1032,7 +1444,7 @@ export function parseFmxToCombined(xmlText) {
         const seenKeys = new Set();
         const uniqueRefs = allRefs.filter(r => {
           if (r.type === "article" && r.target === article_number) return false;
-          const key = `${r.type}:${r.target}:${r.paragraph || ""}:${r.point || ""}`;
+          const key = crossRefDedupeKey(r);
           if (seenKeys.has(key)) return false;
           seenKeys.add(key);
           return true;
@@ -1060,6 +1472,50 @@ export function parseFmxToCombined(xmlText) {
     // The container sits one level above the first real DIVISION, so start one
     // level higher to make the first nested DIVISION a chapter.
     walkDivisions(enactingTerms, { number: "", title: "" }, { number: "", title: "" }, -1);
+  }
+
+  // Some older Commission decisions, especially merger and competition
+  // decisions, contain their complete published text in PROLOG or in a direct
+  // CONTENTS element without ARTICLE children. Do not manufacture an
+  // "Article 1": retain it as an explicitly unnumbered section so it remains
+  // readable, searchable, and eligible for external-citation extraction.
+  if (articles.length === 0) {
+    // Some old Cellar payloads concatenate identical GENERAL documents. Keep
+    // the normal collection-wide parsing above, but use one representative
+    // legal root for the unnumbered fallback so the same decision is not
+    // rendered and indexed several times.
+    const unnumberedRoot = legalRoots[0] || root;
+    const unnumberedBody = Array.from(unnumberedRoot.children).find((child) => child.tagName === "PROLOG")
+      || Array.from(unnumberedRoot.children).find((child) => child.tagName === "CONTENTS" && !child.closest("ANNEX"));
+    const unnumberedText = unnumberedBody ? allText(unnumberedBody) : "";
+    if (unnumberedText) {
+      const article_number = "text";
+      const article_html = injectCrossRefLinks(renderWithFootnotes(unnumberedBody, "unnumbered-text"), lang);
+      articles.push({
+        article_number,
+        article_title: "",
+        display_label: "Decision text",
+        is_unnumbered: true,
+        paragraphs: [{ number: null, html: article_html }],
+        division: {
+          chapter: { number: "", title: "" },
+          section: null,
+        },
+        article_html,
+      });
+
+      const seenKeys = new Set();
+      const refs = [
+        ...extractCrossRefsFromText(unnumberedText, lang),
+        ...extractOjRefsFromElement(unnumberedBody),
+      ].filter((ref) => {
+        const key = crossRefDedupeKey(ref);
+        if (seenKeys.has(key)) return false;
+        seenKeys.add(key);
+        return true;
+      });
+      if (refs.length) crossReferences[article_number] = refs;
+    }
   }
 
   // --- Definitions ---
@@ -1128,7 +1584,7 @@ export function parseFmxToCombined(xmlText) {
     const allRefs = textRefs;
     const seenKeys = new Set();
     const uniqueRefs = allRefs.filter(ref => {
-      const key = `${ref.type}:${ref.target}:${ref.paragraph || ""}:${ref.point || ""}`;
+      const key = crossRefDedupeKey(ref);
       if (seenKeys.has(key)) return false;
       seenKeys.add(key);
       return true;
@@ -1141,6 +1597,7 @@ export function parseFmxToCombined(xmlText) {
 
   // --- Annexes ---
   const annexes = [];
+  const validArticleNumbers = new Set(articles.map((article) => article.article_number));
   // In combined documents, ANNEX elements are siblings of ACT
   const annexContainer = docRoot.tagName === "COMBINED.FMX" ? docRoot : root;
   for (const annexEl of annexContainer.querySelectorAll("ANNEX")) {
@@ -1162,14 +1619,21 @@ export function parseFmxToCombined(xmlText) {
       annex_html = injectCrossRefLinks(renderWithFootnotes(contents, `annex-${annex_id || "body"}`), lang);
     }
 
+    const annexText = allText(annexEl);
+    // An annex's bare Article N can only be an internal link when N exists in
+    // the current act. Replacement annexes and flattened correlation tables
+    // often quote articles of predecessor acts without preserving enough column
+    // context to identify the correct act; plain text is safer than a broken or
+    // guessed link. Explicitly qualified external references remain untouched.
+    annex_html = stripInvalidArticleLinks(annex_html, validArticleNumbers);
     annexes.push({ annex_id, annex_title, annex_html });
 
-    const annexText = allText(annexEl);
     const textRefs = extractCrossRefsFromText(annexText, lang);
     const ojRefs = extractOjRefsFromElement(annexEl);
     const seenKeys = new Set();
     const uniqueRefs = [...textRefs, ...ojRefs].filter((ref) => {
-      const key = `${ref.type}:${ref.target}:${ref.paragraph || ""}:${ref.point || ""}:${ref.ojColl || ""}:${ref.ojYear || ""}:${ref.ojNo || ""}`;
+      if (ref.type === "article" && !validArticleNumbers.has(ref.target)) return false;
+      const key = crossRefDedupeKey(ref);
       if (seenKeys.has(key)) return false;
       seenKeys.add(key);
       return true;
@@ -1178,6 +1642,25 @@ export function parseFmxToCombined(xmlText) {
     if (uniqueRefs.length > 0) {
       crossReferences[`annex_${annex_id}`] = uniqueRefs;
     }
+  }
+
+  // Final integrity guard: no internal edge or anchor may target an article
+  // absent from the fully parsed act. This catches malformed source tokens such
+  // as "Article 1472)" (a flattened "Article 147(2)") and any attribution form
+  // we intentionally did not guess. The citation remains visible as plain text.
+  for (const article of articles) {
+    article.article_html = stripInvalidArticleLinks(article.article_html, validArticleNumbers);
+    for (const paragraph of article.paragraphs || []) {
+      paragraph.html = stripInvalidArticleLinks(paragraph.html, validArticleNumbers);
+    }
+  }
+  for (const recital of recitals) {
+    recital.recital_html = stripInvalidArticleLinks(recital.recital_html, validArticleNumbers);
+  }
+  for (const [location, refs] of Object.entries(crossReferences)) {
+    const validRefs = refs.filter((ref) => ref.type !== "article" || validArticleNumbers.has(ref.target));
+    if (validRefs.length) crossReferences[location] = validRefs;
+    else delete crossReferences[location];
   }
 
   return { title, articles, recitals, annexes, definitions, langCode, crossReferences, parserVersion: PARSER_VERSION };

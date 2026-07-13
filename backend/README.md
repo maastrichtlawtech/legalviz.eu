@@ -298,7 +298,7 @@ The backend stores titles in `recital-title-cache-v1.json` with a cache `version
   "celex": "32016R0679",
   "articleNumber": "6",
   "lang": "ENG",
-  "caseLawCacheVersion": "case-law-cache-v4",
+  "caseLawCacheVersion": "case-law-cache-v5",
   "digest": {
     "summary": "…",
     "themes": [
@@ -319,7 +319,7 @@ The backend stores titles in `recital-title-cache-v1.json` with a cache `version
 {
   "celex": "32014L0104",
   "lang": "ENG",
-  "caseLawCacheVersion": "case-law-cache-v4",
+  "caseLawCacheVersion": "case-law-cache-v5",
   "digest": {
     "summary": "…",
     "themes": [
@@ -508,7 +508,7 @@ backend/
    ├─ fmx-parser-node.js        # Node.js wrapper for browser-side Formex parser
    ├─ fmx-service.js
    ├─ law-queries.js             # Shared SPARQL queries (metadata, amendments, implementing, case-law)
-   ├─ case-law-parser.js         # Parses CJEU judgments (FMX + pre-2004 OJ HTML + Curia HTML)
+   ├─ case-law-parser.js         # Parses article citations across CJEU judgment HTML eras
    ├─ article-digest-service.js  # Cached static article case-law digests
    ├─ law-summary-service.js     # Cached static law overviews
    ├─ openrouter-chat.js         # OpenRouter chat-completions wrapper
@@ -550,6 +550,7 @@ Current test coverage includes:
 - search regression ranking checks
 - search route behavior
 - CELEX/reference parsing helpers
+- case-law citation lists, ranges, contextual refs, and historical HTML shapes
 
 ## Environment Variables
 

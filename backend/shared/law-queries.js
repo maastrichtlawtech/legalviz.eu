@@ -9,6 +9,13 @@ const fs = require('fs');
 const path = require('path');
 const { JSDOM } = require('jsdom');
 const { getSharedPlaywrightPage, loadPlaywrightModule } = require('./eurlex-html-parser');
+const {
+  ACT_CELEX_MAP,
+  CITATION_PARSER_VERSION,
+  extractArticleCitationsFromText,
+  hydrateContextualRefs,
+  parseCitationsToRefs,
+} = require('./case-law-parser');
 
 const EURLEX_COOKIE_MAX_AGE_MS = parseInt(process.env.EURLEX_COOKIE_MAX_AGE_MS) || 12 * 60 * 60 * 1000; // 12h
 const PARTIAL_RETRY_COOLDOWN_MS = 6 * 60 * 60 * 1000; // 6h
@@ -212,7 +219,13 @@ function wait(ms) {
 }
 
 function isPartialEntry(entry) {
-  return !entry || !entry.name || !Array.isArray(entry.declarations) || entry.declarations.length === 0;
+  return !entry
+    || !entry.name
+    || !Array.isArray(entry.declarations)
+    || entry.declarations.length === 0
+    || entry.citationParserVersion !== CITATION_PARSER_VERSION
+    || !Array.isArray(entry.articleRefs)
+    || entry.articleRefs.length === 0;
 }
 
 function isStaleEntry(entry) {
@@ -242,7 +255,7 @@ SELECT DISTINCT ?caseCelex ?ecli ?date WHERE {
   ?caseWork cdm:case-law_interpretes_resource_legal ?law .
   ?law owl:sameAs <${celexUri}> .
   ?caseWork cdm:resource_legal_id_celex ?caseCelex .
-  FILTER(REGEX(?caseCelex, "^6[0-9]{4}CJ"))
+  FILTER(REGEX(?caseCelex, "^6[0-9]{4}(CJ|TJ)[0-9]"))
   OPTIONAL { ?caseWork cdm:case-law_ecli ?ecli }
   OPTIONAL { ?caseWork cdm:work_date_document ?date }
 }
@@ -253,9 +266,10 @@ LIMIT 200`;
   const cases = (data.results?.bindings || []).map((b) => {
     const caseCelex = b.caseCelex?.value || null;
     let caseNumber = caseCelex;
-    const m = caseCelex?.match(/^6(\d{4})CJ(\d{4})$/);
+    const m = caseCelex?.match(/^6(\d{4})(CJ|TJ)(\d{4})$/);
     if (m) {
-      caseNumber = `C-${parseInt(m[2], 10)}/${m[1].slice(2)}`;
+      const prefix = m[2] === 'TJ' ? 'T' : 'C';
+      caseNumber = `${prefix}-${parseInt(m[3], 10)}/${m[1].slice(2)}`;
     }
     const cached = cache[caseCelex];
     return {
@@ -266,7 +280,7 @@ LIMIT 200`;
       name: cached?.name || null,
       declarations: cached?.declarations || [],
       articlesCited: cached?.articlesCited || [],
-      articleRefs: cached?.articleRefs || [],
+      articleRefs: hydrateContextualRefs(cached?.articleRefs || [], celex),
     };
   }).filter((c) => c.celex);
 
@@ -305,8 +319,8 @@ LIMIT 200`;
 // Case law cache: { caseCelex: { name, declarations, articlesCited, articleRefs } }
 // ---------------------------------------------------------------------------
 
-const CASE_LAW_CACHE_FILE = 'case-law-cache-v4.json';
-const CASE_LAW_CACHE_FILE_LEGACY = 'case-law-cache-v3.json';
+const CASE_LAW_CACHE_FILE = 'case-law-cache-v5.json';
+const CASE_LAW_CACHE_FILES_LEGACY = ['case-law-cache-v4.json', 'case-law-cache-v3.json'];
 
 function loadCaseLawCache(cacheDir) {
   try {
@@ -314,9 +328,9 @@ function loadCaseLawCache(cacheDir) {
     if (fs.existsSync(filePath)) {
       return JSON.parse(fs.readFileSync(filePath, 'utf8'));
     }
-    const legacyPath = path.join(cacheDir, CASE_LAW_CACHE_FILE_LEGACY);
-    if (fs.existsSync(legacyPath)) {
-      const legacy = JSON.parse(fs.readFileSync(legacyPath, 'utf8'));
+    const legacyName = CASE_LAW_CACHE_FILES_LEGACY.find((name) => fs.existsSync(path.join(cacheDir, name)));
+    if (legacyName) {
+      const legacy = JSON.parse(fs.readFileSync(path.join(cacheDir, legacyName), 'utf8'));
       const migrated = {};
       for (const [k, v] of Object.entries(legacy)) {
         migrated[k] = v && typeof v === 'object'
@@ -567,155 +581,12 @@ function extractOperativePartFromText(fullText) {
 }
 
 /**
- * Extract article citations from judgment text.
- * Returns compact strings like "Art. 6 GDPR", "Art. 47 Charter".
+ * Extract article citations from judgment text. The parser is intentionally
+ * independent of the judgment's HTML era; JSDOM supplies one visible text
+ * stream for modern Formex, older Curia, and pre-2004 OJ pages.
  */
 function extractArticleCitations(document) {
-  const text = cleanText(document.body?.textContent || '');
-  const citations = [];
-  const seen = new Set();
-
-  const articlePatterns = [
-    /Articles?\s+\d+(?:\(\d+\))*(?:\([a-z]\))?\s+of\s+(?:Regulation|Directive|Decision)\s+\(?(?:EU|EC|EEC|Euratom)?\)?\s*(?:No\s+)?\d{2,4}\/\d+/gi,
-    /Articles?\s+\d+(?:\(\d+\))*(?:\([a-z]\))?\s+of\s+(?:Regulation|Directive|Decision)\s+\d{2,4}\/\d+/gi,
-    /Articles?\s+\d+(?:\(\d+\))*(?:\([a-z]\))?\s+of\s+(?:the\s+)?(?:GDPR|Charter|TFEU|TEU|ECHR)/gi,
-    /Articles\s+[\d,\s]+(?:and\s+\d+)?\s+of\s+(?:Regulation|Directive|Decision)\s+\(?(?:EU|EC|EEC|Euratom)?\)?\s*(?:No\s+)?\d{2,4}\/\d+/gi,
-    /Articles\s+[\d,\s]+(?:and\s+\d+)?\s+of\s+(?:the\s+)?(?:GDPR|Charter|TFEU|TEU|ECHR)/gi,
-    /Article\s+\d+(?:\(\d+\))?\s+(?:TFEU|TEU|ECHR)/gi,
-  ];
-
-  for (const pattern of articlePatterns) {
-    let match;
-    while ((match = pattern.exec(text)) !== null) {
-      const key = match[0].toLowerCase().replace(/\s+/g, ' ');
-      if (!seen.has(key)) {
-        seen.add(key);
-        citations.push(formatArticlePill(match[0].trim()));
-      }
-    }
-  }
-
-  return citations;
-}
-
-// Map of known act shorthands/year-numbers to their CELEX.
-// Year/number acts (e.g. "95/46") are included where the CELEX is
-// unambiguous; acts with multiple instrument types sharing the same
-// year/number are left null and downstream code filters by `act` string.
-const ACT_CELEX_MAP = {
-  // Regulation (EU) 2016/679 — General Data Protection Regulation
-  'GDPR':     '32016R0679',
-  '2016/679': '32016R0679',
-  // Directive 95/46/EC — Data Protection Directive (predecessor to GDPR)
-  '95/46':    '31995L0046',
-  // Directive 2002/58/EC — ePrivacy Directive
-  '2002/58':  '32002L0058',
-  // Directive (EU) 2016/680 — Law Enforcement Directive
-  '2016/680': '32016L0680',
-  // Regulation (EU) 2022/2065 — Digital Services Act
-  '2022/2065': '32022R2065',
-  // Regulation (EU) 2022/1925 — Digital Markets Act
-  '2022/1925': '32022R1925',
-  // Regulation (EU) 2024/1689 — AI Act
-  '2024/1689': '32024R1689',
-  // Charter of Fundamental Rights of the EU (2012 consolidated)
-  'Charter':  '12012P',
-  // Treaty on the Functioning of the EU (2012 consolidated)
-  'TFEU':     '12012E',
-  // Treaty on European Union (2012 consolidated)
-  'TEU':      '12012M',
-};
-
-/**
- * Parse an array of compact article-citation strings (the output of
- * extractArticleCitations, e.g. "Art. 6(1)(a) GDPR", "Art. 5, 6 and 10 GDPR")
- * into structured references suitable for per-article filtering.
- *
- * Returns one ref per (act, article) pair. Composite strings like
- * "Art. 5, 6 and 10 GDPR" yield 3 refs; each ref carries its own
- * article/paragraph/point and a back-link to the original `raw` string.
- */
-function parseCitationsToRefs(citationStrings) {
-  const refs = [];
-  const seen = new Set();
-  for (const s of citationStrings || []) {
-    if (typeof s !== 'string') continue;
-    // "Art. <tokens> <act>" where <act> is an uppercase shorthand
-    // (GDPR, Charter, TFEU, TEU, ECHR) or a year/number (95/46, 2016/680).
-    const m = s.match(/^Art\.?\s+(.+?)\s+([A-Za-z]+|\d{2,4}\/\d+)\s*$/);
-    if (!m) continue;
-    const act = m[2];
-    const actCelex = ACT_CELEX_MAP[act] || null;
-    // Normalise "N and M" -> "N, M" then split on commas at the top level.
-    const tokens = m[1].replace(/\s+and\s+/gi, ', ').split(',');
-    for (const rawTok of tokens) {
-      const parsed = parseArticleToken(rawTok);
-      if (!parsed) continue;
-      const key = `${act}|${parsed.article}|${parsed.paragraph || ''}|${parsed.point || ''}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      refs.push({
-        raw: s,
-        act,
-        actCelex,
-        article: parsed.article,
-        paragraph: parsed.paragraph,
-        point: parsed.point,
-      });
-    }
-  }
-  return refs;
-}
-
-/**
- * Parse a single article token (e.g. "6", "6(1)", "6(1)(a)", "2(a)", "6a")
- * into { article, paragraph, point }. Numeric parenthesized groups are
- * treated as the paragraph; alphabetic groups as the point. This handles
- * both GDPR-style "6(1)(a)" and 95/46-style "7(a)".
- */
-function parseArticleToken(tok) {
-  const m = tok.trim().match(/^(\d+[a-z]?)((?:\([^)]+\))*)$/);
-  if (!m) return null;
-  const article = m[1];
-  let paragraph = null;
-  let point = null;
-  for (const inner of [...m[2].matchAll(/\(([^)]+)\)/g)].map((x) => x[1])) {
-    if (/^\d+[a-z]?$/.test(inner) && paragraph === null) paragraph = inner;
-    else if (/^[a-z]+$/i.test(inner) && point === null) point = inner.toLowerCase();
-  }
-  return { article, paragraph, point };
-}
-
-/**
- * Convert a full citation like "Article 6(1) of Regulation (EU) 2016/679"
- * into a compact pill label like "Art. 6(1) GDPR".
- */
-function formatArticlePill(citation) {
-  let label = citation.replace(/^Articles?\s+/i, 'Art. ');
-
-  const shortNames = [
-    { pattern: /\s+of\s+(?:the\s+)?GDPR/i, short: ' GDPR' },
-    { pattern: /\s+of\s+(?:the\s+)?Charter/i, short: ' Charter' },
-    { pattern: /\s+of\s+(?:the\s+)?TFEU/i, short: ' TFEU' },
-    { pattern: /\s+of\s+(?:the\s+)?TEU/i, short: ' TEU' },
-    { pattern: /\s+of\s+(?:the\s+)?ECHR/i, short: ' ECHR' },
-    { pattern: /\s+of\s+(?:Regulation|Directive|Decision)\s+\(?(?:EU|EC|EEC|Euratom)?\)?\s*(?:No\s+)?2016\/679/i, short: ' GDPR' },
-    { pattern: /\s+of\s+(?:Regulation|Directive|Decision)\s+\(?(?:EU|EC|EEC|Euratom)?\)?\s*(?:No\s+)?(\d{2,4}\/\d+)/i, short: null },
-  ];
-
-  for (const { pattern, short } of shortNames) {
-    const m = label.match(pattern);
-    if (m) {
-      if (short) {
-        label = label.substring(0, m.index) + short;
-      } else {
-        label = label.substring(0, m.index) + ' ' + m[1];
-      }
-      break;
-    }
-  }
-
-  return label;
+  return extractArticleCitationsFromText(document.body?.textContent || '');
 }
 
 /**
@@ -768,7 +639,7 @@ async function fetchCaseDetails(caseCelex, { cacheDir, stats, timeoutMs = DEFAUL
       const doc = dom.window.document;
 
       const operative = extractOperativePart(doc);
-      const articlesCited = extractArticleCitations(doc);
+      const citations = extractArticleCitations(doc);
 
       // Also extract party name from the full HTML (more reliable than Range request).
       // Modern format: <span class="coj-bold">Name</span>
@@ -818,8 +689,9 @@ async function fetchCaseDetails(caseCelex, { cacheDir, stats, timeoutMs = DEFAUL
       return {
         name,
         declarations: operative.declarations,
-        articlesCited,
-        articleRefs: parseCitationsToRefs(articlesCited),
+        articlesCited: citations.articlesCited,
+        articleRefs: citations.articleRefs,
+        citationParserVersion: CITATION_PARSER_VERSION,
       };
     } finally {
       clearTimeout(timeout);
@@ -849,17 +721,27 @@ async function enrichWithCaseDetails(cases, detailsCache, {
       const c = cases[i++];
       try {
         const details = await detailsFetcher(c.celex, { cacheDir, stats });
-        if (details && !isPartialEntry(details)) {
-          const articleRefs = details.articleRefs || parseCitationsToRefs(details.articlesCited);
-          detailsCache[c.celex] = { ...details, articleRefs };
-          c.declarations = details.declarations;
-          c.articlesCited = details.articlesCited;
-          c.articleRefs = articleRefs;
-          if (details.name && !c.name) c.name = details.name;
+        const articleRefs = details?.articleRefs || parseCitationsToRefs(details?.articlesCited);
+        const normalizedDetails = details ? { ...details, articleRefs } : null;
+        if (normalizedDetails && !isPartialEntry(normalizedDetails)) {
+          detailsCache[c.celex] = normalizedDetails;
+          c.declarations = normalizedDetails.declarations;
+          c.articlesCited = normalizedDetails.articlesCited;
+          c.articleRefs = hydrateContextualRefs(articleRefs, logLabel);
+          if (normalizedDetails.name && !c.name) c.name = normalizedDetails.name;
           stats.enriched++;
         } else {
           const existing = detailsCache[c.celex] || {};
-          detailsCache[c.celex] = { ...existing, lastFailedAt: Date.now() };
+          // Preserve whatever did parse (name/operative part) but keep the entry
+          // retryable: a zero-ref result for a judgment known to interpret this
+          // law is often a citation-grammar miss, not proof that no refs exist.
+          detailsCache[c.celex] = { ...existing, ...(normalizedDetails || {}), lastFailedAt: Date.now() };
+          if (normalizedDetails) {
+            c.declarations = normalizedDetails.declarations || c.declarations;
+            c.articlesCited = normalizedDetails.articlesCited || c.articlesCited;
+            c.articleRefs = hydrateContextualRefs(articleRefs, logLabel);
+            if (normalizedDetails.name && !c.name) c.name = normalizedDetails.name;
+          }
           stats.partial++;
         }
         consecutiveFails = 0;

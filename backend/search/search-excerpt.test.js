@@ -137,6 +137,19 @@ test("buildExcerptFromCombined only pulls Article 1 and Article 2, skipping othe
   assert.doesNotMatch(excerpt, /definitions text/);
 });
 
+test("buildExcerptFromCombined indexes explicitly unnumbered decision text", () => {
+  const excerpt = buildExcerptFromCombined({
+    recitals: [],
+    articles: [{
+      article_number: "text",
+      is_unnumbered: true,
+      article_html: "<p>MERGERDECISIONSENTINEL confirms the concentration is compatible with the common market.</p>",
+    }],
+  });
+
+  assert.match(excerpt, /MERGERDECISIONSENTINEL/);
+});
+
 test("buildExcerptFromCombined degrades to an empty string for missing/malformed input", () => {
   assert.equal(buildExcerptFromCombined(null), "");
   assert.equal(buildExcerptFromCombined(undefined), "");

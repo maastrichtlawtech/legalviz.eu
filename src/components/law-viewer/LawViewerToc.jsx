@@ -12,7 +12,7 @@ function ArticleTocButton({ article, selected, onClick }) {
       onClick={onClick}
     >
       <span className="w-full truncate text-left">
-        <span className="font-medium">Art. {article.article_number}</span>
+        <span className="font-medium">{article.display_label || `Art. ${article.article_number}`}</span>
         {article.article_title ? (
           <span className="ml-1 font-normal text-gray-500 opacity-80 dark:text-gray-400 dark:opacity-100">
             - {article.article_title}

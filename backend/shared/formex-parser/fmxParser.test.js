@@ -412,6 +412,30 @@ describe("parseFmxToCombined — unnumbered PARAG numbering", () => {
 // ---------------------------------------------------------------------------
 // injectCrossRefLinks
 // ---------------------------------------------------------------------------
+// parseFmxToCombined — legacy v2 body container (<CONTENTS> without <ENACTING.TERMS>)
+// ---------------------------------------------------------------------------
+
+describe("parseFmxToCombined — v2 CONTENTS body fallback", () => {
+  // Formex v2 (schema 02.00, <GENERAL> root — e.g. Directive 2004/18/EC) has no
+  // <ENACTING.TERMS>; the operative body sits under a top-level <CONTENTS>.
+  it("extracts articles from a <CONTENTS> body when there is no ENACTING.TERMS", () => {
+    const xml =
+      `<GENERAL xsi:noNamespaceSchemaLocation="http://formex.publications.eu.int/schema/formex-02.00-20050101.xd" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">` +
+      `<BIB.INSTANCE><LG.DOC>EN</LG.DOC></BIB.INSTANCE>` +
+      `<CONTENTS>` +
+      `<DIVISION><ARTICLE IDENTIFIER="001"><TI.ART>Article 1</TI.ART><ALINEA><P>First provision.</P></ALINEA></ARTICLE></DIVISION>` +
+      `<DIVISION><ARTICLE IDENTIFIER="002"><TI.ART>Article 2</TI.ART><ALINEA><P>Second provision.</P></ALINEA></ARTICLE></DIVISION>` +
+      `</CONTENTS>` +
+      `<ANNEX><CONTENTS><DIVISION><ARTICLE IDENTIFIER="A01"><TI.ART>Article 1</TI.ART><ALINEA><P>Annex article, must be ignored.</P></ALINEA></ARTICLE></DIVISION></CONTENTS></ANNEX>` +
+      `</GENERAL>`;
+    const result = parseFmxToCombined(xml);
+    // The two body articles are picked up; the annex's own <CONTENTS> is excluded.
+    expect(result.articles).toHaveLength(2);
+    expect(result.articles.map((a) => a.article_number)).toEqual(["1", "2"]);
+  });
+});
+
+// ---------------------------------------------------------------------------
 
 describe("injectCrossRefLinks", () => {
   const lang = getLangConfig("EN");

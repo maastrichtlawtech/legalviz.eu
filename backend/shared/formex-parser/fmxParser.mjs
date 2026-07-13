@@ -20,7 +20,7 @@ import { buildEurlexSearchUrl } from "./url.mjs";
  * Bump this whenever the parser output changes (new fields, bug fixes, etc.)
  * so that cached parsed results are automatically re-parsed from raw XML.
  */
-export const PARSER_VERSION = 1;
+export const PARSER_VERSION = 2;
 
 // ---------------------------------------------------------------------------
 // FMX → HTML conversion helpers
@@ -1049,10 +1049,16 @@ export function parseFmxToCombined(xmlText) {
     }
   }
 
-  const enactingTerms = root.querySelector("ENACTING\\.TERMS");
+  // Modern Formex wraps the operative body in <ENACTING.TERMS>. Older/large v2
+  // acts (schema 02.00, <GENERAL> root — e.g. Directive 2004/18/EC) have no
+  // ENACTING.TERMS and instead nest the body divisions under a top-level
+  // <CONTENTS>. Fall back to that so their articles aren't dropped; exclude any
+  // <CONTENTS> that belongs to an <ANNEX> (annexes carry their own).
+  const enactingTerms = root.querySelector("ENACTING\\.TERMS")
+    || Array.from(root.querySelectorAll("CONTENTS")).find((el) => !el.closest("ANNEX"));
   if (enactingTerms) {
-    // ENACTING.TERMS is the container above the first real DIVISION, so start
-    // one level higher to make the first nested DIVISION a chapter.
+    // The container sits one level above the first real DIVISION, so start one
+    // level higher to make the first nested DIVISION a chapter.
     walkDivisions(enactingTerms, { number: "", title: "" }, { number: "", title: "" }, -1);
   }
 

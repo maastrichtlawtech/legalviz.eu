@@ -15,7 +15,10 @@ export function SEO({
   const metaDescription = description || t("seo.defaultDescription");
   const metaKeywords = keywords || t("seo.defaultKeywords");
   const siteUrl = 'https://legalviz.eu';
-  const currentUrl = canonical || (typeof window !== 'undefined' ? window.location.href : siteUrl);
+  const currentUrl = canonical
+    || (typeof window !== 'undefined'
+      ? `${window.location.origin}${window.location.pathname}`
+      : siteUrl);
   const imageUrl = image.startsWith('http') ? image : `${siteUrl}${image}`;
 
   return (

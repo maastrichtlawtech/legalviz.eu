@@ -21,7 +21,10 @@
     "articles": "Artykuły",
     "recitals": "Motywy",
     "annexes": "Załączniki",
-    "noSelection": "Brak wyboru"
+    "noSelection": "Brak wyboru",
+    "beta": "beta",
+    "ai": "AI",
+    "noneFoundSuffix": "— nie znaleziono"
   },
   "seo": {
     "defaultDescription": "Interaktywna wizualizacja prawa UE. Nawiguj po artykułach, motywach i załącznikach z łatwością.",
@@ -183,6 +186,33 @@
     "description": "Te motywy wydają się być powiązane z tym artykułem na podstawie analizy tekstu przy użyciu prostej AI (<a href=\"https://ebooks.iospress.nl/volumearticle/56169\" target=\"_blank\" rel=\"noopener noreferrer\">podobieństwo TF-IDF</a> (Nanda et al.)). Posortowane według wyniku istotności.",
     "match": "{score}% dopasowanie",
     "read": "Czytaj →"
+  },
+  "relatedCaseLaw": {
+    "title": "Powiązane orzecznictwo",
+    "loading": "Ładowanie",
+    "showAllJudgments": "Pokaż wszystkie {count} wyroków",
+    "noMatchPrefix": "Do tego artykułu nie przypisano jeszcze żadnego orzecznictwa. {count} {judgmentWord} ten akt prawny jako całość — otwórz",
+    "judgmentInterprets": "wyrok TSUE interpretuje",
+    "judgmentsInterpret": "wyroki TSUE interpretują",
+    "sidebarLabel": "Orzecznictwo",
+    "noMatchSuffix": "w panelu bocznym, aby zobaczyć pełną listę i podsumowanie wygenerowane przez AI."
+  },
+  "caseLawDigest": {
+    "generate": "Wygeneruj podsumowanie orzecznictwa",
+    "generating": "Generowanie podsumowania orzecznictwa",
+    "unavailable": "Podsumowanie orzecznictwa nie jest jeszcze dostępne.",
+    "generatedOn": "Statyczne podsumowanie wygenerowane {date}",
+    "fromCache": "z pamięci podręcznej"
+  },
+  "caseLawCard": {
+    "expandDecision": "Rozwiń decyzję",
+    "collapse": "Zwiń",
+    "readFullJudgment": "Przeczytaj pełny wyrok",
+    "decisionLabel": "Decyzja:",
+    "moreArticles": "+{count} więcej"
+  },
+  "caseLawModal": {
+    "showMore": "Pokaż jeszcze {count} (pozostało {remaining})"
   },
   "crossReferences": {
     "title": "Odsyłacze Wzajemne",

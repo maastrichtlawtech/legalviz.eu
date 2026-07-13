@@ -1,69 +1,40 @@
 import { useCallback, useEffect, useState } from "react";
-import { ExternalLink, Loader2, RefreshCw, Scale } from "lucide-react";
-import { fetchArticleCaseLawDigest } from "../utils/formexApi.js";
+import { Loader2, RefreshCw, Scale, Sparkles } from "lucide-react";
+import { fetchCaseLawDigest } from "../utils/formexApi.js";
 import { useI18n } from "../i18n/useI18n.js";
 import { Button } from "./Button.jsx";
+import { JudgmentCite } from "./ArticleCaseLawDigest.jsx";
 
-export function JudgmentCite({ cite, currentLang }) {
-  if (!cite?.celex && !cite?.ecli) return null;
-  const label = cite.caseNumber || cite.ecli || cite.celex;
-  const suffix = cite.declarationNumber ? ` §${cite.declarationNumber}` : "";
-  const href = cite.celex
-    ? `https://eur-lex.europa.eu/legal-content/${currentLang || "EN"}/TXT/?uri=CELEX:${cite.celex}`
-    : null;
-  const title = cite.name && cite.ecli ? `${cite.name} (${cite.ecli})` : cite.name || cite.ecli || undefined;
-
-  const content = (
-    <>
-      <span className="font-mono">{label}{suffix}</span>
-      {cite.name ? <span className="max-w-[220px] truncate">— {cite.name}</span> : null}
-      {href ? <ExternalLink size={10} className="shrink-0" /> : null}
-    </>
-  );
-
-  if (!href) {
-    return (
-      <span title={title} className="inline-flex max-w-full items-center gap-1 rounded border border-teal-200 bg-teal-50 px-1.5 py-0.5 text-[11px] font-medium text-teal-700 dark:border-teal-800 dark:bg-teal-950/40 dark:text-teal-300">
-        {content}
-      </span>
-    );
-  }
-
-  return (
-    <a
-      href={href}
-      target="_blank"
-      rel="noopener noreferrer"
-      title={title}
-      className="inline-flex max-w-full items-center gap-1 rounded border border-teal-200 bg-teal-50 px-1.5 py-0.5 text-[11px] font-medium text-teal-700 transition hover:border-teal-300 hover:bg-teal-100 dark:border-teal-800 dark:bg-teal-950/40 dark:text-teal-300 dark:hover:border-teal-700"
-    >
-      {content}
-    </a>
-  );
-}
-
-export function ArticleCaseLawDigest({ celex, articleNumber, currentLang = "EN", enabled = true }) {
+/**
+ * Whole-law AI digest of the CJEU case law interpreting an act. Generation is
+ * on-demand (explicit button) and the result is cached server-side, so repeat
+ * viewers of the same law get an instant cache hit.
+ */
+export function CaseLawDigest({ celex, currentLang = "EN" }) {
   const { t } = useI18n();
+  const [requested, setRequested] = useState(false);
   const [digest, setDigest] = useState(null);
   const [metadata, setMetadata] = useState(null);
   const [loading, setLoading] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState(null);
 
+  // Reset when the law or language changes.
   useEffect(() => {
+    setRequested(false);
     setDigest(null);
     setMetadata(null);
     setLoaded(false);
     setLoading(false);
     setError(null);
-  }, [celex, articleNumber, currentLang]);
+  }, [celex, currentLang]);
 
   useEffect(() => {
-    if (!enabled || !celex || !articleNumber || loaded) return;
+    if (!requested || !celex || loaded) return;
     let cancelled = false;
 
     setLoading(true);
-    fetchArticleCaseLawDigest(celex, articleNumber, currentLang)
+    fetchCaseLawDigest(celex, currentLang)
       .then((payload) => {
         if (cancelled) return;
         setDigest(payload.digest || null);
@@ -88,18 +59,40 @@ export function ArticleCaseLawDigest({ celex, articleNumber, currentLang = "EN",
     return () => {
       cancelled = true;
     };
-  }, [celex, articleNumber, currentLang, enabled, loaded]);
+  }, [celex, currentLang, requested, loaded]);
 
   const retry = useCallback(() => {
     setError(null);
     setLoaded(false);
   }, []);
 
-  if (!enabled) return null;
-  if (digest?.noCaseLaw) return null;
+  if (!celex) return null;
+
+  // Idle: show the generate button.
+  if (!requested) {
+    return (
+      <button
+        type="button"
+        onClick={() => setRequested(true)}
+        className="mb-3 flex w-full items-center justify-between gap-3 rounded-lg border border-teal-200 bg-teal-50 px-3 py-2.5 text-left text-sm transition hover:border-teal-300 hover:bg-teal-100 dark:border-teal-800 dark:bg-teal-950/40 dark:hover:border-teal-700 dark:hover:bg-teal-950/70"
+      >
+        <span className="inline-flex min-w-0 items-center gap-2 font-medium text-teal-900 dark:text-teal-100">
+          <Sparkles size={14} className="shrink-0 text-teal-700 dark:text-teal-300" />
+          <span>{t("caseLawDigest.generate")}</span>
+        </span>
+        <span className="shrink-0 rounded bg-teal-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-teal-800 dark:bg-teal-900/50 dark:text-teal-200">
+          {t("common.ai")}
+        </span>
+      </button>
+    );
+  }
+
+  // Requested but the model found nothing groundable — stay quiet rather than
+  // showing an empty box.
+  if (loaded && !error && (!digest || digest.noCaseLaw)) return null;
 
   return (
-    <div className="border-b border-gray-200 py-4 dark:border-gray-800">
+    <div className="mb-3 rounded-lg border border-gray-200 bg-white p-3 dark:border-gray-700 dark:bg-gray-800">
       {loading && !loaded ? (
         <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
           <Loader2 size={14} className="animate-spin" />

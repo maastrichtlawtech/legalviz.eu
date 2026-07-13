@@ -21,7 +21,10 @@
     "articles": "Articole",
     "recitals": "Considerente",
     "annexes": "Anexe",
-    "noSelection": "Nicio selecție"
+    "noSelection": "Nicio selecție",
+    "beta": "beta",
+    "ai": "IA",
+    "noneFoundSuffix": "— niciunul găsit"
   },
   "seo": {
     "defaultDescription": "Vizualizare interactivă a legislației UE. Navigați prin articole, preambuluri și anexe cu ușurință.",
@@ -183,6 +186,33 @@
     "description": "Aceste preambuluri par să fie conectate la acest articol pe baza analizei textului folosind IA simplă (<a href=\"https://ebooks.iospress.nl/volumearticle/56169\" target=\"_blank\" rel=\"noopener noreferrer\">similaritate TF-IDF</a> (Nanda et al.)). Sortate după scor de relevanță.",
     "match": "{score}% potrivire",
     "read": "Citire →"
+  },
+  "relatedCaseLaw": {
+    "title": "Jurisprudență conexă",
+    "loading": "Se încarcă",
+    "showAllJudgments": "Afișează toate cele {count} hotărâri",
+    "noMatchPrefix": "Niciun act de jurisprudență nu este încă asociat acestui articol. {count} {judgmentWord} această lege în ansamblu — deschideți",
+    "judgmentInterprets": "hotărâre a CJUE interpretează",
+    "judgmentsInterpret": "hotărâri ale CJUE interpretează",
+    "sidebarLabel": "Jurisprudență",
+    "noMatchSuffix": "din bara laterală pentru lista completă și un rezumat generat de IA."
+  },
+  "caseLawDigest": {
+    "generate": "Generează rezumatul jurisprudenței",
+    "generating": "Se generează rezumatul jurisprudenței",
+    "unavailable": "Rezumatul jurisprudenței nu este încă disponibil.",
+    "generatedOn": "Rezumat static generat la {date}",
+    "fromCache": "din cache"
+  },
+  "caseLawCard": {
+    "expandDecision": "Extinde decizia",
+    "collapse": "Restrânge",
+    "readFullJudgment": "Citește hotărârea completă",
+    "decisionLabel": "Decizie:",
+    "moreArticles": "+{count} în plus"
+  },
+  "caseLawModal": {
+    "showMore": "Afișează încă {count} (au mai rămas {remaining})"
   },
   "crossReferences": {
     "title": "Referințe încrucișate",

@@ -55,6 +55,10 @@ eurlex resolve "Regulation 2016/679"
 
 See the [full documentation](backend/README.md) for installation and all available commands.
 
+### Use in AI Assistants (MCP)
+
+The API also exposes an [MCP](https://modelcontextprotocol.io) server at `https://api.legalviz.eu/mcp`, so you can query EU law directly from Claude, ChatGPT, Cursor, and other MCP-compatible AI assistants — just add the URL as a connector, no coding required. See [MCP server](backend/README.md#mcp-server) for setup instructions per client.
+
 ## For Developers
 
 ### Setup

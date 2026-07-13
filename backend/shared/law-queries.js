@@ -8,7 +8,7 @@
 const fs = require('fs');
 const path = require('path');
 const { JSDOM } = require('jsdom');
-const { getSharedPlaywrightPage, loadPlaywrightModule, closeSharedPlaywrightBrowser } = require('./eurlex-html-parser');
+const { getSharedPlaywrightPage, loadPlaywrightModule } = require('./eurlex-html-parser');
 
 const EURLEX_COOKIE_MAX_AGE_MS = parseInt(process.env.EURLEX_COOKIE_MAX_AGE_MS) || 12 * 60 * 60 * 1000; // 12h
 const PARTIAL_RETRY_COOLDOWN_MS = 6 * 60 * 60 * 1000; // 6h
@@ -205,6 +205,7 @@ async function warmEurlexCookies({ cacheDir } = {}) {
 }
 
 const CASE_LAW_ENRICH_BUDGET_MS = 1_500;
+const DEFAULT_FETCH_TIMEOUT_MS = 30_000;
 
 function wait(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -221,12 +222,16 @@ function isStaleEntry(entry) {
 
 async function fetchCaseLaw(celex, runSparqlQuery, {
   cacheDir,
-  detailsFetcher = fetchCaseDetails,
+  detailsFetcher,
   enrichBudgetMs = CASE_LAW_ENRICH_BUDGET_MS,
   enrichConcurrency = 3,
+  fetchTimeoutMs = DEFAULT_FETCH_TIMEOUT_MS,
 } = {}) {
   if (cacheDir && warmCookieHeader === null && cookieWarmPromise === null) {
     loadCookiesFromDisk(cacheDir);
+  }
+  if (!detailsFetcher) {
+    detailsFetcher = (caseCelex, opts) => fetchCaseDetails(caseCelex, { ...opts, timeoutMs: fetchTimeoutMs });
   }
   const cache = cacheDir ? loadCaseLawCache(cacheDir) : {};
   const celexUri = `http://publications.europa.eu/resource/celex/${celex}`;
@@ -717,7 +722,7 @@ function formatArticlePill(citation) {
  * Fetch full HTML for a case and extract decision + article citations.
  * Uses warm EUR-Lex session cookies to bypass WAF challenge.
  */
-async function fetchCaseDetails(caseCelex, { cacheDir, stats } = {}) {
+async function fetchCaseDetails(caseCelex, { cacheDir, stats, timeoutMs = DEFAULT_FETCH_TIMEOUT_MS } = {}) {
   const url = `https://eur-lex.europa.eu/legal-content/EN/TXT/HTML/?uri=CELEX:${caseCelex}`;
 
   if (warmCookieHeader === null && cookieWarmPromise === null) {
@@ -729,7 +734,7 @@ async function fetchCaseDetails(caseCelex, { cacheDir, stats } = {}) {
 
   for (let attempt = 0; attempt < 3; attempt++) {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 30_000);
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
       const headers = {
@@ -884,4 +889,5 @@ module.exports = {
   fetchImplementing,
   fetchCaseLaw,
   parseCitationsToRefs,
+  CASE_LAW_CACHE_FILE,
 };

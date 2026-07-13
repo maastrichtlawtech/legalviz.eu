@@ -21,7 +21,10 @@
     "articles": "Artiklar",
     "recitals": "Skäl",
     "annexes": "Bilagor",
-    "noSelection": "Inget valt"
+    "noSelection": "Inget valt",
+    "beta": "beta",
+    "ai": "AI",
+    "noneFoundSuffix": "— inga hittades"
   },
   "seo": {
     "defaultDescription": "Interaktiv visualisering av EU-lagar. Navigera enkelt genom artiklar, preambel och bilagor.",
@@ -183,6 +186,33 @@
     "description": "Denna preambel verkar vara relaterad till denna artikel baserad på textanalys med enkel AI (<a href=\"https://ebooks.iospress.nl/volumearticle/56169\" target=\"_blank\" rel=\"noopener noreferrer\">TF-IDF likhet</a> (Nanda et al.)). Sorterad efter relevanspoäng.",
     "match": "{score}% träff",
     "read": "Läs →"
+  },
+  "relatedCaseLaw": {
+    "title": "Relaterad rättspraxis",
+    "loading": "Läser in",
+    "showAllJudgments": "Visa alla {count} domar",
+    "noMatchPrefix": "Ingen rättspraxis är ännu kopplad till denna artikel. {count} {judgmentWord} denna lag som helhet — öppna",
+    "judgmentInterprets": "EU-domstolens dom tolkar",
+    "judgmentsInterpret": "EU-domstolens domar tolkar",
+    "sidebarLabel": "Rättspraxis",
+    "noMatchSuffix": "i sidopanelen för hela listan och en AI-genererad sammanfattning."
+  },
+  "caseLawDigest": {
+    "generate": "Skapa sammanfattning av rättspraxis",
+    "generating": "Skapar sammanfattning av rättspraxis",
+    "unavailable": "Sammanfattning av rättspraxis är inte tillgänglig än.",
+    "generatedOn": "Statisk sammanfattning skapad {date}",
+    "fromCache": "från cache"
+  },
+  "caseLawCard": {
+    "expandDecision": "Expandera avgörande",
+    "collapse": "Fäll ihop",
+    "readFullJudgment": "Läs hela domen",
+    "decisionLabel": "Avgörande:",
+    "moreArticles": "+{count} till"
+  },
+  "caseLawModal": {
+    "showMore": "Visa {count} till ({remaining} kvar)"
   },
   "crossReferences": {
     "title": "Korsreferenser",

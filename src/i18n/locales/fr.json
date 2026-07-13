@@ -21,7 +21,10 @@
     "articles": "Articles",
     "recitals": "Considérants",
     "annexes": "Annexes",
-    "noSelection": "Aucune sélection"
+    "noSelection": "Aucune sélection",
+    "beta": "bêta",
+    "ai": "IA",
+    "noneFoundSuffix": "— aucun trouvé"
   },
   "seo": {
     "defaultDescription": "Visualisation interactive des lois de l'UE. Naviguez dans les articles, considérants et annexes avec facilité.",
@@ -183,6 +186,33 @@
     "description": "Ces considérants semblent être liés à cet article en fonction de l'analyse textuelle utilisant une IA simple (<a href=\"https://ebooks.iospress.nl/volumearticle/56169\" target=\"_blank\" rel=\"noopener noreferrer\">similarité TF-IDF</a> (Nanda et al.)). Trié par score de pertinence.",
     "match": "{score}% de correspondance",
     "read": "Lire →"
+  },
+  "relatedCaseLaw": {
+    "title": "Jurisprudence associée",
+    "loading": "Chargement",
+    "showAllJudgments": "Afficher les {count} arrêts",
+    "noMatchPrefix": "Aucune jurisprudence n'est encore associée à cet article. {count} {judgmentWord} cette loi dans son ensemble — ouvrez",
+    "judgmentInterprets": "arrêt de la CJUE interprète",
+    "judgmentsInterpret": "arrêts de la CJUE interprètent",
+    "sidebarLabel": "Jurisprudence",
+    "noMatchSuffix": "dans la barre latérale pour la liste complète et une synthèse par IA."
+  },
+  "caseLawDigest": {
+    "generate": "Générer une synthèse de la jurisprudence",
+    "generating": "Génération de la synthèse de la jurisprudence",
+    "unavailable": "La synthèse de la jurisprudence n'est pas encore disponible.",
+    "generatedOn": "Synthèse statique générée le {date}",
+    "fromCache": "depuis le cache"
+  },
+  "caseLawCard": {
+    "expandDecision": "Développer la décision",
+    "collapse": "Réduire",
+    "readFullJudgment": "Lire l'arrêt complet",
+    "decisionLabel": "Décision :",
+    "moreArticles": "+{count} de plus"
+  },
+  "caseLawModal": {
+    "showMore": "Afficher {count} de plus ({remaining} restants)"
   },
   "crossReferences": {
     "title": "Références croisées",

@@ -11,6 +11,7 @@ const { ClientError, cacheGet, cacheSet, safeErrorResponse, toSearchLang } = req
 const { JsonLegalCacheStore } = require("../search/legal-cache-store");
 
 const fixturePath = path.join(__dirname, "..", "search", "__fixtures__", "search-fixture.json");
+const gdprFmxPath = path.join(__dirname, "..", "..", "src", "__fixtures__", "gdpr.fmx.xml");
 
 function createAppRecorder() {
   const routes = new Map();
@@ -360,7 +361,91 @@ test("AI-backed static routes require their own OpenRouter key or the shared fal
   });
 
   await withOpenRouterEnv({ RECITAL_TITLE_OPENROUTER_API_KEY: "title-key" }, async () => {
+    // The recital-titles-only key does not grant access to the summary
+    // endpoint, which requires its own key or the shared OPENROUTER_API_KEY
+    // fallback. The summary handler now checks this before doing any
+    // expensive work (resolving/parsing the law), so this should fail fast
+    // with openrouter_unconfigured rather than reaching resolveParsedLaw.
+    let resolveParsedLawCalled = false;
     const { app } = registerTestRoutes({
+      resolveParsedLaw: async () => {
+        resolveParsedLawCalled = true;
+        throw new Error("resolveParsedLaw should not be called without an API key");
+      },
+    });
+    const handler = app.routes.get("/api/laws/:celex/summary");
+    const res = createResponseRecorder();
+
+    await handler({
+      params: { celex: "32016R0679" },
+      query: { lang: "ENG", skipFmxProbe: "1" },
+    }, res);
+
+    assert.equal(res.statusCode, 503);
+    assert.equal(res.payload.code, "openrouter_unconfigured");
+    assert.match(res.payload.error, /OpenRouter API key/);
+    assert.equal(resolveParsedLawCalled, false);
+  });
+});
+
+// These two tests exercise the *real* getSource/getParsedLaw closures wired
+// up inside the /api/laws/:celex/summary handler (unlike the "cache miss"
+// test above, which always passes skipFmxProbe=1 and therefore never calls
+// getSource or the FMX parse branch of getParsedLaw). They are regression
+// tests for two bugs that a stub-heavy test suite missed: (1) parseFmxXml
+// was never imported into api-routes.js, so any FMX-backed summary request
+// threw `ReferenceError: parseFmxXml is not defined`; (2) getSource's 404
+// fallback was guarded by `typeof fetchAndParseHtmlLaw === 'function'`, an
+// identifier that was never in scope in api-routes.js (it's only wired into
+// server.js's resolveParsedLaw), so the guard was always false and HTML-only
+// laws got a re-thrown 404 instead of falling back to HTML parsing.
+// A dummy API key is supplied in these two tests so the route's early
+// "no API key configured" fast-fail guard (see below) does not short-circuit
+// before getSource/getParsedLaw run. global.fetch is stubbed to fail
+// synchronously (no real network call) once the pipeline reaches the actual
+// chat call, so a successful fetch invocation is itself proof that
+// getSource()/getParsedLaw() completed without error.
+test("GET /api/laws/:celex/summary drives the real getSource/getParsedLaw closures for an FMX law", async () => {
+  await withOpenRouterEnv({ LAW_SUMMARY_OPENROUTER_API_KEY: "test-key" }, async () => {
+    const gdprXml = fs.readFileSync(gdprFmxPath, "utf8");
+    const { app } = registerTestRoutes({
+      prepareLawPayload: async () => ({ servePath: gdprFmxPath }),
+    });
+    const handler = app.routes.get("/api/laws/:celex/summary");
+    const res = createResponseRecorder();
+
+    let fetchCalled = false;
+    const originalFetch = global.fetch;
+    global.fetch = async () => {
+      fetchCalled = true;
+      throw new Error("network disabled in test");
+    };
+
+    try {
+      await handler({
+        params: { celex: "32016R0679" },
+        query: { lang: "ENG" },
+      }, res);
+    } finally {
+      global.fetch = originalFetch;
+    }
+
+    // Reaching the (stubbed) chat call proves getSource() read the fixture
+    // and getParsedLaw() successfully parsed it with parseFmxXml (a
+    // ReferenceError there would surface before fetch is ever called, and
+    // gdprXml would never have been read at all).
+    assert.ok(gdprXml.length > 0);
+    assert.ok(fetchCalled, "Expected the summary pipeline to reach the chat call");
+    assert.equal(res.statusCode, 500);
+  });
+});
+
+test("GET /api/laws/:celex/summary falls back to HTML parsing when FMX is unavailable for a law", async () => {
+  await withOpenRouterEnv({ LAW_SUMMARY_OPENROUTER_API_KEY: "test-key" }, async () => {
+    const { app } = registerTestRoutes({
+      prepareLawPayload: async () => {
+        throw new ClientError("FMX not found", 404, "fmx_not_found");
+      },
       fetchAndParseHtmlLaw: async (celex, lang) => ({
         celex,
         lang,
@@ -378,15 +463,106 @@ test("AI-backed static routes require their own OpenRouter key or the shared fal
     const handler = app.routes.get("/api/laws/:celex/summary");
     const res = createResponseRecorder();
 
-    await handler({
-      params: { celex: "32016R0679" },
-      query: { lang: "ENG", skipFmxProbe: "1" },
-    }, res);
+    let fetchCalled = false;
+    const originalFetch = global.fetch;
+    global.fetch = async () => {
+      fetchCalled = true;
+      throw new Error("network disabled in test");
+    };
 
-    assert.equal(res.statusCode, 503);
-    assert.equal(res.payload.code, "missing_api_key");
-    assert.match(res.payload.message, /OPENROUTER_API_KEY/);
+    try {
+      await handler({
+        params: { celex: "32016R0679" },
+        query: { lang: "ENG" },
+      }, res);
+    } finally {
+      global.fetch = originalFetch;
+    }
+
+    // With the guard bug, getSource() re-throws the 404 from
+    // prepareLawPayload instead of swallowing it, so the handler would
+    // respond 404 here instead of falling through to the HTML parse and
+    // reaching the (stubbed) chat call.
+    assert.ok(fetchCalled, "Expected the summary pipeline to fall through to HTML parsing and reach the chat call");
+    assert.equal(res.statusCode, 500);
   });
+});
+
+test("Case-law-digest routes fail fast without an OpenRouter key, before resolving/parsing the law", async () => {
+  await withOpenRouterEnv({}, async () => {
+    let resolveParsedLawCalled = false;
+    const { app } = registerTestRoutes({
+      resolveParsedLaw: async () => {
+        resolveParsedLawCalled = true;
+        throw new Error("resolveParsedLaw should not be called without an API key");
+      },
+    });
+
+    const articleHandler = app.routes.get("/api/laws/:celex/articles/:n/case-law-digest");
+    const articleRes = createResponseRecorder();
+    await articleHandler({
+      params: { celex: "32016R0679", n: "5" },
+      query: { lang: "ENG" },
+    }, articleRes);
+
+    assert.equal(articleRes.statusCode, 503);
+    assert.equal(articleRes.payload.code, "openrouter_unconfigured");
+    assert.equal(resolveParsedLawCalled, false);
+
+    const digestHandler = app.routes.get("/api/laws/:celex/case-law-digest");
+    const digestRes = createResponseRecorder();
+    await digestHandler({
+      params: { celex: "32016R0679" },
+      query: { lang: "ENG" },
+    }, digestRes);
+
+    assert.equal(digestRes.statusCode, 503);
+    assert.equal(digestRes.payload.code, "openrouter_unconfigured");
+    assert.equal(resolveParsedLawCalled, false);
+  });
+});
+
+test("GET /api/_stats requires the header token and rejects the query-param form", async () => {
+  const previousToken = process.env.ANALYTICS_TOKEN;
+  try {
+    delete process.env.ANALYTICS_TOKEN;
+    const { app: appWithoutToken } = registerTestRoutes();
+    const noTokenHandler = appWithoutToken.routes.get("/api/_stats");
+    const noTokenRes = createResponseRecorder();
+    await noTokenHandler({ headers: {}, query: {} }, noTokenRes);
+    assert.equal(noTokenRes.statusCode, 404);
+
+    process.env.ANALYTICS_TOKEN = "secret-token";
+    const { app } = registerTestRoutes({
+      analytics: { getStats: () => ({ ok: true }) },
+    });
+    const handler = app.routes.get("/api/_stats");
+
+    const missingHeaderRes = createResponseRecorder();
+    await handler({ headers: {}, query: {} }, missingHeaderRes);
+    assert.equal(missingHeaderRes.statusCode, 401);
+
+    // The query-param fallback must no longer grant access, even though the
+    // token value is correct, since it leaks into access/proxy logs.
+    const queryParamRes = createResponseRecorder();
+    await handler({ headers: {}, query: { token: "secret-token" } }, queryParamRes);
+    assert.equal(queryParamRes.statusCode, 401);
+
+    const wrongHeaderRes = createResponseRecorder();
+    await handler({ headers: { "x-analytics-token": "wrong-token" }, query: {} }, wrongHeaderRes);
+    assert.equal(wrongHeaderRes.statusCode, 401);
+
+    const okRes = createResponseRecorder();
+    await handler({ headers: { "x-analytics-token": "secret-token" }, query: {} }, okRes);
+    assert.equal(okRes.statusCode, 200);
+    assert.deepEqual(okRes.payload, { ok: true });
+  } finally {
+    if (previousToken === undefined) {
+      delete process.env.ANALYTICS_TOKEN;
+    } else {
+      process.env.ANALYTICS_TOKEN = previousToken;
+    }
+  }
 });
 
 test("GET /api/resolve-url returns cache-backed ELI resolution", async () => {

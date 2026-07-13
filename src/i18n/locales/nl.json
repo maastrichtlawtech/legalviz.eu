@@ -21,7 +21,10 @@
     "articles": "Artikelen",
     "recitals": "Overwegingen",
     "annexes": "Bijlagen",
-    "noSelection": "Geen selectie"
+    "noSelection": "Geen selectie",
+    "beta": "bèta",
+    "ai": "AI",
+    "noneFoundSuffix": "— geen gevonden"
   },
   "seo": {
     "defaultDescription": "Interactieve visualisatie van EU-wetgeving. Navigeer gemakkelijk door artikelen, preambules en bijlagen.",
@@ -183,6 +186,33 @@
     "description": "Deze preambules lijken gerelateerd te zijn aan dit artikel op basis van tekstanalyse met behulp van eenvoudige AI (<a href=\"https://ebooks.iospress.nl/volumearticle/56169\" target=\"_blank\" rel=\"noopener noreferrer\">TF-IDF gelijkenis</a> (Nanda et al.)). Gesorteerd op relevantiescore.",
     "match": "{score}% overeenkomst",
     "read": "Lees →"
+  },
+  "relatedCaseLaw": {
+    "title": "Gerelateerde rechtspraak",
+    "loading": "Bezig met laden",
+    "showAllJudgments": "Toon alle {count} arresten",
+    "noMatchPrefix": "Aan dit artikel is nog geen rechtspraak gekoppeld. {count} {judgmentWord} deze wet als geheel — open",
+    "judgmentInterprets": "arrest van het HvJ-EU interpreteert",
+    "judgmentsInterpret": "arresten van het HvJ-EU interpreteren",
+    "sidebarLabel": "Rechtspraak",
+    "noMatchSuffix": "in de zijbalk voor de volledige lijst en een door AI gegenereerde samenvatting."
+  },
+  "caseLawDigest": {
+    "generate": "Samenvatting van rechtspraak genereren",
+    "generating": "Samenvatting van rechtspraak wordt gegenereerd",
+    "unavailable": "Samenvatting van rechtspraak is nog niet beschikbaar.",
+    "generatedOn": "Statische samenvatting gegenereerd op {date}",
+    "fromCache": "uit de cache"
+  },
+  "caseLawCard": {
+    "expandDecision": "Beslissing uitklappen",
+    "collapse": "Inklappen",
+    "readFullJudgment": "Volledig arrest lezen",
+    "decisionLabel": "Beslissing:",
+    "moreArticles": "+{count} meer"
+  },
+  "caseLawModal": {
+    "showMore": "Toon {count} meer ({remaining} resterend)"
   },
   "crossReferences": {
     "title": "Kruisverwijzingen",

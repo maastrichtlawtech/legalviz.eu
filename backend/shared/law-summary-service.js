@@ -1,10 +1,17 @@
+const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
-const crypto = require('crypto');
-
 const { chatComplete } = require('./openrouter-chat');
 const { ACT_CELEX_MAP } = require('./law-queries');
 const { inferTypeFromCelex } = require('../search/search-ranking');
+const {
+  stripTags,
+  normalizeText,
+  stableHash,
+  makeSingleFlight,
+  loadCache,
+  saveCache,
+} = require('./ai-digest-utils');
 
 const CACHE_FILE = 'law-summary-cache-v1.json';
 const CACHE_VERSION = 1;
@@ -23,7 +30,7 @@ const ACT_TYPE_GUIDANCE = {
   unknown: 'The act type could not be determined: frame key points generically as obligations, rights, powers, or prohibitions as best supported by the text.',
 };
 
-const inFlight = new Map();
+const withSingleFlight = makeSingleFlight();
 
 function buildSystemPrompt(actType) {
   const guidance = ACT_TYPE_GUIDANCE[actType] || ACT_TYPE_GUIDANCE.unknown;
@@ -52,18 +59,8 @@ Rules:
 - Do not invent article numbers, CELEX identifiers, instruments, obligations, or legal effects.`;
 }
 
-function stripTags(value) {
-  return String(value || '')
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/&nbsp;|&#160;/g, ' ')
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
+// Sentence-boundary-aware truncation, specific to the summary feature (the
+// digest features use the plain clip in ai-digest-utils).
 function clip(value, maxChars) {
   const text = stripTags(value);
   if (text.length <= maxChars) return text;
@@ -88,36 +85,37 @@ function cacheKey(celex, lang) {
   return `${String(celex || '').toUpperCase()}_${String(lang || 'ENG').toUpperCase()}`;
 }
 
-function stableHash(value) {
-  return crypto.createHash('sha256').update(JSON.stringify(value)).digest('hex');
+function rawSourceHash(text) {
+  return crypto.createHash('sha256').update(String(text ?? ''), 'utf8').digest('hex');
 }
 
-function withSingleFlight(key, factory) {
-  if (inFlight.has(key)) return inFlight.get(key);
-  const promise = Promise.resolve()
-    .then(factory)
-    .finally(() => inFlight.delete(key));
-  inFlight.set(key, promise);
-  return promise;
+/**
+ * Resolve a cache-entry sourceFile back to an absolute path, rejecting
+ * anything that would escape the cache directory (entries come from our own
+ * cache file, but it lives on disk and could be edited).
+ */
+function resolveSourceFilePath(cacheDir, sourceFile) {
+  if (!cacheDir || !sourceFile) return null;
+  const resolved = path.resolve(cacheDir, sourceFile);
+  if (!resolved.startsWith(path.resolve(cacheDir) + path.sep)) return null;
+  return resolved;
 }
 
-function loadCache(cacheDir) {
-  try {
-    const filePath = path.join(cacheDir, CACHE_FILE);
-    if (!fs.existsSync(filePath)) return {};
-    const parsed = JSON.parse(fs.readFileSync(filePath, 'utf8'));
-    return parsed && typeof parsed === 'object' ? parsed : {};
-  } catch {
-    return {};
-  }
+function isServableEntry(entry, model) {
+  return entry?.version === CACHE_VERSION
+    && entry?.schemaVersion === SCHEMA_VERSION
+    && entry?.promptVersion === PROMPT_VERSION
+    && entry?.model === model
+    && Boolean(entry?.summary);
 }
 
-function saveCache(cacheDir, cache) {
-  fs.mkdirSync(cacheDir, { recursive: true });
-  const filePath = path.join(cacheDir, CACHE_FILE);
-  const tempPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
-  fs.writeFileSync(tempPath, JSON.stringify(cache, null, 2), 'utf8');
-  fs.renameSync(tempPath, filePath);
+function cachedResult(entry) {
+  return {
+    summary: entry.summary,
+    model: entry.model,
+    generatedAt: entry.generatedAt || null,
+    cached: true,
+  };
 }
 
 function findKnownCelex(label, actCelexMap = ACT_CELEX_MAP) {
@@ -235,11 +233,6 @@ function normalizeCitations(value, validArticles) {
     .filter((citation) => validArticles.has(citation))));
 }
 
-function normalizeText(value, maxChars = 1200) {
-  const text = stripTags(value);
-  return text.length > maxChars ? `${text.slice(0, maxChars).trim()}...` : text;
-}
-
 function normalizeCitedBlock(value, validArticles, { requireCitation = false } = {}) {
   const block = value && typeof value === 'object'
     ? value
@@ -350,36 +343,82 @@ async function generateLawSummary(input, {
   };
 }
 
+/**
+ * Return a validated summary for a law, generating (and caching) it only when
+ * needed. Callers can pass either an already-parsed law (`parsedLaw`) or lazy
+ * providers so that a cache hit never pays for source resolution or parsing:
+ *
+ * - `getSource()` resolves the raw law source and returns
+ *   `{ rawText, sourceFile }` (or null to defer entirely to `getParsedLaw`).
+ *   `sourceFile` is a cacheDir-relative path remembered in the cache entry.
+ * - `getParsedLaw(rawText)` parses the law; `rawText` is the source text from
+ *   `getSource()` when available, otherwise null.
+ *
+ * Cache validation is layered from cheapest to most expensive: a stored
+ * rawHash matching the bytes of the remembered source file (no parse), then a
+ * rawHash match against freshly resolved source text (no parse), then the
+ * sourceHash of the parsed summary input (parse, but no model call).
+ */
 async function ensureLawSummary({
   celex,
   lang,
   parsedLaw,
+  getSource,
+  getParsedLaw,
   cacheDir,
   apiKey,
   model,
   chatComplete: chatCompleteImpl = chatComplete,
 } = {}) {
-  const input = buildLawSummaryInput(parsedLaw);
-  const sourceHash = stableHash(input);
-  const key = cacheKey(celex || input.celex, lang || input.lang);
+  const key = cacheKey(celex || parsedLaw?.celex, lang || parsedLaw?.lang);
 
-  return withSingleFlight(`law-summary:${key}:${sourceHash}:${model}`, async () => {
-    const cache = cacheDir ? loadCache(cacheDir) : {};
+  return withSingleFlight(`law-summary:${key}:${model}`, async () => {
+    const cache = cacheDir ? loadCache(cacheDir, CACHE_FILE) : {};
     const cached = cache[key];
-    if (
-      cached?.version === CACHE_VERSION
-      && cached?.schemaVersion === SCHEMA_VERSION
-      && cached?.promptVersion === PROMPT_VERSION
-      && cached?.sourceHash === sourceHash
-      && cached?.model === model
-      && cached?.summary
-    ) {
-      return {
-        summary: cached.summary,
-        model: cached.model,
-        generatedAt: cached.generatedAt || null,
-        cached: true,
-      };
+    const servable = isServableEntry(cached, model);
+
+    // Fast path: the cache entry remembers which source file it was built
+    // from; if those bytes are unchanged the summary is current, with no
+    // upstream lookup and no Formex parse.
+    if (servable && cached.rawHash) {
+      const sourceFilePath = resolveSourceFilePath(cacheDir, cached.sourceFile);
+      if (sourceFilePath && fs.existsSync(sourceFilePath)) {
+        try {
+          if (rawSourceHash(fs.readFileSync(sourceFilePath, 'utf8')) === cached.rawHash) {
+            return cachedResult(cached);
+          }
+        } catch {
+          // Unreadable file: fall through to the slower paths.
+        }
+      }
+    }
+
+    const source = !parsedLaw && typeof getSource === 'function' ? await getSource() : null;
+    const rawHash = source?.rawText != null ? rawSourceHash(source.rawText) : null;
+
+    // The source was re-resolved but its bytes are unchanged: still no parse
+    // needed. Refresh the remembered file name if it moved.
+    if (servable && rawHash && cached.rawHash === rawHash) {
+      if (cacheDir && cached.sourceFile !== (source.sourceFile || null)) {
+        cache[key] = { ...cached, sourceFile: source.sourceFile || null };
+        saveCache(cacheDir, CACHE_FILE, cache);
+      }
+      return cachedResult(cached);
+    }
+
+    const parsed = parsedLaw || await getParsedLaw(source ? source.rawText : null);
+    const input = buildLawSummaryInput(parsed);
+    const sourceHash = stableHash(input);
+
+    if (servable && cached.sourceHash === sourceHash) {
+      // Same parsed input: adopt the raw-source fingerprint so the next
+      // request can take the fast path without re-parsing. This also
+      // migrates entries written before rawHash/sourceFile existed.
+      if (cacheDir && rawHash && (cached.rawHash !== rawHash || cached.sourceFile !== (source.sourceFile || null))) {
+        cache[key] = { ...cached, rawHash, sourceFile: source.sourceFile || null };
+        saveCache(cacheDir, CACHE_FILE, cache);
+      }
+      return cachedResult(cache[key] || cached);
     }
 
     const generated = await generateLawSummary(input, { apiKey, model, chatComplete: chatCompleteImpl });
@@ -389,11 +428,13 @@ async function ensureLawSummary({
         schemaVersion: SCHEMA_VERSION,
         promptVersion: PROMPT_VERSION,
         sourceHash,
+        rawHash,
+        sourceFile: source?.sourceFile || null,
         model: generated.model || model,
         generatedAt: new Date().toISOString(),
         summary: generated.summary,
       };
-      saveCache(cacheDir, cache);
+      saveCache(cacheDir, CACHE_FILE, cache);
     }
 
     return {
@@ -414,4 +455,5 @@ module.exports = {
   ensureLawSummary,
   generateLawSummary,
   parseLawSummaryJson,
+  rawSourceHash,
 };

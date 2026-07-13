@@ -2,6 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const { createAnalytics } = require('./analytics');
+const { CASE_LAW_CACHE_FILE } = require('./law-queries');
 
 // Drive the finish handler the way Express would.
 function hit(analytics, req) {
@@ -62,4 +63,45 @@ test('persists channel counters across a flush/reload cycle', () => {
   assert.equal(stats.channels.mcp, 1);
   assert.equal(stats.channels.web, 1);
   second.shutdown();
+});
+
+test('getStats reads case-law cache stats from the current (v4) cache filename', () => {
+  const os = require('node:os');
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const cacheDir = fs.mkdtempSync(path.join(os.tmpdir(), 'analytics-caselaw-'));
+
+  assert.equal(CASE_LAW_CACHE_FILE, 'case-law-cache-v4.json');
+  fs.writeFileSync(
+    path.join(cacheDir, CASE_LAW_CACHE_FILE),
+    JSON.stringify({
+      '62016CJ0001': { name: 'Case 1', declarations: ['x'] },
+      '62016CJ0002': { name: null, declarations: [] },
+    }),
+    'utf8'
+  );
+
+  const analytics = createAnalytics({ cacheDir });
+  const stats = analytics.getStats();
+  assert.deepEqual(stats.caseLawCache, { total: 2, partial: 1, failedRecently: 0 });
+  analytics.shutdown();
+});
+
+test('getClientIp prefers req.ip and falls back to the socket address', () => {
+  const analytics = createAnalytics({});
+  hit(analytics, baseReq({
+    path: '/api/x',
+    route: { path: '/api/x' },
+    ip: '203.0.113.5',
+    headers: { 'x-forwarded-for': '10.0.0.1' }, // client-supplied header must be ignored
+  }));
+  hit(analytics, baseReq({
+    path: '/api/y',
+    route: { path: '/api/y' },
+    socket: { remoteAddress: '198.51.100.9' },
+  }));
+
+  const stats = analytics.getStats();
+  assert.equal(stats.today.uniqueUsers, 2);
+  analytics.shutdown();
 });

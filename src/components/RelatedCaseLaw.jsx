@@ -15,6 +15,7 @@ function formatDate(isoDate) {
 }
 
 function CaseCard({ c, currentLang }) {
+  const { t } = useI18n();
   const [expanded, setExpanded] = useState(false);
   const eurlexUrl = `https://eur-lex.europa.eu/legal-content/${currentLang || "EN"}/TXT/?uri=CELEX:${c.celex}`;
   const dateLabel = formatDate(c.date);
@@ -47,7 +48,7 @@ function CaseCard({ c, currentLang }) {
               </p>
               <span className="mt-0.5 inline-flex items-center gap-0.5 text-[10px] font-medium text-teal-600 dark:text-teal-400 hover:text-teal-800 dark:hover:text-teal-300">
                 <ChevronDown size={10} />
-                Expand decision
+                {t("caseLawCard.expandDecision")}
               </span>
             </button>
           ) : (
@@ -66,7 +67,7 @@ function CaseCard({ c, currentLang }) {
                 className="mt-1 inline-flex items-center gap-0.5 text-[10px] font-medium text-teal-600 dark:text-teal-400 hover:text-teal-800 dark:hover:text-teal-300"
               >
                 <ChevronUp size={10} />
-                Collapse
+                {t("caseLawCard.collapse")}
               </button>
             </div>
           )}
@@ -82,7 +83,7 @@ function CaseCard({ c, currentLang }) {
           rel="noopener noreferrer"
           className="ml-auto shrink-0 inline-flex items-center gap-1 rounded-md bg-teal-50 px-2.5 py-1 text-[11px] font-medium text-teal-700 hover:bg-teal-100 transition-colors dark:bg-teal-900/30 dark:text-teal-300 dark:hover:bg-teal-900/50"
         >
-          Read full judgment
+          {t("caseLawCard.readFullJudgment")}
           <ExternalLink size={10} />
         </a>
       </div>
@@ -117,18 +118,40 @@ export function RelatedCaseLaw({ celex, articleNumber, currentLang = "EN" }) {
           <span className="flex min-w-0 items-center gap-2">
             <Scale size={16} className="shrink-0 text-teal-700 dark:text-teal-300" />
             <span className="font-semibold text-gray-900 dark:text-gray-100">{title}</span>
-            <span className="rounded bg-teal-200 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-teal-800 dark:bg-teal-800 dark:text-teal-200">beta</span>
+            <span className="rounded bg-teal-200 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-teal-800 dark:bg-teal-800 dark:text-teal-200">{t("common.beta")}</span>
           </span>
           <span className="flex shrink-0 items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
             <Loader2 size={14} className="animate-spin" />
-            Loading
+            {t("relatedCaseLaw.loading")}
           </span>
         </div>
       </div>
     );
   }
 
-  if (!loaded || matching.length === 0) return null;
+  if (!loaded) return null;
+
+  // No judgment maps to this specific article. If the law has case law overall,
+  // say so — otherwise the section silently vanishing looks like a broken
+  // feature rather than a genuine "nothing here yet".
+  if (matching.length === 0) {
+    const total = cases?.length || 0;
+    if (total === 0) return null;
+    return (
+      <div className="mt-6 px-6 md:px-12">
+        <div className="flex flex-wrap items-center gap-2 border-y border-gray-200 py-3 text-sm dark:border-gray-800">
+          <Scale size={16} className="shrink-0 text-gray-400 dark:text-gray-500" />
+          <span className="text-gray-500 dark:text-gray-400">
+            {t("relatedCaseLaw.noMatchPrefix", {
+              count: total,
+              judgmentWord: total === 1 ? t("relatedCaseLaw.judgmentInterprets") : t("relatedCaseLaw.judgmentsInterpret"),
+            })}{" "}
+            <span className="font-medium text-gray-700 dark:text-gray-300">{t("relatedCaseLaw.sidebarLabel")}</span> {t("relatedCaseLaw.noMatchSuffix")}
+          </span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="mt-6 px-6 md:px-12">
@@ -139,7 +162,7 @@ export function RelatedCaseLaw({ celex, articleNumber, currentLang = "EN" }) {
           <span className="rounded-full bg-teal-100 px-2.5 py-0.5 text-sm font-medium text-teal-800 dark:bg-teal-900/40 dark:text-teal-200">
             {matching.length}
           </span>
-          <span className="rounded bg-teal-200 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-teal-800 dark:bg-teal-800 dark:text-teal-200">beta</span>
+          <span className="rounded bg-teal-200 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-teal-800 dark:bg-teal-800 dark:text-teal-200">{t("common.beta")}</span>
         </span>
       </div>
 
@@ -158,10 +181,10 @@ export function RelatedCaseLaw({ celex, articleNumber, currentLang = "EN" }) {
         >
           <span className="inline-flex min-w-0 items-center gap-2 font-medium text-gray-700 dark:text-gray-300">
             <Sparkles size={14} className="shrink-0 text-teal-700 dark:text-teal-300" />
-            <span>Generate case-law digest</span>
+            <span>{t("caseLawDigest.generate")}</span>
           </span>
           <span className="shrink-0 rounded bg-teal-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-teal-800 dark:bg-teal-900/50 dark:text-teal-200">
-            AI
+            {t("common.ai")}
           </span>
         </button>
       )}
@@ -172,7 +195,7 @@ export function RelatedCaseLaw({ celex, articleNumber, currentLang = "EN" }) {
         aria-expanded={isListOpen}
         onClick={() => setIsListOpen((current) => !current)}
       >
-        <span className="font-medium text-gray-700 dark:text-gray-300">Show all {matching.length} judgments</span>
+        <span className="font-medium text-gray-700 dark:text-gray-300">{t("relatedCaseLaw.showAllJudgments", { count: matching.length })}</span>
         <span className="shrink-0 text-gray-500 dark:text-gray-400">
           {isListOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
         </span>

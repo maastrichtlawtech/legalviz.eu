@@ -1,5 +1,5 @@
 function getIp(req) {
-  return req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket.remoteAddress || 'unknown';
+  return req.ip || req.socket?.remoteAddress || 'unknown';
 }
 
 function createRateLimitMiddleware(options = {}) {
@@ -25,13 +25,15 @@ function createRateLimitMiddleware(options = {}) {
     next();
   }
 
-  setInterval(() => {
+  const cleanupInterval = setInterval(() => {
     const now = Date.now();
     for (const [ip, record] of ipRequests) {
       if (now > record.resetAt) ipRequests.delete(ip);
     }
   }, 5 * 60 * 1000);
+  cleanupInterval.unref();
 
+  middleware.close = () => clearInterval(cleanupInterval);
   return middleware;
 }
 

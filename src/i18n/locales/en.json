@@ -21,12 +21,16 @@
     "articles": "Articles",
     "recitals": "Recitals",
     "annexes": "Annexes",
-    "noSelection": "No selection"
+    "noSelection": "No selection",
+    "beta": "beta",
+    "ai": "AI",
+    "noneFoundSuffix": "— none found"
   },
   "seo": {
     "defaultDescription": "Read EU laws like the GDPR, AI Act, DMA, DSA and Data Act with ease. Navigate articles, recitals, annexes and cross-references, side by side.",
     "defaultKeywords": "EU law, GDPR, AI Act, DMA, DSA, Data Act, read EU law, EU regulation reader, legal tech",
-    "landingDescription": "Read EU laws like the GDPR, AI Act, DMA, DSA and Data Act with ease. Navigate articles, recitals, annexes and cross-references, side by side."
+    "landingDescription": "Read EU laws like the GDPR, AI Act, DMA, DSA and Data Act with ease. Navigate articles, recitals, annexes and cross-references, side by side.",
+    "itemDescription": "Read {kind} {id} of {law} on {app}."
   },
   "error": {
     "somethingWentWrong": "Something went wrong",
@@ -155,7 +159,8 @@
     "addFromUrl": "Add from URL",
     "invalidEurlexUrl": "Enter a valid EUR-Lex URL.",
     "importResolveFailed": "This EUR-Lex page could not be resolved to a law LegalViz can open.",
-    "extensionInline": "Or install our extension to open any law directly from EUR-Lex by clicking the extension icon, without copying URLs:"
+    "extensionInline": "Or install our extension to open any law directly from EUR-Lex by clicking the extension icon, without copying URLs:",
+    "orConjunction": " or "
   },
   "resetFooter": {
     "title": "Something isn't working?",
@@ -187,7 +192,31 @@
     "read": "Read →"
   },
   "relatedCaseLaw": {
-    "title": "Related case law"
+    "title": "Related case law",
+    "loading": "Loading",
+    "showAllJudgments": "Show all {count} judgments",
+    "noMatchPrefix": "No case law maps to this article yet. {count} CJEU {judgmentWord} this law overall — open",
+    "judgmentInterprets": "judgment interprets",
+    "judgmentsInterpret": "judgments interpret",
+    "sidebarLabel": "Case law",
+    "noMatchSuffix": "in the sidebar for the full list and an AI digest."
+  },
+  "caseLawDigest": {
+    "generate": "Generate case-law digest",
+    "generating": "Generating case-law digest",
+    "unavailable": "Case-law digest is not available yet.",
+    "generatedOn": "Static digest generated {date}",
+    "fromCache": "from cache"
+  },
+  "caseLawCard": {
+    "expandDecision": "Expand decision",
+    "collapse": "Collapse",
+    "readFullJudgment": "Read full judgment",
+    "decisionLabel": "Decision:",
+    "moreArticles": "+{count} more"
+  },
+  "caseLawModal": {
+    "showMore": "Show {count} more ({remaining} remaining)"
   },
   "crossReferences": {
     "title": "Cross-References",
@@ -253,6 +282,7 @@
     "eea": "EEA relevant",
     "yes": "Yes",
     "implementingActs": "Implementing / Delegated Acts",
+    "implDelBadge": "Impl/Del",
     "caseLaw": "CJEU Case Law",
     "caseLawSearchPlaceholder": "Search by party, case number, or article…",
     "caseLawNoResults": "No cases match your search."

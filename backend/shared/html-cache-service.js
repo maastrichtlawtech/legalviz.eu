@@ -48,12 +48,11 @@ function createHtmlCacheService({ CACHE_DIR, STORAGE_LIMIT_MB }) {
   }
 
   function evictOldestIfNeeded(requiredMB) {
-    const currentMB = getCacheSizeMB();
+    const files = getCacheFiles();
+    const currentMB = files.reduce((sum, f) => sum + f.size, 0) / (1024 * 1024);
     if (currentMB + requiredMB <= STORAGE_LIMIT_MB) {
       return { evicted: 0 };
     }
-
-    const files = getCacheFiles();
     let freedMB = 0;
     let evicted = 0;
     const targetMB = currentMB + requiredMB - STORAGE_LIMIT_MB;

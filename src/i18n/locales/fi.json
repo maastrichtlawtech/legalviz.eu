@@ -21,7 +21,10 @@
     "articles": "Artiklat",
     "recitals": "Johdanto-osan kappaleet",
     "annexes": "Liitteet",
-    "noSelection": "Ei valintaa"
+    "noSelection": "Ei valintaa",
+    "beta": "beta",
+    "ai": "tekoäly",
+    "noneFoundSuffix": "— ei löytynyt yhtään"
   },
   "seo": {
     "defaultDescription": "EU-lakien interaktiivinen visualisointi. Siirry artikkeleihin, johdantoihin ja liitteisiin helposti.",
@@ -183,6 +186,33 @@
     "description": "Nämä johdannot näyttävät liittyvän tähän artiklaan tekstin analyysiin perustuvalla yksinkertaisella tekoälyllä (<a href=\"https://ebooks.iospress.nl/volumearticle/56169\" target=\"_blank\" rel=\"noopener noreferrer\">TF-IDF samankaltaisuus</a> (Nanda et al.)). Lajiteltu merkityksen perusteella.",
     "match": "{score}% osuma",
     "read": "Lue →"
+  },
+  "relatedCaseLaw": {
+    "title": "Aiheeseen liittyvä oikeuskäytäntö",
+    "loading": "Ladataan",
+    "showAllJudgments": "Näytä kaikki {count} tuomiota",
+    "noMatchPrefix": "Tähän artiklaan ei ole vielä liitetty oikeuskäytäntöä. {count} {judgmentWord} tätä säädöstä kokonaisuutena — avaa",
+    "judgmentInterprets": "EU-tuomioistuimen tuomio tulkitsee",
+    "judgmentsInterpret": "EU-tuomioistuimen tuomiot tulkitsevat",
+    "sidebarLabel": "Oikeuskäytäntö",
+    "noMatchSuffix": "sivupalkista nähdäksesi koko luettelon ja tekoälyn laatiman yhteenvedon."
+  },
+  "caseLawDigest": {
+    "generate": "Luo oikeuskäytäntöyhteenveto",
+    "generating": "Luodaan oikeuskäytäntöyhteenvetoa",
+    "unavailable": "Oikeuskäytäntöyhteenveto ei ole vielä saatavilla.",
+    "generatedOn": "Staattinen yhteenveto luotu {date}",
+    "fromCache": "välimuistista"
+  },
+  "caseLawCard": {
+    "expandDecision": "Laajenna ratkaisu",
+    "collapse": "Supista",
+    "readFullJudgment": "Lue koko tuomio",
+    "decisionLabel": "Ratkaisu:",
+    "moreArticles": "+{count} lisää"
+  },
+  "caseLawModal": {
+    "showMore": "Näytä {count} lisää ({remaining} jäljellä)"
   },
   "crossReferences": {
     "title": "Ristiviitteet",

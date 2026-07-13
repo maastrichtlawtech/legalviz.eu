@@ -21,7 +21,10 @@
     "articles": "Članci",
     "recitals": "Uvodne izjave",
     "annexes": "Prilozi",
-    "noSelection": "Nema odabira"
+    "noSelection": "Nema odabira",
+    "beta": "beta",
+    "ai": "UI",
+    "noneFoundSuffix": "— nije pronađeno"
   },
   "seo": {
     "defaultDescription": "Interaktivna vizualizacija EU zakona. Navigirajte člancima, preamblama i prilozima s lakoćom.",
@@ -183,6 +186,33 @@
     "description": "Čini se da su ove preamble povezane s ovim člankom na osnovi analize teksta koristeći jednostavnu AI (<a href=\"https://ebooks.iospress.nl/volumearticle/56169\" target=\"_blank\" rel=\"noopener noreferrer\">TF-IDF sličnost</a> (Nanda et al.)). Sortirano po rezultatu relevantnosti.",
     "match": "{score}% podudaranje",
     "read": "Čitaj →"
+  },
+  "relatedCaseLaw": {
+    "title": "Povezana sudska praksa",
+    "loading": "Učitavanje",
+    "showAllJudgments": "Prikaži svih {count} presuda",
+    "noMatchPrefix": "Ovom članku još nije pridružena sudska praksa. {count} {judgmentWord} ovaj propis u cjelini — otvorite",
+    "judgmentInterprets": "presuda Suda EU-a tumači",
+    "judgmentsInterpret": "presude Suda EU-a tumače",
+    "sidebarLabel": "Sudska praksa",
+    "noMatchSuffix": "na bočnoj traci za cijeli popis i sažetak izrađen UI-jem."
+  },
+  "caseLawDigest": {
+    "generate": "Generiraj sažetak sudske prakse",
+    "generating": "Generiranje sažetka sudske prakse",
+    "unavailable": "Sažetak sudske prakse još nije dostupan.",
+    "generatedOn": "Statički sažetak generiran {date}",
+    "fromCache": "iz predmemorije"
+  },
+  "caseLawCard": {
+    "expandDecision": "Proširi odluku",
+    "collapse": "Sažmi",
+    "readFullJudgment": "Pročitaj cijelu presudu",
+    "decisionLabel": "Odluka:",
+    "moreArticles": "+{count} više"
+  },
+  "caseLawModal": {
+    "showMore": "Prikaži još {count} (preostalo {remaining})"
   },
   "crossReferences": {
     "title": "Kereszt-referencije",

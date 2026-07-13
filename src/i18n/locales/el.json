@@ -21,7 +21,10 @@
     "articles": "Άρθρα",
     "recitals": "Αιτιολογικές σκέψεις",
     "annexes": "Παραρτήματα",
-    "noSelection": "Καμία επιλογή"
+    "noSelection": "Καμία επιλογή",
+    "beta": "beta",
+    "ai": "ΤΝ",
+    "noneFoundSuffix": "— δεν βρέθηκαν"
   },
   "seo": {
     "defaultDescription": "Διαδραστική απεικόνιση νομοθεσίας της ΕΕ. Περιηγηθείτε σε άρθρα, ψηφίσματα και παραρτήματα με ευκολία.",
@@ -183,6 +186,33 @@
     "description": "Αυτά τα ψηφίσματα φαίνεται να σχετίζονται με αυτό το άρθρο με βάση την ανάλυση κειμένου χρησιμοποιώντας απλή AI (<a href=\"https://ebooks.iospress.nl/volumearticle/56169\" target=\"_blank\" rel=\"noopener noreferrer\">ομοιότητα TF-IDF</a> (Nanda et al.)). Ταξινομημένα κατά βαθμό συνάφειας.",
     "match": "{score}% αντιστοιχία",
     "read": "Ανάγνωση →"
+  },
+  "relatedCaseLaw": {
+    "title": "Σχετική νομολογία",
+    "loading": "Φόρτωση",
+    "showAllJudgments": "Εμφάνιση όλων των {count} αποφάσεων",
+    "noMatchPrefix": "Δεν έχει συσχετιστεί ακόμη νομολογία με αυτό το άρθρο. {count} {judgmentWord} συνολικά αυτόν τον νόμο — ανοίξτε",
+    "judgmentInterprets": "απόφαση του ΔΕΕ ερμηνεύει",
+    "judgmentsInterpret": "αποφάσεις του ΔΕΕ ερμηνεύουν",
+    "sidebarLabel": "Νομολογία",
+    "noMatchSuffix": "στην πλαϊνή στήλη για την πλήρη λίστα και μια σύνοψη με ΤΝ."
+  },
+  "caseLawDigest": {
+    "generate": "Δημιουργία σύνοψης νομολογίας",
+    "generating": "Δημιουργία σύνοψης νομολογίας σε εξέλιξη",
+    "unavailable": "Η σύνοψη νομολογίας δεν είναι ακόμη διαθέσιμη.",
+    "generatedOn": "Στατική σύνοψη δημιουργήθηκε στις {date}",
+    "fromCache": "από την κρυφή μνήμη"
+  },
+  "caseLawCard": {
+    "expandDecision": "Ανάπτυξη απόφασης",
+    "collapse": "Σύμπτυξη",
+    "readFullJudgment": "Ανάγνωση πλήρους απόφασης",
+    "decisionLabel": "Απόφαση:",
+    "moreArticles": "+{count} ακόμη"
+  },
+  "caseLawModal": {
+    "showMore": "Εμφάνιση {count} ακόμη (απομένουν {remaining})"
   },
   "crossReferences": {
     "title": "Διασταυρούμενες Αναφορές",

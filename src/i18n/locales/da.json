@@ -21,7 +21,10 @@
     "articles": "Artikler",
     "recitals": "Betragtninger",
     "annexes": "Bilag",
-    "noSelection": "Intet valgt"
+    "noSelection": "Intet valgt",
+    "beta": "beta",
+    "ai": "AI",
+    "noneFoundSuffix": "— ingen fundet"
   },
   "seo": {
     "defaultDescription": "Interaktiv visualisering af EU-lovgivning. Naviger artikler, præambler og bilag med lethed.",
@@ -183,6 +186,33 @@
     "description": "Disse præambler ser ud til at være relateret til denne artikel baseret på tekstanalyse ved hjælp af simpel AI (<a href=\"https://ebooks.iospress.nl/volumearticle/56169\" target=\"_blank\" rel=\"noopener noreferrer\">TF-IDF lighed</a> (Nanda et al.)). Sorteret efter relevans score.",
     "match": "{score}% overensstemmelse",
     "read": "Læs →"
+  },
+  "relatedCaseLaw": {
+    "title": "Relateret retspraksis",
+    "loading": "Indlæser",
+    "showAllJudgments": "Vis alle {count} domme",
+    "noMatchPrefix": "Der er endnu ikke knyttet nogen retspraksis til denne artikel. {count} {judgmentWord} denne lov som helhed — åbn",
+    "judgmentInterprets": "dom fra EU-Domstolen fortolker",
+    "judgmentsInterpret": "domme fra EU-Domstolen fortolker",
+    "sidebarLabel": "Retspraksis",
+    "noMatchSuffix": "i sidepanelet for at se den fulde liste og et AI-resumé."
+  },
+  "caseLawDigest": {
+    "generate": "Generér resumé af retspraksis",
+    "generating": "Genererer resumé af retspraksis",
+    "unavailable": "Resumé af retspraksis er endnu ikke tilgængeligt.",
+    "generatedOn": "Statisk resumé genereret {date}",
+    "fromCache": "fra cache"
+  },
+  "caseLawCard": {
+    "expandDecision": "Udvid afgørelse",
+    "collapse": "Sammenfold",
+    "readFullJudgment": "Læs hele dommen",
+    "decisionLabel": "Afgørelse:",
+    "moreArticles": "+{count} mere"
+  },
+  "caseLawModal": {
+    "showMore": "Vis {count} mere ({remaining} tilbage)"
   },
   "crossReferences": {
     "title": "Krydshenvisninger",

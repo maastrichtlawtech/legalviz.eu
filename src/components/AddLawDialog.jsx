@@ -167,7 +167,7 @@ export function AddLawDialog({
                 >
                   Edge
                 </a>
-                {" or "}
+                {t("landing.orConjunction")}
                 <a
                   href="https://addons.mozilla.org/en-US/firefox/addon/eur-lex-visualiser/"
                   target="_blank"

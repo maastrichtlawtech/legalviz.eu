@@ -1,15 +1,20 @@
+const crypto = require("crypto");
 const fs = require("fs");
+const path = require("path");
 
 const { ClientError } = require("../shared/api-utils");
+const { parseFmxXml } = require("../shared/fmx-parser-node");
 const { createSearchHandler } = require("../search/search-route");
 const { fetchMetadata, fetchAmendments, fetchImplementing, fetchCaseLaw } = require("../shared/law-queries");
 const { ChatProviderError } = require("../shared/openrouter-chat");
 const { ensureRecitalTitles } = require("../shared/recital-title-service");
 const { ensureLawSummary } = require("../shared/law-summary-service");
 const { ensureArticleDigest } = require("../shared/article-digest-service");
+const { ensureCaseLawDigest } = require("../shared/case-law-digest-service");
 
 const DEFAULT_STATIC_SUMMARY_MODEL = process.env.LAW_SUMMARY_MODEL || process.env.ARTICLE_QA_ANSWER_MODEL || process.env.ARTICLE_QA_MODEL || 'google/gemini-2.5-pro';
 const DEFAULT_ARTICLE_DIGEST_MODEL = process.env.ARTICLE_DIGEST_MODEL || process.env.LAW_SUMMARY_MODEL || process.env.ARTICLE_QA_ANSWER_MODEL || process.env.ARTICLE_QA_MODEL || 'google/gemini-2.5-pro';
+const DEFAULT_CASE_LAW_DIGEST_MODEL = process.env.CASE_LAW_DIGEST_MODEL || process.env.ARTICLE_DIGEST_MODEL || process.env.LAW_SUMMARY_MODEL || process.env.ARTICLE_QA_ANSWER_MODEL || process.env.ARTICLE_QA_MODEL || 'google/gemini-2.5-pro';
 const DEFAULT_RECITAL_TITLE_MODEL = process.env.RECITAL_TITLE_MODEL || process.env.ARTICLE_QA_PLANNER_MODEL || process.env.ARTICLE_QA_MODEL || 'google/gemini-2.5-pro';
 
 function getStaticSummaryApiKey() {
@@ -68,9 +73,7 @@ function registerApiRoutes(app, deps) {
   const {
     analytics,
     CELEX_NAMES,
-    EURLEX_BASE,
     FMX_DIR,
-    RATE_LIMIT_MAX,
     RESOLUTION_CACHE_MS,
     cacheGet,
     cacheSet,
@@ -99,8 +102,12 @@ function registerApiRoutes(app, deps) {
   app.get('/api/_stats', rateLimitMiddleware, (req, res) => {
     const token = process.env.ANALYTICS_TOKEN;
     if (!token) return res.status(404).json({ error: 'Not found' });
-    const provided = req.headers['x-analytics-token'] || req.query.token;
-    if (provided !== token) return res.status(401).json({ error: 'Unauthorized' });
+    const provided = String(req.headers['x-analytics-token'] || '');
+    const tokenBuf = Buffer.from(token);
+    const providedBuf = Buffer.from(provided);
+    if (providedBuf.length !== tokenBuf.length || !crypto.timingSafeEqual(providedBuf, tokenBuf)) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
     res.json(analytics.getStats());
   });
 
@@ -388,14 +395,51 @@ function registerApiRoutes(app, deps) {
       // parameter is ignored so other languages cannot trigger generation.
       const lang = 'ENG';
 
-      const parsed = await resolveParsedLaw(celex, lang, { skipFmxProbe: req.query.skipFmxProbe === '1' });
+      const apiKey = getStaticSummaryApiKey();
+      if (!apiKey) {
+        return res.status(503).json({ error: 'OpenRouter API key is not configured', code: 'openrouter_unconfigured' });
+      }
+
+      const skipFmxProbe = req.query.skipFmxProbe === '1';
       const result = await ensureLawSummary({
         celex,
         lang,
-        parsedLaw: parsed,
         cacheDir: FMX_DIR,
-        apiKey: getStaticSummaryApiKey(),
+        apiKey,
         model: DEFAULT_STATIC_SUMMARY_MODEL,
+        // Resolve the raw FMX source without parsing it, so the summary
+        // service can validate its cache against the raw bytes and skip the
+        // (expensive) Formex parse on a hit.
+        getSource: skipFmxProbe ? null : async () => {
+          try {
+            const { servePath } = await prepareLawPayload(celex, lang);
+            return {
+              rawText: fs.readFileSync(servePath, 'utf8'),
+              sourceFile: path.relative(FMX_DIR, servePath),
+            };
+          } catch (err) {
+            if (err instanceof ClientError && err.statusCode === 404) {
+              // No FMX for this law: defer to the HTML fallback in
+              // getParsedLaw, which calls resolveParsedLaw(..., {
+              // skipFmxProbe: true }) and handles the EUR-Lex HTML path.
+              return null;
+            }
+            throw err;
+          }
+        },
+        getParsedLaw: async (rawText) => {
+          if (rawText != null) {
+            return {
+              celex,
+              lang,
+              name: CELEX_NAMES[celex] || null,
+              format: 'combined-v1',
+              source: 'fmx',
+              ...(await parseFmxXml(rawText)),
+            };
+          }
+          return resolveParsedLaw(celex, lang, { skipFmxProbe: true });
+        },
       });
 
       res.json({
@@ -432,6 +476,11 @@ function registerApiRoutes(app, deps) {
         return res.status(400).json({ error: `Invalid language code: ${rawLang}` });
       }
 
+      const apiKey = getStaticSummaryApiKey();
+      if (!apiKey) {
+        return res.status(503).json({ error: 'OpenRouter API key is not configured', code: 'openrouter_unconfigured' });
+      }
+
       const parsed = await resolveParsedLaw(celex, lang, { skipFmxProbe: req.query.skipFmxProbe === '1' });
       const caseLawPayload = await fetchCaseLaw(celex, runSparqlQuery, { cacheDir: FMX_DIR });
       const result = await ensureArticleDigest({
@@ -441,7 +490,7 @@ function registerApiRoutes(app, deps) {
         parsedLaw: parsed,
         caseLawPayload,
         cacheDir: FMX_DIR,
-        apiKey: getStaticSummaryApiKey(),
+        apiKey,
         model: DEFAULT_ARTICLE_DIGEST_MODEL,
       });
 
@@ -464,6 +513,54 @@ function registerApiRoutes(app, deps) {
         return res.status(404).json({ error: err.message, code: 'article_not_found' });
       }
       safeErrorResponse(res, err, 'Failed to generate article case-law digest');
+    }
+  });
+
+  app.get('/api/laws/:celex/case-law-digest', rateLimitMiddleware, async (req, res) => {
+    try {
+      const { celex } = req.params;
+      const rawLang = req.query.lang || 'ENG';
+
+      if (!validateCelex(celex)) {
+        return res.status(400).json({ error: 'Invalid CELEX format' });
+      }
+      const lang = validateLang(rawLang);
+      if (!lang) {
+        return res.status(400).json({ error: `Invalid language code: ${rawLang}` });
+      }
+
+      const apiKey = getStaticSummaryApiKey();
+      if (!apiKey) {
+        return res.status(503).json({ error: 'OpenRouter API key is not configured', code: 'openrouter_unconfigured' });
+      }
+
+      const parsed = await resolveParsedLaw(celex, lang, { skipFmxProbe: req.query.skipFmxProbe === '1' });
+      const caseLawPayload = await fetchCaseLaw(celex, runSparqlQuery, { cacheDir: FMX_DIR });
+      const result = await ensureCaseLawDigest({
+        celex,
+        lang,
+        parsedLaw: parsed,
+        caseLawPayload,
+        cacheDir: FMX_DIR,
+        apiKey,
+        model: DEFAULT_CASE_LAW_DIGEST_MODEL,
+      });
+
+      res.json({
+        celex,
+        lang,
+        model: result.model,
+        cached: result.cached,
+        generatedAt: result.generatedAt,
+        caseLawCacheVersion: result.caseLawCacheVersion,
+        digest: result.digest,
+      });
+    } catch (err) {
+      if (err instanceof ChatProviderError) {
+        const mapped = mapChatError(err);
+        return res.status(mapped.status).json({ code: mapped.code, message: mapped.message, detail: mapped.detail });
+      }
+      safeErrorResponse(res, err, 'Failed to generate case-law digest');
     }
   });
 
@@ -545,6 +642,7 @@ function registerApiRoutes(app, deps) {
         'GET /api/laws/:celex/case-law': 'List CJEU judgments that interpret this law',
         'GET /api/laws/:celex/recital-titles?lang=ENG': 'Get cached AI-generated short titles for recitals',
         'GET /api/laws/:celex/summary': 'Get cached static summary of what this law does (English only)',
+        'GET /api/laws/:celex/case-law-digest?lang=ENG': 'Get cached static digest of CJEU case law interpreting this law as a whole',
         'GET /api/laws/:celex/articles/:n/case-law-digest?lang=ENG': 'Get cached static digest of CJEU case law interpreting one article',
         'GET /api/search?q=keyword&limit=10': 'Search cached primary-law metadata',
         'GET /api/resolve-reference?actType=directive&year=2018&number=1972&lang=ENG': 'Resolve an FMX-derived legal reference to CELEX via cache-first lookup with Cellar fallback',

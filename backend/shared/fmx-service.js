@@ -298,6 +298,19 @@ function createFmxService({
         file.size = buffer.length;
       }
 
+      // Safety net: the pre-download eviction pass above sizes itself from the
+      // `content-length` header, which some upstream responses omit (yielding
+      // size 0 and skipping eviction entirely). Now that files are written to
+      // disk with their real sizes, re-check the on-disk total and evict the
+      // oldest files if the cache still exceeds STORAGE_LIMIT_MB. Passing 0 as
+      // the required size means only files beyond the existing cap are
+      // evicted; sorted-by-mtime eviction order means the files just written
+      // above are newest and won't be evicted by this pass.
+      const { evicted: postWriteEvicted, freedMB: postWriteFreedMB } = evictOldestIfNeeded(0);
+      if (postWriteEvicted > 0) {
+        console.log(`[Cache] Post-download eviction removed ${postWriteEvicted} file(s), freed ${postWriteFreedMB} MB`);
+      }
+
       return { type, files: downloaded };
     })().finally(() => {
       inFlightDownloads.delete(lockKey);

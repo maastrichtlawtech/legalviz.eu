@@ -74,7 +74,7 @@ export function injectDefinitionTooltips(html, definitions, options = {}) {
         // Create a regex that matches the term (with optional inflection for Polish)
         // But NOT inside HTML tags or already-wrapped spans
         const pattern = useInflection
-            ? buildStemPattern(term)
+            ? `(?<![\\w-])${buildStemPattern(term)}`
             : `(?<![\\w-])${escapeRegex(term)}(?![\\w-])`;
         const termPattern = new RegExp(pattern, 'gi');
 

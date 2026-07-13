@@ -5,6 +5,11 @@ const { parseFmxXml } = require('./fmx-parser-node');
 
 const PARSED_LAW_CACHE_MS = 10 * 60 * 1000; // 10 minutes
 
+// Each entry holds a full parsed law (including rendered article/annex HTML),
+// so cap the in-memory cache well below the generic DEFAULT_CACHE_MAX_ENTRIES
+// (10,000) to keep the memory ceiling reasonable.
+const MAX_PARSED_CACHE_ENTRIES = 200;
+
 /**
  * Builds a resolver that turns a CELEX + language into the parsed "combined"
  * law structure ({ title, articles, recitals, annexes, definitions,
@@ -57,7 +62,7 @@ function createParsedLawResolver({ prepareLawPayload, fetchAndParseHtmlLaw, CELE
       ...parsed,
     };
 
-    cacheSet(parsedCache, cacheKey, result, PARSED_LAW_CACHE_MS);
+    cacheSet(parsedCache, cacheKey, result, PARSED_LAW_CACHE_MS, MAX_PARSED_CACHE_ENTRIES);
     return result;
   }
 

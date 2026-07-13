@@ -21,7 +21,10 @@
     "articles": "Cikkek",
     "recitals": "Preambulumbekezdések",
     "annexes": "Mellékletek",
-    "noSelection": "Nincs kijelölés"
+    "noSelection": "Nincs kijelölés",
+    "beta": "béta",
+    "ai": "MI",
+    "noneFoundSuffix": "— nem található"
   },
   "seo": {
     "defaultDescription": "Az EU jogszabályok interaktív megjelenítése. Könnyedén navigálhat a cikkek, preambulumok és mellékletek között.",
@@ -183,6 +186,33 @@
     "description": "Ezek az preambulumok kapcsolódnak ehhez a cikkhez a szöveganalízis alapján egyszerű AI-val (<a href=\"https://ebooks.iospress.nl/volumearticle/56169\" target=\"_blank\" rel=\"noopener noreferrer\">TF-IDF hasonlóság</a> (Nanda et al.)). Relevanciascore szerint rendezve.",
     "match": "{score}% egyezés",
     "read": "Olvasás →"
+  },
+  "relatedCaseLaw": {
+    "title": "Kapcsolódó ítélkezési gyakorlat",
+    "loading": "Betöltés",
+    "showAllJudgments": "Mind a(z) {count} ítélet megjelenítése",
+    "noMatchPrefix": "Ehhez a cikkhez még nem tartozik ítélkezési gyakorlat. {count} {judgmentWord} ezt a jogszabályt összességében — nyissa meg",
+    "judgmentInterprets": "EUB-ítélet értelmezi",
+    "judgmentsInterpret": "EUB-ítéletek értelmezik",
+    "sidebarLabel": "Ítélkezési gyakorlat",
+    "noMatchSuffix": "az oldalsávban a teljes listáért és egy MI által készített összefoglalóért."
+  },
+  "caseLawDigest": {
+    "generate": "Ítélkezési gyakorlat összefoglalójának létrehozása",
+    "generating": "Ítélkezési gyakorlat összefoglalójának létrehozása folyamatban",
+    "unavailable": "Az ítélkezési gyakorlat összefoglalója még nem érhető el.",
+    "generatedOn": "Statikus összefoglaló létrehozva: {date}",
+    "fromCache": "gyorsítótárból"
+  },
+  "caseLawCard": {
+    "expandDecision": "Döntés kibontása",
+    "collapse": "Összecsukás",
+    "readFullJudgment": "Teljes ítélet elolvasása",
+    "decisionLabel": "Döntés:",
+    "moreArticles": "+{count} további"
+  },
+  "caseLawModal": {
+    "showMore": "{count} további megjelenítése ({remaining} hátravan)"
   },
   "crossReferences": {
     "title": "Kereszthivatkozások",

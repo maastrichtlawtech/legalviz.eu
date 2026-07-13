@@ -21,7 +21,10 @@
     "articles": "Artikoli",
     "recitals": "Premessi",
     "annexes": "Annessi",
-    "noSelection": "Ebda għażla"
+    "noSelection": "Ebda għażla",
+    "beta": "beta",
+    "ai": "AI",
+    "noneFoundSuffix": "— l-ebda wieħed misjub"
   },
   "seo": {
     "defaultDescription": "Visualizzazzjoni interattiva tal-liġi tal-UE. Innaviga artikli, preamboli u anessi bl-ċans.",
@@ -183,6 +186,33 @@
     "description": "Jidher li dawk il-preamboli huma relatati għal dan l-artiklu ibbażat fuq analiżi tat-test bl-użu ta' AI sempliċi (<a href=\"https://ebooks.iospress.nl/volumearticle/56169\" target=\"_blank\" rel=\"noopener noreferrer\">similarità TF-IDF</a> (Nanda et al.)). Issort skond il-punteġġ tar-rilevanza.",
     "match": "{score}% taqbila",
     "read": "Aqra →"
+  },
+  "relatedCaseLaw": {
+    "title": "Ġurisprudenza Relatata",
+    "loading": "Qed jgħabbi",
+    "showAllJudgments": "Uri d-{count} sentenzi kollha",
+    "noMatchPrefix": "Għadha ma ġiet assoċjata l-ebda ġurisprudenza ma' dan l-artikolu. {count} {judgmentWord} din il-liġi b'mod ġenerali — iftaħ",
+    "judgmentInterprets": "sentenza tal-QĠUE tinterpreta",
+    "judgmentsInterpret": "sentenzi tal-QĠUE jinterpretaw",
+    "sidebarLabel": "Ġurisprudenza",
+    "noMatchSuffix": "fil-barra laterali għal-lista sħiħa u sommarju magħmul bl-AI."
+  },
+  "caseLawDigest": {
+    "generate": "Iġġenera sommarju tal-ġurisprudenza",
+    "generating": "Qed jiġi ġġenerat is-sommarju tal-ġurisprudenza",
+    "unavailable": "Is-sommarju tal-ġurisprudenza għadu mhux disponibbli.",
+    "generatedOn": "Sommarju statiku ġġenerat fi {date}",
+    "fromCache": "mill-cache"
+  },
+  "caseLawCard": {
+    "expandDecision": "Espandi d-deċiżjoni",
+    "collapse": "Għalaq",
+    "readFullJudgment": "Aqra s-sentenza sħiħa",
+    "decisionLabel": "Deċiżjoni:",
+    "moreArticles": "+{count} oħra"
+  },
+  "caseLawModal": {
+    "showMore": "Uri {count} oħra ({remaining} li fadal)"
   },
   "crossReferences": {
     "title": "Riferimenti Inkruċiati",

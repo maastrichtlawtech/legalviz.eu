@@ -413,6 +413,37 @@ function parseRecitals(paragraphs, articleStartIndex) {
   });
 }
 
+// Pre-1990s EEC/ECSC acts don't number their recitals: the preamble is a run of
+// paragraphs each beginning "Whereas …", sitting between the "Having regard to …"
+// citations and the "HAS ADOPTED THIS DIRECTIVE:" enacting formula. parseRecitals
+// (which needs "(N)" markers) finds nothing here, so this fallback treats every
+// "Whereas …" paragraph as one recital, folding wrapped continuation lines (and
+// mid-paragraph "; whereas …") into the current one. It stops at the enacting
+// formula / first article so the "HAS ADOPTED…" line is never swallowed.
+const ENACTING_FORMULA = /^(?:HAS|HAVE)\s+(?:ADOPTED|DECIDED|LAID\s+DOWN|DRAWN\s+UP)\b/i;
+
+function parseWhereasRecitals(paragraphs, endIndex) {
+  const recitals = [];
+  let current = null;
+
+  for (let index = 0; index < endIndex; index += 1) {
+    const paragraph = normalizeText(paragraphs[index]);
+    if (!paragraph) continue;
+    if (ENACTING_FORMULA.test(paragraph) || isArticleHeading(paragraph)) break;
+
+    if (/^whereas\b/i.test(paragraph)) {
+      if (current) recitals.push(current);
+      current = { chunks: [stripLeadingMarker(paragraph, /^whereas[\s,:;]*/i)] };
+    } else if (current) {
+      current.chunks.push(paragraph);
+    }
+  }
+  if (current) recitals.push(current);
+
+  return recitals.map((recital, order) =>
+    buildRecital(order + 1, recital.chunks.join(" ")));
+}
+
 function parseArticles(paragraphs) {
   const articles = [];
   let currentArticle = null;
@@ -911,7 +942,15 @@ async function parseEurlexHtmlToCombined(htmlText, lang = "ENG") {
   const recitalParagraphs = whereasIndex >= 0 && articleStartIndex > whereasIndex
     ? paragraphs.slice(whereasIndex + 1, articleStartIndex)
     : [];
-  const recitals = parseRecitals(recitalParagraphs, recitalParagraphs.length);
+  let recitals = parseRecitals(recitalParagraphs, recitalParagraphs.length);
+  // Fall back to old-style unnumbered "Whereas …" recitals (pre-1990s acts),
+  // which have no "(N)" markers for parseRecitals to latch onto.
+  if (recitals.length === 0) {
+    recitals = parseWhereasRecitals(
+      paragraphs,
+      articleStartIndex >= 0 ? articleStartIndex : paragraphs.length,
+    );
+  }
 
   const articles = parseArticles(paragraphs.slice(articleStartIndex >= 0 ? articleStartIndex : paragraphs.length))
     .map((article) => {

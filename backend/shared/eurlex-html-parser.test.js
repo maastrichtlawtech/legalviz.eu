@@ -151,6 +151,48 @@ test("parseEurlexHtmlToCombined parses LegisWrite Commission-proposal layout", a
   assert.match(parsed.annexes[0].annex_html, /Annex body content/);
 });
 
+// Pre-1990s EEC/ECSC acts ship as a <TXT_TE> fragment with an unnumbered
+// "Whereas …" preamble (no "(N)" recital markers) and a "HAS ADOPTED …"
+// enacting formula before Article 1 — the shape the FMX-less HTML corpus is full of.
+const OLD_WHEREAS_HTML = `<!DOCTYPE html>
+<html lang="EN">
+<head><meta name="DC.description" content="Council Directive 64/428/EEC"></head>
+<body>
+  <div id="TexteOnly">
+    <TXT_TE>
+      <p>COUNCIL DIRECTIVE of 7 July 1964</p>
+      <p>THE COUNCIL OF THE EUROPEAN ECONOMIC COMMUNITY,</p>
+      <p>Having regard to the Treaty establishing the European Economic Community;</p>
+      <p>Having regard to the proposal from the Commission;</p>
+      <p>Whereas the General Programmes provide for freedom of establishment;</p>
+      <p>Whereas wholesale trade activities have been liberalised;</p>
+      <p>and whereas that liberalisation should continue in stages;</p>
+      <p>HAS ADOPTED THIS DIRECTIVE:</p>
+      <p>Article 1</p>
+      <p>Member States shall abolish the restrictions referred to in the General Programme.</p>
+      <p>Article 2</p>
+      <p>This Directive is addressed to the Member States.</p>
+    </TXT_TE>
+  </div>
+</body>
+</html>`;
+
+test("parseEurlexHtmlToCombined extracts unnumbered Whereas recitals from old acts", async () => {
+  const parsed = await parseEurlexHtmlToCombined(OLD_WHEREAS_HTML, "ENG");
+
+  // Two "Whereas …" paragraphs → two recitals; the continuation line ("and
+  // whereas …") folds into the second, not a third.
+  assert.equal(parsed.recitals.length, 2);
+  assert.equal(parsed.recitals[0].recital_number, "1");
+  assert.match(parsed.recitals[0].recital_text, /^the General Programmes provide/);
+  assert.equal(parsed.recitals[1].recital_number, "2");
+  assert.match(parsed.recitals[1].recital_text, /liberalised.*continue in stages/);
+  // The "HAS ADOPTED …" enacting formula must never be swallowed into a recital.
+  assert.ok(parsed.recitals.every((r) => !/HAS ADOPTED/i.test(r.recital_text)));
+  assert.equal(parsed.articles.length, 2);
+  assert.equal(parsed.articles[0].article_number, "1");
+});
+
 test("parseEurlexHtmlToCombined keeps flat chapter and section headings out of article bodies", async () => {
   const parsed = await parseEurlexHtmlToCombined(FLAT_DIVISION_HTML, "ENG");
 

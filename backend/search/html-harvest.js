@@ -26,6 +26,22 @@ function isChallengeResponse(res) {
     && String(res.headers.get("x-amzn-waf-action") || "").toLowerCase() === "challenge";
 }
 
+// EUR-Lex serves a 200 "site shell" (chrome only, no law text) for acts that
+// have no HTML rendition — instead of a 404. The shell carries the message
+// "The requested document does not exist." and none of the document-content
+// containers a real page has. Detecting it lets us record a permanent miss
+// rather than saving ~85 KB of navigation as if it were a law. We require BOTH
+// the shell phrase AND the absence of any content container, so a genuine
+// document is never discarded.
+const SHELL_PHRASE = /the requested document does not exist/i;
+const CONTENT_CONTAINER = /id="TexteOnly"|<TXT_TE|class="[^"]*\b(?:oj-ti-art|eli-subdivision)\b/i;
+
+function isEmptyShellHtml(html) {
+  const text = String(html || "");
+  if (CONTENT_CONTAINER.test(text)) return false;
+  return SHELL_PHRASE.test(text);
+}
+
 // Download one act's raw HTML with warm WAF cookies over a plain fetch. The
 // headless browser is only touched to (re)warm cookies on a 202 challenge — not
 // per page — so bulk downloading stays cheap.
@@ -151,10 +167,11 @@ async function harvestHtml(options = {}) {
     } else {
       try {
         const result = await fetchImpl({ celex, eurlexBase, cacheDir, timeoutMs });
-        if (result?.rawHtml) {
+        if (result?.rawHtml && !isEmptyShellHtml(result.rawHtml)) {
           await writeCorpusHtml(corpusDir, celex, result.rawHtml);
           saved += 1;
         } else {
+          // No rawHtml, or a chrome-only "does not exist" shell — permanent miss.
           missing += 1;
           fs.appendFileSync(missesPath, `${celex}\n`);
         }
@@ -206,4 +223,4 @@ if (require.main === module) {
   main().catch((error) => { console.error(error.message); process.exitCode = 1; });
 }
 
-module.exports = { harvestHtml, isPermanentMiss };
+module.exports = { harvestHtml, isEmptyShellHtml, isPermanentMiss };

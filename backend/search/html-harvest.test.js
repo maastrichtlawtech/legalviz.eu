@@ -5,7 +5,7 @@ const fsp = require("fs/promises");
 const os = require("os");
 const path = require("path");
 
-const { harvestHtml } = require("./html-harvest");
+const { harvestHtml, isEmptyShellHtml } = require("./html-harvest");
 const { hasCorpusHtml, readCorpusHtml } = require("./law-corpus-store");
 
 async function withTempDir(run) {
@@ -51,6 +51,46 @@ test("harvestHtml saves HTML, records 404 misses and transient fails, then resum
     const r2 = await harvestHtml({ targets: targetsPath, statePath, corpusDir: dir, delayMs: 0, fetchLawImpl });
     assert.equal(calls.length, 0, "resume from finished state fetches nothing");
     assert.equal(r2.finished, true);
+  });
+});
+
+test("isEmptyShellHtml flags 'does not exist' chrome but keeps real content", () => {
+  // The EUR-Lex 200 shell for acts with no HTML rendition.
+  const shell = '<html><head><title>The requested document does not exist. - EUR-Lex</title></head>'
+    + '<body><footer class="ecl-site-footer__list-item">links</footer></body></html>';
+  assert.equal(isEmptyShellHtml(shell), true);
+
+  // A real (old) act: the shell phrase is absent, content container present.
+  const real = '<html><body><div id="TexteOnly"><TXT_TE><p>Article 1</p></TXT_TE></div></body></html>';
+  assert.equal(isEmptyShellHtml(real), false);
+
+  // Guard: even if the phrase somehow co-occurs with real content, keep it.
+  const both = '<html><body>The requested document does not exist.'
+    + '<div id="TexteOnly"><TXT_TE><p>x</p></TXT_TE></div></body></html>';
+  assert.equal(isEmptyShellHtml(both), false);
+
+  assert.equal(isEmptyShellHtml(""), false);
+});
+
+test("harvestHtml records a chrome-only shell as a miss, not a save", async () => {
+  await withTempDir(async (dir) => {
+    const targetsPath = path.join(dir, "targets.txt");
+    const statePath = path.join(dir, "state.json");
+    fs.writeFileSync(targetsPath, ["31956D0006", "31995L0046"].join("\n"));
+
+    const fetchLawImpl = async ({ celex }) => {
+      if (celex === "31956D0006") {
+        return { celex, rawHtml: "<html><title>The requested document does not exist. - EUR-Lex</title><body>chrome</body></html>" };
+      }
+      return { celex, rawHtml: '<div id="TexteOnly"><TXT_TE><p>Article 1</p></TXT_TE></div>' };
+    };
+
+    const r = await harvestHtml({ targets: targetsPath, statePath, corpusDir: dir, delayMs: 0, fetchLawImpl });
+    assert.equal(r.saved, 1);
+    assert.equal(r.missing, 1);
+    assert.equal(hasCorpusHtml(dir, "31956D0006"), false);
+    assert.equal(hasCorpusHtml(dir, "31995L0046"), true);
+    assert.match(fs.readFileSync(`${statePath}.misses.txt`, "utf8"), /31956D0006/);
   });
 });
 

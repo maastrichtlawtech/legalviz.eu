@@ -444,6 +444,28 @@ function parseWhereasRecitals(paragraphs, endIndex) {
     buildRecital(order + 1, recital.chunks.join(" ")));
 }
 
+// Old single-provision acts (amending regs, ECSC/Euratom decisions) often carry
+// no numbered "Article N" heading — the operative text follows the enacting
+// formula directly, sometimes under a "SOLE ARTICLE" / "ARTICLE UNIQUE" label.
+// parseArticles finds nothing in that case, so we salvage the body as Article 1.
+const SOLE_ARTICLE_HEADING =
+  /^(?:SOLE\s+ARTICLE|SINGLE\s+ARTICLE|ARTICLE\s+UNIQUE|ARTICLE\s+PREMIER)$/i;
+const CLOSING_FORMULA =
+  /^(?:THIS\s+(?:REGULATION|DIRECTIVE|DECISION)\s+SHALL\s+BE\s+BINDING|THIS\s+(?:REGULATION|DIRECTIVE|DECISION)\s+(?:IS|SHALL\s+BE)\s+ADDRESSED|DONE\s+AT\b|FOR\s+THE\s+(?:COMMISSION|COUNCIL|HIGH\s+AUTHORITY)\b)/i;
+
+function parseSoleArticleBody(paragraphs, startIndex) {
+  const body = [];
+  for (let index = startIndex; index < paragraphs.length; index += 1) {
+    const paragraph = normalizeText(paragraphs[index]);
+    if (!paragraph) continue;
+    if (isAnnexHeading(paragraph) || CLOSING_FORMULA.test(paragraph)) break;
+    // Drop a leading "SOLE ARTICLE" label but keep the operative text after it.
+    if (body.length === 0 && SOLE_ARTICLE_HEADING.test(paragraph)) continue;
+    body.push(paragraph);
+  }
+  return body;
+}
+
 function parseArticles(paragraphs) {
   const articles = [];
   let currentArticle = null;
@@ -952,7 +974,26 @@ async function parseEurlexHtmlToCombined(htmlText, lang = "ENG") {
     );
   }
 
-  const articles = parseArticles(paragraphs.slice(articleStartIndex >= 0 ? articleStartIndex : paragraphs.length))
+  let rawArticles = parseArticles(paragraphs.slice(articleStartIndex >= 0 ? articleStartIndex : paragraphs.length));
+  // Single-provision acts have no "Article N" heading — recover the operative
+  // text after the enacting formula as a lone Article 1 so it isn't dropped.
+  if (rawArticles.length === 0) {
+    const enactingIndex = paragraphs.findIndex((paragraph) =>
+      ENACTING_FORMULA.test(normalizeText(paragraph)));
+    if (enactingIndex >= 0) {
+      const body = parseSoleArticleBody(paragraphs, enactingIndex + 1);
+      if (body.length) {
+        rawArticles = [{
+          article_number: "1",
+          article_title: "",
+          division: { chapter: { number: "", title: "" }, section: null },
+          bodyParagraphs: body,
+        }];
+      }
+    }
+  }
+
+  const articles = rawArticles
     .map((article) => {
       const html = paragraphsToHtml(article.bodyParagraphs, { title: article.article_title });
       return {

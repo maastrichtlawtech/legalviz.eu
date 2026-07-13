@@ -193,6 +193,43 @@ test("parseEurlexHtmlToCombined extracts unnumbered Whereas recitals from old ac
   assert.equal(parsed.articles[0].article_number, "1");
 });
 
+// Old single-provision amending acts carry a "SOLE ARTICLE" label (or nothing)
+// instead of a numbered "Article N" heading.
+const SOLE_ARTICLE_HTML = `<!DOCTYPE html>
+<html lang="EN">
+<head><meta name="DC.description" content="Council Regulation (EEC) No 2681/72"></head>
+<body>
+  <div id="TexteOnly">
+    <TXT_TE>
+      <p>REGULATION (EEC) No 2681/72 OF THE COUNCIL of 12 December 1972</p>
+      <p>THE COUNCIL OF THE EUROPEAN COMMUNITIES,</p>
+      <p>Whereas the method of calculation should be clarified;</p>
+      <p>HAS ADOPTED THIS REGULATION:</p>
+      <p>SOLE ARTICLE</p>
+      <p>Article 10 of Regulation (EEC) No 2306/70 shall be replaced by the following text.</p>
+      <p>THIS REGULATION SHALL BE BINDING IN ITS ENTIRETY AND DIRECTLY APPLICABLE IN ALL MEMBER STATES.</p>
+      <p>DONE AT BRUSSELS, 12 DECEMBER 1972.</p>
+    </TXT_TE>
+  </div>
+</body>
+</html>`;
+
+test("parseEurlexHtmlToCombined recovers a single article from a 'SOLE ARTICLE' act", async () => {
+  const parsed = await parseEurlexHtmlToCombined(SOLE_ARTICLE_HTML, "ENG");
+
+  // No numbered "Article N" heading, but the operative text after the enacting
+  // formula is salvaged as a lone Article 1.
+  assert.equal(parsed.articles.length, 1);
+  assert.equal(parsed.articles[0].article_number, "1");
+  // The "SOLE ARTICLE" label is dropped; the operative sentence is kept.
+  assert.match(parsed.articles[0].article_html, /Article 10 of Regulation/);
+  assert.doesNotMatch(parsed.articles[0].article_html, /SOLE ARTICLE/i);
+  // The closing/binding formula and signature must not leak into the body.
+  assert.doesNotMatch(parsed.articles[0].article_html, /SHALL BE BINDING|DONE AT/i);
+  // The preamble recital is still parsed independently.
+  assert.equal(parsed.recitals.length, 1);
+});
+
 test("parseEurlexHtmlToCombined keeps flat chapter and section headings out of article bodies", async () => {
   const parsed = await parseEurlexHtmlToCombined(FLAT_DIVISION_HTML, "ENG");
 

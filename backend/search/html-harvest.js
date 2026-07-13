@@ -18,9 +18,57 @@ const fsp = require("fs/promises");
 const path = require("path");
 
 const { hasCorpusHtml, writeCorpusHtml } = require("./law-corpus-store");
-const { fetchEurlexHtmlLaw, closeSharedPlaywrightBrowser } = require("../shared/eurlex-html-parser");
+const { ensureWarmHeaders, getWarmHeaders, invalidateCookies, warmCookies } = require("../shared/eurlex-cookies");
 
 const DEFAULT_EURLEX_BASE = "https://eur-lex.europa.eu";
+
+function isChallengeResponse(res) {
+  return res.status === 202
+    && String(res.headers.get("x-amzn-waf-action") || "").toLowerCase() === "challenge";
+}
+
+// Download one act's raw HTML with warm WAF cookies over a plain fetch. The
+// headless browser is only touched to (re)warm cookies on a 202 challenge — not
+// per page — so bulk downloading stays cheap.
+async function fetchHtmlWithWarmCookies({ celex, eurlexBase, cacheDir, timeoutMs = 45_000 }) {
+  const url = `${eurlexBase}/legal-content/EN/TXT/HTML/?uri=CELEX:${encodeURIComponent(celex)}`;
+  await ensureWarmHeaders({ cacheDir });
+
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const res = await fetch(url, {
+        signal: controller.signal,
+        redirect: "follow",
+        headers: { "accept-language": "en", ...(getWarmHeaders() || {}) },
+      });
+
+      if (isChallengeResponse(res)) {
+        invalidateCookies(cacheDir);
+        await warmCookies({ cacheDir });
+        continue;
+      }
+      if (res.status === 404) {
+        const error = new Error(`No EUR-Lex HTML law found for ${celex}`);
+        error.code = "law_not_found";
+        throw error;
+      }
+      if (!res.ok) {
+        const error = new Error(`EUR-Lex HTML fetch failed with HTTP ${res.status} for ${celex}`);
+        error.statusCode = res.status;
+        throw error;
+      }
+      return { celex, rawHtml: await res.text() };
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  const error = new Error(`EUR-Lex WAF challenge persisted for ${celex}`);
+  error.code = "eurlex_html_challenged";
+  throw error;
+}
 
 function logProgress(message) {
   console.log(`[html-harvest] ${message}`);
@@ -73,7 +121,10 @@ async function harvestHtml(options = {}) {
   const maxRecords = options.maxRecords ? ensurePositiveInt(options.maxRecords, 0) : 0;
   const delayMs = Math.max(0, Number.parseInt(String(options.delayMs ?? "250"), 10) || 0);
   const timeoutMs = ensurePositiveInt(options.timeoutMs, 45_000);
-  const fetchImpl = options.fetchLawImpl || fetchEurlexHtmlLaw;
+  // Cookies (and their on-disk cache) live in the corpus dir so all workers
+  // share one warmed session.
+  const cacheDir = options.cookieCacheDir || corpusDir;
+  const fetchImpl = options.fetchLawImpl || fetchHtmlWithWarmCookies;
 
   const targets = readTargets(targetsPath);
   const prior = readState(statePath) || {};
@@ -100,14 +151,7 @@ async function harvestHtml(options = {}) {
       skipped += 1;
     } else {
       try {
-        const result = await fetchImpl({
-          celex,
-          eurlexBase,
-          timeoutMs,
-          usePlaywright: false,
-          usePlaywrightOnChallenge: true,
-          closeBrowserAfterFetch: false,
-        });
+        const result = await fetchImpl({ celex, eurlexBase, cacheDir, timeoutMs });
         if (result?.rawHtml) {
           await writeCorpusHtml(corpusDir, celex, result.rawHtml);
           saved += 1;
@@ -141,7 +185,6 @@ async function harvestHtml(options = {}) {
     nextIndex: index, total: targets.length, saved, skipped, missing, failed,
     finished, updatedAt: new Date().toISOString(),
   });
-  await closeSharedPlaywrightBrowser().catch(() => {});
   return { nextIndex: index, total: targets.length, saved, skipped, missing, failed, finished };
 }
 

@@ -26,6 +26,7 @@ The download gives us raw HTML; parsing older shapes is the deferred work.
 - [ ] Add an offline "excerpt from corpus" path so `search-build.js` can enrich a record from the local FMX **or** HTML corpus (no network). FMX is already corpus-first; add an HTML fallback that runs `parseStructuredHtmlToCombined` → `buildExcerptFromCombined`.
 - [ ] Extend the harvested/enriched set to the full year range (1952–2026), folding in 2000–2009 FMX + the HTML-parsed FMX-less acts.
 - [ ] Merge into `backend/search/data/search-cache.json` (reuse the shard-merge approach). Decide inclusion policy: which historical acts are worth indexing vs. noise.
+- [ ] Review cache invalidation against `main`'s new versioning: check `PARSER_VERSION` (FMX parser) and the cross-cutting **cache-version table** in the root `CLAUDE.md` — bump any constants whose cached output our excerpt/corpus changes affect, so stale caches are detected.
 - [ ] Commit the rebuilt `search-cache.json` (it's the artifact the deployed backend loads at startup — the raw corpus is build-time only and stays gitignored).
 
 ## 3. More downloads — EUROVOC topic enrichment

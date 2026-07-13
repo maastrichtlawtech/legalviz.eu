@@ -42,8 +42,13 @@ The download gives us raw HTML; parsing older shapes is the deferred work.
 - [ ] Grep for any other hardcoded coverage/date copy in `src/` and adjust.
 
 ## 6. Deploy to Railway
-- [ ] Ensure the rebuilt `search-cache.json` (+ `eurovoc.json`) are committed / present in the deployed image; the backend loads the cache at startup (restart required — see README "Search Cache Build").
-- [ ] Sanity-check deploy size: the raw corpus (`laws/`, `laws-html/`) is **not** shipped (gitignored, build-time only); only the derived cache is. Confirm the larger cache is within Railway limits.
+- [ ] **Decide how to ship the cache — this is now blocking.** `search-cache.json` is already **51 MB** at just 2010–2026 (excerpts ~doubled it) and triggers GitHub's >50 MB warning; the full 1952–2026 rebuild will exceed GitHub's **100 MB hard limit** and bloat the repo/deploy. Options:
+  - commit a **gzipped** cache and gunzip at load (smallest change; ~5–10 MB in git),
+  - move it to **Git LFS**,
+  - or **build the cache at deploy time** on Railway instead of committing it (needs the corpus available there — probably not viable) / fetch it from object storage.
+  Recommend gzip-at-rest.
+- [ ] Ensure the chosen cache artifact (+ `eurovoc.json`) is present in the deployed image; the backend loads the cache at startup (restart required — see README "Search Cache Build").
+- [ ] The raw corpus (`laws/`, `laws-html/`) is **not** shipped (gitignored, build-time only); only the derived cache is.
 - [ ] Deploy, restart the API, smoke-test `/api/search` on the server for a pre-2010 / topic-only query.
 
 ## 7. Verify end-to-end

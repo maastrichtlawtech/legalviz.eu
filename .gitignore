@@ -28,9 +28,12 @@ backend/html-fallback-downloads/
 # only the derived search-cache.json is committed, never the raw XML.
 backend/search/data/laws/
 backend/search/data/laws-html/
+backend/search/data/case-law/
 backend/search/data/shards/
 backend/search/data/html-shards/
 backend/search/data/search-build-state*.json
+backend/search/data/case-law-harvest-state.json*
+backend/search/data/case-law-targets.txt
 backend/search/data/search-cache-historical*.json
 backend/search/data/*.backup
 backend/search/data/*.bak

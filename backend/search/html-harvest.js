@@ -16,7 +16,7 @@
 const fs = require("fs");
 const fsp = require("fs/promises");
 
-const { hasCorpusHtml, writeCorpusHtml } = require("./law-corpus-store");
+const { hasCorpusVariant, writeCorpusVariant } = require("./law-corpus-store");
 const { ensureWarmHeaders, getWarmHeaders, invalidateCookies, warmCookies } = require("../shared/eurlex-cookies");
 
 const DEFAULT_EURLEX_BASE = "https://eur-lex.europa.eu";
@@ -133,6 +133,9 @@ async function harvestHtml(options = {}) {
     throw new Error("html-harvest requires --targets, --statePath and --corpusDir");
   }
   const eurlexBase = options.eurlexBase || DEFAULT_EURLEX_BASE;
+  // Which corpus tree to write into: "html" (FMX-less acts, default) or
+  // "caselaw" (CJEU/GC judgment HTML). Both share the same WAF-fetch path.
+  const variant = options.variant || "html";
   const maxRecords = options.maxRecords ? ensurePositiveInt(options.maxRecords, 0) : 0;
   const delayMs = Math.max(0, Number.parseInt(String(options.delayMs ?? "250"), 10) || 0);
   const timeoutMs = ensurePositiveInt(options.timeoutMs, 45_000);
@@ -162,13 +165,13 @@ async function harvestHtml(options = {}) {
     const celex = targets[index];
     processedThisRun += 1;
 
-    if (hasCorpusHtml(corpusDir, celex)) {
+    if (hasCorpusVariant(corpusDir, celex, variant)) {
       skipped += 1;
     } else {
       try {
         const result = await fetchImpl({ celex, eurlexBase, cacheDir, timeoutMs });
         if (result?.rawHtml && !isEmptyShellHtml(result.rawHtml)) {
-          await writeCorpusHtml(corpusDir, celex, result.rawHtml);
+          await writeCorpusVariant(corpusDir, celex, variant, result.rawHtml);
           saved += 1;
         } else {
           // No rawHtml, or a chrome-only "does not exist" shell — permanent miss.

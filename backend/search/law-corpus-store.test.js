@@ -9,13 +9,17 @@ const {
   celexShard,
   corpusPathFor,
   corpusHtmlPathFor,
+  corpusCaseLawPathFor,
   hasCorpusXml,
   hasCorpusHtml,
+  hasCorpusCaseLaw,
   readCorpusXml,
   readCorpusHtml,
+  readCorpusCaseLaw,
   sanitizeCelex,
   writeCorpusXml,
   writeCorpusHtml,
+  writeCorpusCaseLaw,
 } = require("./law-corpus-store");
 
 async function withTempDir(run) {
@@ -87,6 +91,26 @@ test("HTML variant round-trips in a separate laws-html/ tree", async () => {
     assert.match(corpusHtmlPathFor(dir, celex), /\/laws-html\/1995\/31995L0046\.html\.gz$/);
     assert.match(corpusPathFor(dir, celex), /\/laws\/1995\/31995L0046\.xml\.gz$/);
     // Writing HTML must not create an XML entry (and vice versa).
+    assert.equal(hasCorpusXml(dir, celex), false);
+  });
+});
+
+test("case-law variant round-trips in a separate case-law/ tree keyed by judgment CELEX", async () => {
+  await withTempDir(async (dir) => {
+    const celex = "62017CJ0673"; // Planet49
+    const html = "<html><body>Judgment of the Court</body></html>";
+
+    assert.equal(hasCorpusCaseLaw(dir, celex), false);
+    assert.equal(await readCorpusCaseLaw(dir, celex), null);
+
+    assert.equal(await writeCorpusCaseLaw(dir, celex, html), true);
+    assert.equal(hasCorpusCaseLaw(dir, celex), true);
+    assert.equal(await readCorpusCaseLaw(dir, celex), html);
+
+    // Judgments shard on the same 4-digit year group and live under case-law/.
+    assert.match(corpusCaseLawPathFor(dir, celex), /\/case-law\/2017\/62017CJ0673\.html\.gz$/);
+    // Isolated from the act trees.
+    assert.equal(hasCorpusHtml(dir, celex), false);
     assert.equal(hasCorpusXml(dir, celex), false);
   });
 });

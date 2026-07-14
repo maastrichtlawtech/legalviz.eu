@@ -36,13 +36,16 @@ function sanitizeCelex(celex) {
   return String(celex || "").replace(/[^A-Za-z0-9()_-]/g, "_");
 }
 
-// The corpus holds two kinds of raw law source, in parallel trees:
-//   FMX XML   -> laws/<year>/<CELEX>.xml.gz     (from CELLAR, most acts >= ~2000)
+// The corpus holds three kinds of raw source, in parallel trees:
+//   FMX XML      -> laws/<year>/<CELEX>.xml.gz        (from CELLAR, most acts >= ~2000)
 //   EUR-Lex HTML -> laws-html/<year>/<CELEX>.html.gz  (fallback for FMX-less acts)
-// Both are gzipped, sharded by CELEX year, written atomically.
+//   Case law     -> case-law/<year>/<CELEX>.html.gz   (CJEU/GC judgment HTML)
+// All are gzipped, sharded by CELEX year, written atomically. Judgment CELEX ids
+// (e.g. "62017CJ0673") shard on the same 4-digit year group as acts.
 const VARIANTS = {
   xml: { subdir: "laws", ext: "xml" },
   html: { subdir: "laws-html", ext: "html" },
+  caselaw: { subdir: "case-law", ext: "html" },
 };
 
 function corpusPathForVariant(dataDir, celex, variant) {
@@ -94,15 +97,30 @@ const readCorpusHtml = (dataDir, celex) => readCorpusVariant(dataDir, celex, "ht
 const writeCorpusHtml = (dataDir, celex, html) => writeCorpusVariant(dataDir, celex, "html", html);
 const hasCorpusHtml = (dataDir, celex) => hasCorpusVariant(dataDir, celex, "html");
 
+// CJEU/GC judgment HTML corpus (bulk case-law harvest; parsed into structured
+// refs offline, mirroring the download-first-then-parse laws pipeline).
+const corpusCaseLawPathFor = (dataDir, celex) => corpusPathForVariant(dataDir, celex, "caselaw");
+const readCorpusCaseLaw = (dataDir, celex) => readCorpusVariant(dataDir, celex, "caselaw");
+const writeCorpusCaseLaw = (dataDir, celex, html) => writeCorpusVariant(dataDir, celex, "caselaw", html);
+const hasCorpusCaseLaw = (dataDir, celex) => hasCorpusVariant(dataDir, celex, "caselaw");
+
 module.exports = {
   celexShard,
   corpusPathFor,
   corpusHtmlPathFor,
+  corpusCaseLawPathFor,
+  corpusPathForVariant,
   hasCorpusXml,
   hasCorpusHtml,
+  hasCorpusCaseLaw,
+  hasCorpusVariant,
   readCorpusXml,
   readCorpusHtml,
+  readCorpusCaseLaw,
+  readCorpusVariant,
   sanitizeCelex,
   writeCorpusXml,
   writeCorpusHtml,
+  writeCorpusCaseLaw,
+  writeCorpusVariant,
 };

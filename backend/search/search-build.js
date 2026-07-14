@@ -9,6 +9,7 @@ const { DEFAULT_SEARCH_CACHE_PATH } = require("./search-index");
 const { enrichSearchRecord, inferTypeFromCelex } = require("./search-ranking");
 const { parseFmxXml } = require("../shared/fmx-parser-node");
 const { readCorpusXml, writeCorpusXml } = require("./law-corpus-store");
+const { mergeCorpusDates } = require("./law-corpus-dates");
 
 const execFileAsync = promisify(execFile);
 const SPARQL_ENDPOINT = "https://publications.europa.eu/webapi/rdf/sparql";
@@ -912,6 +913,22 @@ async function buildSearchCache(options = {}) {
       finished: false,
     }));
     logProgress(`Harvest complete with ${records.length} records`);
+  }
+
+  // Persist the SPARQL work_date_document for every harvested act to a sidecar
+  // manifest so the offline corpus rebuild (build-cache-from-corpus.js) can
+  // restore precise dates without re-querying SPARQL — the raw source on disk
+  // doesn't carry the date. Best-effort: a manifest write failure must never
+  // fail the build. Runs on resume too (state records carry the SPARQL date),
+  // which is harmless — the merge is idempotent.
+  const datesCorpusDir = options.corpusDir === undefined ? CORPUS_DIR : options.corpusDir;
+  if (datesCorpusDir) {
+    try {
+      const total = await mergeCorpusDates(datesCorpusDir, records);
+      logProgress(`Corpus date manifest now holds ${total} act dates`);
+    } catch (error) {
+      logProgress(`Corpus date manifest write failed: ${error.message}`);
+    }
   }
 
   const enrichResult = await enrichRecords(records, {

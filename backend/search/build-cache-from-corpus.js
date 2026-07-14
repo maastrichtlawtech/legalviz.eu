@@ -12,9 +12,11 @@
 //   - Reuse the existing 2010-2026 records verbatim (they carry a SPARQL-derived
 //     precise date + eli that can't be reconstructed offline).
 //   - Build pre-2010 additions from the corpus: title + excerpt from parsing the
-//     gzipped source, metadata (celex/year/type/eli/date) derived
-//     deterministically. The date is year-only (from the CELEX) since the exact
-//     work_date_document isn't on disk — enough to render a date chip.
+//     gzipped source, metadata (celex/year/type/eli) derived deterministically.
+//     The date is the precise work_date_document when the harvest-time sidecar
+//     manifest (law-dates.json, written by search-build.js) has it; otherwise it
+//     falls back to a year-only date derived from the CELEX — enough to render a
+//     date chip either way.
 //   - Merge and dedup by CELEX (existing > FMX > HTML).
 //
 // FMX parsing uses jsdom, which leaks: a single process OOMs around ~500 parses.
@@ -29,6 +31,8 @@ const os = require("os");
 const path = require("path");
 const zlib = require("zlib");
 const { spawn } = require("child_process");
+
+const { readCorpusDates, normalizeCelexKey } = require("./law-corpus-dates.js");
 
 const CORPUS_DIR = path.join(__dirname, "data");
 const FMX_ROOT = path.join(CORPUS_DIR, "laws");
@@ -317,6 +321,13 @@ async function driver() {
   console.log(`[corpus-build] Spawning ${jobs.length} worker batches, concurrency=${CONCURRENCY}`);
   const failed = await runPool(jobs, CONCURRENCY);
 
+  // Precise dates harvested from SPARQL (work_date_document), persisted by
+  // search-build.js at harvest time. When present, overlay them onto the
+  // corpus records — the worker only knows the year-only date it can derive
+  // from the CELEX offline. Missing here just means we keep that year fallback.
+  const corpusDates = readCorpusDates(CORPUS_DIR);
+  let preciseDates = 0;
+
   // Collect ALL partials in the work dir (this run + any carried over from an
   // interrupted run), enrich to the canonical record shape. Dedup by CELEX
   // happens in the merge below, so overlap between partials is harmless.
@@ -326,9 +337,17 @@ async function driver() {
     let raw;
     try { raw = JSON.parse(fs.readFileSync(path.join(WORK_DIR, f), "utf8")); }
     catch { continue; } // skip a corrupt/half-written partial
-    for (const rec of raw) newRecords.push(enrichSearchRecord(rec));
+    for (const rec of raw) {
+      const enriched = enrichSearchRecord(rec);
+      const precise = corpusDates[normalizeCelexKey(enriched.celex)];
+      if (precise) {
+        enriched.date = precise;
+        preciseDates += 1;
+      }
+      newRecords.push(enriched);
+    }
   }
-  console.log(`[corpus-build] Parsed ${newRecords.length} corpus records (${failed.length} batches failed this run)`);
+  console.log(`[corpus-build] Parsed ${newRecords.length} corpus records (${preciseDates} with precise SPARQL dates, ${failed.length} batches failed this run)`);
 
   // Merge: existing (as-is) + new, dedup by CELEX (existing wins), primary only.
   const merged = [];
@@ -346,8 +365,9 @@ async function driver() {
   }
 
   // Same ordering as buildSearchCache: newest first. Corpus records carry a
-  // year-only date, which still sorts correctly against the full ISO dates of
-  // reused records (both start with the year).
+  // precise date (from the manifest) or a year-only fallback; both sort
+  // correctly against the full ISO dates of reused records (all start with the
+  // year).
   merged.sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
 
   const years = merged.map((r) => Number(r.celexYear)).filter((y) => Number.isFinite(y));

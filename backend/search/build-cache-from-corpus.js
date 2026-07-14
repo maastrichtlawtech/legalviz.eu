@@ -12,11 +12,10 @@
 //   - Reuse the existing 2010-2026 records verbatim (they carry a SPARQL-derived
 //     precise date + eli that can't be reconstructed offline).
 //   - Build pre-2010 additions from the corpus: title + excerpt from parsing the
-//     gzipped source, metadata (celex/year/type/eli) derived deterministically.
-//     The date is the precise work_date_document when the harvest-time sidecar
-//     manifest (law-dates.json, written by search-build.js) has it; otherwise it
-//     falls back to a year-only date derived from the CELEX — enough to render a
-//     date chip either way.
+//     gzipped source, metadata (celex/type/eli) derived deterministically. The
+//     date is the precise work_date_document from the harvest-time sidecar
+//     manifest (law-dates.json, written by search-build.js) when available,
+//     otherwise null — the raw source on disk doesn't carry the date.
 //   - Merge and dedup by CELEX (existing > FMX > HTML).
 //
 // FMX parsing uses jsdom, which leaks: a single process OOMs around ~500 parses.
@@ -109,7 +108,7 @@ async function runWorker(variant, batchPath, outPath) {
       records.push({
         celex,
         title: null,
-        date: deriveDateFromCelex(celex),
+        date: null,
         eli: buildPrimaryEli(celex),
         type: inferType(celex),
         fmxAvailable: false,
@@ -123,7 +122,7 @@ async function runWorker(variant, batchPath, outPath) {
     records.push({
       celex,
       title,
-      date: deriveDateFromCelex(celex),
+      date: null,
       eli: buildPrimaryEli(celex),
       type: inferType(celex),
       fmxAvailable: variant === "fmx" && ok,
@@ -165,16 +164,6 @@ function inferType(celex) {
   if (marker === "L") return "directive";
   if (marker === "D") return "decision";
   return "unknown";
-}
-
-// Year-only date derived from the CELEX id. The real work_date_document can't
-// be reconstructed offline (it lives in SPARQL, not in the raw source on disk),
-// but the CELEX encodes the year (`3YYYY…`), which is enough to render a date
-// chip in the search modal instead of showing nothing. Returns null for a CELEX
-// we can't parse.
-function deriveDateFromCelex(celex) {
-  const match = String(celex || "").match(/^3(\d{4})([RLD])/);
-  return match ? match[1] : null;
 }
 
 function buildPrimaryEli(celex) {
@@ -322,9 +311,9 @@ async function driver() {
   const failed = await runPool(jobs, CONCURRENCY);
 
   // Precise dates harvested from SPARQL (work_date_document), persisted by
-  // search-build.js at harvest time. When present, overlay them onto the
-  // corpus records — the worker only knows the year-only date it can derive
-  // from the CELEX offline. Missing here just means we keep that year fallback.
+  // search-build.js at harvest time. Overlay them onto the corpus records (the
+  // offline worker has no date). A CELEX missing from the manifest keeps its
+  // null date until the next harvest populates it.
   const corpusDates = readCorpusDates(CORPUS_DIR);
   let preciseDates = 0;
 
@@ -364,10 +353,8 @@ async function driver() {
     push(rec);
   }
 
-  // Same ordering as buildSearchCache: newest first. Corpus records carry a
-  // precise date (from the manifest) or a year-only fallback; both sort
-  // correctly against the full ISO dates of reused records (all start with the
-  // year).
+  // Same ordering as buildSearchCache: newest first, records without a date
+  // (corpus acts missing from the manifest) last.
   merged.sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
 
   const years = merged.map((r) => Number(r.celexYear)).filter((y) => Number.isFinite(y));
@@ -423,4 +410,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { buildPrimaryEli, deriveDateFromCelex, inferType, listCorpusFiles };
+module.exports = { buildPrimaryEli, inferType, listCorpusFiles };

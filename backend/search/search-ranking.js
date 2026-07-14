@@ -240,12 +240,6 @@ function enrichSearchRecord(record) {
     ...record,
     title,
     type,
-    // Fall back to the CELEX year when no precise date is known. Corpus-built
-    // records (pre-2010, see build-cache-from-corpus.js) can't reconstruct the
-    // SPARQL work_date_document offline, so they carry a year-only date instead
-    // of null — enough to render a date chip in the search modal. Records that
-    // already have a real ISO date keep it untouched.
-    date: record.date || year || null,
     normalizedTitle,
     normalizedEli,
     normalizedCelex,

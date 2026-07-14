@@ -6,6 +6,7 @@ const { CASE_LAW_CACHE_FILE } = require('./law-queries');
 const FLUSH_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 const DAY_RETENTION = 90;
 const COUNTER_CAP = 1000;
+const DAILY_TOP_LIMIT = 20;
 const UNIQUE_BITMAP_BITS = 16 * 1024;
 const UNIQUE_BITMAP_BYTES = UNIQUE_BITMAP_BITS / 8;
 
@@ -46,6 +47,20 @@ function increment(obj, key) {
   obj[key] = (obj[key] || 0) + 1;
 }
 
+function capObject(obj) {
+  const entries = Object.entries(obj);
+  if (entries.length <= COUNTER_CAP) return;
+  entries.sort((a, b) => a[1] - b[1]);
+  for (const [key] of entries.slice(0, entries.length - COUNTER_CAP)) delete obj[key];
+}
+
+function topObject(obj, n = DAILY_TOP_LIMIT) {
+  return Object.entries(obj)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, n)
+    .map(([key, count]) => ({ key, count }));
+}
+
 function trimDays(days) {
   const keys = Object.keys(days).sort();
   for (const key of keys.slice(0, Math.max(0, keys.length - DAY_RETENTION))) delete days[key];
@@ -62,6 +77,9 @@ function newDaily(date) {
     uniqueSketch: Buffer.alloc(UNIQUE_BITMAP_BYTES),
     uniqueUsersLegacy: null,
     channels: { web: 0, api: 0, mcp: 0 },
+    statusCodes: {},
+    routes: {},
+    celexes: {},
     searches: 0,
   };
 }
@@ -83,6 +101,9 @@ function hydrateDaily(date, saved = {}) {
   daily.uniqueSketch = decodeSketch(saved.uniqueSketch);
   daily.uniqueUsersLegacy = Number.isFinite(saved.uniqueUsers) ? saved.uniqueUsers : null;
   daily.channels = { ...daily.channels, ...(saved.channels || {}) };
+  daily.statusCodes = { ...(saved.statusCodes || {}) };
+  daily.routes = { ...(saved.routes || {}) };
+  daily.celexes = { ...(saved.celexes || {}) };
   daily.searches = Number(saved.searches) || 0;
   return daily;
 }
@@ -93,6 +114,9 @@ function serializeDaily(daily) {
     uniqueSketch: daily.uniqueSketch.toString('base64'),
     ...(daily.uniqueUsersLegacy == null ? {} : { uniqueUsers: daily.uniqueUsersLegacy }),
     channels: daily.channels,
+    statusCodes: daily.statusCodes,
+    routes: daily.routes,
+    celexes: daily.celexes,
     searches: daily.searches,
   };
 }
@@ -225,6 +249,18 @@ function createAnalytics({ cacheDir, now = () => new Date(), hashKey } = {}) {
     return 'api';
   }
 
+  function recordDailyRoute(route) {
+    if (!route) return;
+    increment(today.routes, route);
+    capObject(today.routes);
+  }
+
+  function recordDailyCelex(celex) {
+    if (!celex) return;
+    increment(today.celexes, celex);
+    capObject(today.celexes);
+  }
+
   function middleware(req, res, next) {
     res.on('finish', () => {
       rolloverDayIfNeeded();
@@ -234,17 +270,20 @@ function createAnalytics({ cacheDir, now = () => new Date(), hashKey } = {}) {
       const channel = classifyChannel(req);
       increment(today.channels, channel);
       channelCounts.set(channel, (channelCounts.get(channel) || 0) + 1);
+      increment(today.statusCodes, `${Math.floor((res.statusCode || 0) / 100)}xx`);
 
       const route = req.route?.path;
       if (route) {
         routeCounts.set(route, (routeCounts.get(route) || 0) + 1);
         capMap(routeCounts);
+        recordDailyRoute(route);
       }
 
       const celex = req.params?.celex;
       if (celex && res.statusCode < 500) {
         celexCounts.set(celex, (celexCounts.get(celex) || 0) + 1);
         capMap(celexCounts);
+        recordDailyCelex(celex);
       }
 
       if (route && route.includes('search') && res.statusCode === 200) {
@@ -266,10 +305,12 @@ function createAnalytics({ cacheDir, now = () => new Date(), hashKey } = {}) {
     const routeKey = `mcp:${toolName}`;
     routeCounts.set(routeKey, (routeCounts.get(routeKey) || 0) + 1);
     capMap(routeCounts);
+    recordDailyRoute(routeKey);
 
     if (celex) {
       celexCounts.set(celex, (celexCounts.get(celex) || 0) + 1);
       capMap(celexCounts);
+      recordDailyCelex(celex);
     }
 
     if (String(query || '').trim()) {
@@ -290,7 +331,10 @@ function createAnalytics({ cacheDir, now = () => new Date(), hashKey } = {}) {
       requests: daily.requests,
       uniqueUsersEstimate: estimateUniques(daily),
       channels: { ...daily.channels },
+      statusCodes: { ...daily.statusCodes },
       searches: daily.searches,
+      topRoutes: topObject(daily.routes).map(({ key, count }) => ({ route: key, count })),
+      topCelexes: topObject(daily.celexes).map(({ key, count }) => ({ celex: key, count })),
     };
   }
 

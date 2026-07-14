@@ -137,7 +137,10 @@ test('exposes useful per-day aggregates without identifiers or query text', () =
     requests: 2,
     uniqueUsersEstimate: 1,
     channels: { web: 1, api: 1, mcp: 0 },
+    statusCodes: { '2xx': 1, '5xx': 1 },
     searches: 1,
+    topRoutes: [{ route: '/api/search', count: 2 }],
+    topCelexes: [],
   });
   assert.equal(JSON.stringify(stats).includes('sensitive phrase'), false);
   analytics.shutdown();

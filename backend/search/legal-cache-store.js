@@ -15,6 +15,9 @@ const DEFAULT_SEARCH_CACHE_PATH = process.env.SEARCH_CACHE_PATH ||
 const DEFAULT_EUROVOC_DATA_PATH = process.env.EUROVOC_DATA_PATH ||
   path.join(__dirname, "data", "eurovoc.json");
 
+const DEFAULT_DATES_DATA_PATH = process.env.DATES_DATA_PATH ||
+  path.join(__dirname, "data", "dates.json");
+
 const SUPPLEMENTAL_RECORDS = [
   {
     celex: "32000L0031",
@@ -96,10 +99,14 @@ function buildCanonicalEliFromReference(reference) {
   return `http://data.europa.eu/eli/${segment}/${year}/${number}/oj`;
 }
 
-function loadEurovocSidecar(eurovocPath) {
+// Loads a committed celex-keyed sidecar (eurovoc.json, dates.json) that
+// backfills fields the search-cache release asset does not carry for every
+// record. Returns {} when absent or unreadable so a missing sidecar just
+// degrades gracefully to no backfill.
+function loadJsonSidecar(sidecarPath) {
   try {
-    if (!fs.existsSync(eurovocPath)) return {};
-    const parsed = JSON.parse(fs.readFileSync(eurovocPath, "utf8"));
+    if (!fs.existsSync(sidecarPath)) return {};
+    const parsed = JSON.parse(fs.readFileSync(sidecarPath, "utf8"));
     return parsed && typeof parsed === "object" ? parsed : {};
   } catch {
     return {};
@@ -184,9 +191,14 @@ function buildDocumentBoost(parsed) {
 }
 
 class JsonLegalCacheStore {
-  constructor(cachePath = DEFAULT_SEARCH_CACHE_PATH, eurovocPath = DEFAULT_EUROVOC_DATA_PATH) {
+  constructor(
+    cachePath = DEFAULT_SEARCH_CACHE_PATH,
+    eurovocPath = DEFAULT_EUROVOC_DATA_PATH,
+    datesPath = DEFAULT_DATES_DATA_PATH,
+  ) {
     this.cachePath = cachePath;
     this.eurovocPath = eurovocPath;
+    this.datesPath = datesPath;
     this.payload = null;
     this.records = [];
     this.loadedAt = null;
@@ -229,7 +241,8 @@ class JsonLegalCacheStore {
           .filter((record) => record.isPrimaryAct)
         : [];
 
-      const eurovocData = loadEurovocSidecar(this.eurovocPath);
+      const eurovocData = loadJsonSidecar(this.eurovocPath);
+      const datesData = loadJsonSidecar(this.datesPath);
 
       this.payload = parsed;
       this.records = records;
@@ -240,6 +253,12 @@ class JsonLegalCacheStore {
 
       for (const record of records) {
         record.eurovoc = eurovocData[record.celex] || [];
+        // Older acts (pre-2010) arrived in the corpus expansion without a
+        // work_date_document; backfill from the sidecar without overriding a
+        // date the cache already carries.
+        if (!record.date && datesData[record.celex]) {
+          record.date = datesData[record.celex];
+        }
 
         const celexKey = normalizeCelexLookupKey(record.celex);
         if (celexKey) {
@@ -384,6 +403,7 @@ class JsonLegalCacheStore {
 
 module.exports = {
   buildCanonicalEliFromReference,
+  DEFAULT_DATES_DATA_PATH,
   DEFAULT_EUROVOC_DATA_PATH,
   DEFAULT_SEARCH_CACHE_PATH,
   JsonLegalCacheStore,

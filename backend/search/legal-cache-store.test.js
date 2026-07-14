@@ -179,6 +179,76 @@ test("legal cache store degrades gracefully when the EuroVoc sidecar is missing"
   assert.deepEqual(gdpr.topics, []);
 });
 
+test("legal cache store backfills missing dates from the sidecar without overriding existing ones", () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "legal-cache-store-dates-"));
+  const cachePath = path.join(tempDir, "cache.json");
+  const datesPath = path.join(tempDir, "dates.json");
+  fs.writeFileSync(cachePath, JSON.stringify({
+    records: [
+      {
+        celex: "31968R0260",
+        title: "Regulation (EEC) 260/68 on old widgets",
+        type: "regulation",
+        date: null,
+        eli: "http://data.europa.eu/eli/reg/1968/260/oj",
+        fmxAvailable: true,
+      },
+      {
+        celex: "32020R0123",
+        title: "Regulation (EU) 2020/123 on new widgets",
+        type: "regulation",
+        date: "2020-01-01",
+        eli: "http://data.europa.eu/eli/reg/2020/123/oj",
+        fmxAvailable: true,
+      },
+    ],
+  }));
+  // Sidecar has a date for the date-less record, and a (stale) one for the
+  // record that already carries a date — the latter must not win.
+  fs.writeFileSync(datesPath, JSON.stringify({
+    "31968R0260": "1968-02-29",
+    "32020R0123": "1999-12-31",
+  }));
+
+  const store = new JsonLegalCacheStore(cachePath, undefined, datesPath);
+  assert.equal(store.load(), true);
+
+  assert.equal(store.getByCelex("31968R0260")?.date, "1968-02-29");
+  assert.equal(store.getByCelex("32020R0123")?.date, "2020-01-01");
+
+  const [old] = store.searchLaws("31968R0260", { limit: 1 });
+  assert.equal(old.date, "1968-02-29");
+});
+
+test("legal cache store leaves dates untouched when the sidecar is missing or has a null entry", () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "legal-cache-store-dates-missing-"));
+  const cachePath = path.join(tempDir, "cache.json");
+  const datesPath = path.join(tempDir, "dates.json");
+  fs.writeFileSync(cachePath, JSON.stringify({
+    records: [
+      {
+        celex: "31968R0260",
+        title: "Regulation (EEC) 260/68 on old widgets",
+        type: "regulation",
+        date: null,
+        eli: "http://data.europa.eu/eli/reg/1968/260/oj",
+        fmxAvailable: true,
+      },
+    ],
+  }));
+  // A null sidecar entry (endpoint had no date) must not throw or fabricate one.
+  fs.writeFileSync(datesPath, JSON.stringify({ "31968R0260": null }));
+
+  const store = new JsonLegalCacheStore(cachePath, undefined, datesPath);
+  assert.equal(store.load(), true);
+  assert.equal(store.getByCelex("31968R0260")?.date, null);
+
+  const missingDatesPath = path.join(os.tmpdir(), `missing-dates-${Date.now()}.json`);
+  const store2 = new JsonLegalCacheStore(cachePath, undefined, missingDatesPath);
+  assert.equal(store2.load(), true);
+  assert.equal(store2.getByCelex("31968R0260")?.date, null);
+});
+
 test("legal cache store stays searchable when a CELEX is duplicated", () => {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "legal-cache-store-"));
   const tempPath = path.join(tempDir, "duplicate-celex.json");

@@ -484,6 +484,30 @@ Default files:
 
 Important: restart the API server after rebuilding the cache, because the cache is loaded on startup.
 
+### Metadata sidecars (EuroVoc topics, dates)
+
+The shipped `search-cache.json` release asset does not carry every field for
+every record — the corpus expansion folded in ~67k older acts without EuroVoc
+subjects or a `work_date_document`. Two committed, CELEX-keyed sidecars backfill
+those at load time (`legal-cache-store.js`); a missing sidecar just degrades to
+no backfill:
+
+- `search/data/eurovoc.json` → `record.eurovoc` (surfaced as `topics` in `/api/search`)
+- `search/data/dates.json` → `record.date` when the cache has none (never overrides an existing date)
+
+Regenerate them after a cache rebuild (both are resumable — they skip
+already-fetched CELEX, so re-runs only cover new records):
+
+```bash
+node search/fetch-eurovoc.js          # celex -> [EuroVoc labels]
+node search/fetch-dates.js            # celex -> "YYYY-MM-DD" (only date-less records)
+node search/fetch-dates.js --limit 200 # smoke test on a subset
+```
+
+Both read the current search cache to determine their target CELEX, so build the
+search cache first. Unlike `search-cache.json`, these sidecars are small enough
+to commit to git and ship via `COPY . .` in the Docker image.
+
 ## Project Layout
 
 ```text
@@ -501,6 +525,8 @@ backend/
 │  ├─ search-index.js
 │  ├─ search-ranking.js
 │  ├─ search-route.js
+│  ├─ fetch-eurovoc.js         # Builds the celex -> EuroVoc labels sidecar
+│  ├─ fetch-dates.js           # Builds the celex -> document date sidecar
 │  ├─ search-regression.test.js
 │  └─ search-route.test.js
 └─ shared/

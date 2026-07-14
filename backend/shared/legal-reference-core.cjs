@@ -59,10 +59,10 @@ function parseInstrumentIdentifier({ actType, identifier, hasNo = false, allowHi
   let yearPart = null;
   let numberPart = null;
 
-  // A two-digit first part and three-digit second part is the old
-  // unambiguous year/number form (Decision No 65/271), even though it retains
-  // a "No" label.
-  if (first.length === 2 && second.length === 3) {
+  // A two-digit first part and three/four-digit second part is the old
+  // unambiguous year/number decision form (Decision No 65/271 or
+  // 80/1186/EEC), even though it retains a "No" label.
+  if (first.length === 2 && (second.length === 3 || (type === 'decision' && second.length === 4))) {
     yearPart = first;
     numberPart = second;
   // In regulations and decisions, an unlabelled historical 19xx/20xx pair
@@ -72,6 +72,13 @@ function parseInstrumentIdentifier({ actType, identifier, hasNo = false, allowHi
     && /^(?:19|20)\d{2}$/.test(second)) {
     yearPart = second;
     numberPart = first;
+  // Modern decisions such as Decision No 2005/802/EC retain a "No" label
+  // while using year/number order. The explicit institutional suffix keeps
+  // this separate from old No number/year decisions.
+  } else if (type === 'decision' && /^(?:19|20)\d{2}$/.test(first)
+    && /^(?:EC|EU|EURATOM)$/i.test(suffix || '')) {
+    yearPart = first;
+    numberPart = second;
   // Regulations and decisions otherwise labelled "No" use number/year order.
   // The number can itself look like a four-digit year (No 1924/2006 or
   // 2027/97), so this must precede the superficial year checks below.
@@ -92,7 +99,7 @@ function parseInstrumentIdentifier({ actType, identifier, hasNo = false, allowHi
   // narrow historical signal; damaged strings such as "199/44" stay safely
   // unresolved rather than being mislinked.
   } else if ((type === 'directive'
-    || (type === 'regulation' && (allowHistoricalNoLabel || first.length <= 3))
+    || (type === 'regulation' && (allowHistoricalNoLabel || first.length <= 3 || institutionalIssuer || suffix === 'EEC' || suffix === 'EC'))
     || (type === 'decision' && suffix === 'ECSC')
     || (type === 'recommendation' && ecscAuthority))
     && first.length >= 1 && second.length === 2 && Number(second) >= 50) {

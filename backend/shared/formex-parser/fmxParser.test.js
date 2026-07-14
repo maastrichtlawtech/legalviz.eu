@@ -501,6 +501,34 @@ describe("parseFmxToCombined — unnumbered PROLOG decisions", () => {
     expect(result.crossReferences.text.some((ref) => ref.actCelex === "32003R0001")).toBe(true);
     expect(result.crossReferences.text.some((ref) => ref.actCelex === "12002E")).toBe(true);
   });
+
+  it("retains competition-decision summaries structured as grouped sequences", () => {
+    const xml =
+      `<FMX.COLLECTION><GENERAL><BIB.INSTANCE><LG.DOC>EN</LG.DOC></BIB.INSTANCE>` +
+      `<ENACTING.TERMS><GR.SEQ LEVEL="1"><TITLE><TI><NP><NO.P>1.</NO.P><TXT>SUMMARY OF THE DECISION</TXT></NP></TI></TITLE>` +
+      `<P>The Commission found an infringement of Article 81 of the EC Treaty.</P></GR.SEQ></ENACTING.TERMS>` +
+      `</GENERAL></FMX.COLLECTION>`;
+    const result = parseFmxToCombined(xml);
+
+    expect(result.articles).toHaveLength(1);
+    expect(result.articles[0]).toMatchObject({ article_number: "text", is_unnumbered: true });
+    expect(result.articles[0].article_html).toMatch(/SUMMARY OF THE DECISION/);
+    expect(result.crossReferences.text.some((ref) => ref.actCelex === "12002E")).toBe(true);
+  });
+
+  it("retains competition summaries structured in preamble considerations", () => {
+    const xml =
+      `<FMX.COLLECTION><GENERAL><BIB.INSTANCE><LG.DOC>EN</LG.DOC></BIB.INSTANCE>` +
+      `<PREAMBLE><GR.CONSID><DIV.CONSID><TITLE><TI><NP><NO.P>1.</NO.P><TXT>SUMMARY OF THE INFRINGEMENT</TXT></NP></TI></TITLE>` +
+      `<CONSID><NP><NO.P>(1)</NO.P><TXT>The decision concerns Article 81 of the EC Treaty.</TXT></NP></CONSID>` +
+      `</DIV.CONSID></GR.CONSID></PREAMBLE></GENERAL></FMX.COLLECTION>`;
+    const result = parseFmxToCombined(xml);
+
+    expect(result.articles).toHaveLength(1);
+    expect(result.articles[0]).toMatchObject({ article_number: "text", is_unnumbered: true });
+    expect(result.articles[0].article_html).toMatch(/SUMMARY OF THE INFRINGEMENT/);
+    expect(result.crossReferences.text.some((ref) => ref.actCelex === "12002E")).toBe(true);
+  });
 });
 
 describe("extractCrossRefsFromText — multilingual instruments", () => {
@@ -537,6 +565,29 @@ describe("extractCrossRefsFromText — multilingual instruments", () => {
     }));
   });
 
+  it("recognises Association Council decisions as external", () => {
+    const refs = extractCrossRefsFromText(
+      "Association Council Decision 4/72, as amended by Decision 1/75",
+      getLangConfig("EN"),
+    );
+    expect(refs).toEqual(expect.arrayContaining([
+      expect.objectContaining({ target: "4/72", externalInstitutional: true, actCelex: null }),
+      expect.objectContaining({ target: "1/75", externalInstitutional: true, actCelex: null }),
+    ]));
+  });
+
+  it("keeps Court decision citations out of the sector-3 act resolver", () => {
+    const refs = extractCrossRefsFromText(
+      "the decision of the Court in the case AEG emphasized paragraph 37 of Decision 107/82 of 25 October 1983",
+      getLangConfig("EN"),
+    );
+    expect(refs).toContainEqual(expect.objectContaining({
+      target: "107/82",
+      externalCaseLaw: true,
+      actCelex: null,
+    }));
+  });
+
   it("keeps expressly regional instruments external to EU law", () => {
     const refs = extractCrossRefsFromText(
       "Law No 51 of the region of Lombardy and Decision No 11/21587 of the regional government",
@@ -564,6 +615,71 @@ describe("extractCrossRefsFromText — multilingual instruments", () => {
       target: "2894/79",
       actCelex: "31979R2894",
     }));
+  });
+
+  it("repairs a split year immediately followed by a footnote marker", () => {
+    const refs = extractCrossRefsFromText("Regulation (EEC) No 2192/8 1 (4)", getLangConfig("EN"));
+    expect(refs).toContainEqual(expect.objectContaining({
+      target: "2192/81",
+      actCelex: "31981R2192",
+    }));
+  });
+
+  it("resolves historical regulations with a trailing EEC suffix", () => {
+    const refs = extractCrossRefsFromText("Regulation 3286/80/EEC", getLangConfig("EN"));
+    expect(refs).toContainEqual(expect.objectContaining({
+      actCelex: "31980R3286",
+    }));
+  });
+
+  it("resolves old year-first decisions with four-digit numbers", () => {
+    const refs = extractCrossRefsFromText("Decision No 80/1186/EEC", getLangConfig("EN"));
+    expect(refs).toContainEqual(expect.objectContaining({
+      actCelex: "31980D1186",
+    }));
+  });
+
+  it("resolves modern year-first decisions that retain a No label", () => {
+    const refs = extractCrossRefsFromText("Decision No 2005/802/EC", getLangConfig("EN"));
+    expect(refs).toContainEqual(expect.objectContaining({
+      actCelex: "32005D0802",
+    }));
+  });
+
+  it("uses an explicit Council issuer for historical number-first regulations", () => {
+    const refs = extractCrossRefsFromText("Council Regulation 3448/93", getLangConfig("EN"));
+    expect(refs).toContainEqual(expect.objectContaining({
+      actCelex: "31993R3448",
+    }));
+  });
+
+  it("carries an explicit Commission issuer to a same-sentence short-form repeat", () => {
+    const refs = extractCrossRefsFromText(
+      "Commission Regulation 1636/98, hereinafter Regulation 1636/98, applies.",
+      getLangConfig("EN"),
+    );
+    // Identical citations share one graph edge, but the short form must not
+    // displace the fully resolved citation that precedes it.
+    expect(refs.filter((ref) => ref.target === "1636/98")).toEqual([
+      expect.objectContaining({ actCelex: "31998R1636" }),
+    ]);
+  });
+
+  it("recognises Estonian and Greek directive labels in multilingual annexes", () => {
+    const estonian = extractCrossRefsFromText("direktiivis 90/426/EMÜ", getLangConfig("EN"));
+    const greek = extractCrossRefsFromText("οδηγία 90/426/ΕΟΚ", getLangConfig("EN"));
+    expect(estonian).toContainEqual(expect.objectContaining({ actCelex: "31990L0426" }));
+    expect(greek).toContainEqual(expect.objectContaining({ actCelex: "31990L0426" }));
+  });
+
+  it("recognises multilingual directive and decision labels in annex copies", () => {
+    const directives = extractCrossRefsFromText("Direktīvas 97/78/EK", getLangConfig("EN"));
+    const decisions = extractCrossRefsFromText("décision 93/352/CEE; απόφαση 2003/630; Decisiones 2003/630/CE; päätös 2003/630/EY", getLangConfig("EN"));
+    expect(directives).toContainEqual(expect.objectContaining({ actCelex: "31978L0097" }));
+    expect(decisions).toEqual(expect.arrayContaining([
+      expect.objectContaining({ actCelex: "31993D0352" }),
+      expect.objectContaining({ actCelex: "32003D0630" }),
+    ]));
   });
 
   it("resolves an explicit High Authority recommendation as an ECSC act", () => {

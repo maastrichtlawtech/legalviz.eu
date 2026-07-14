@@ -108,6 +108,22 @@ test('shared resolver handles modern and legacy EU numbering conventions', () =>
     '32000R2040',
   );
   assert.equal(
+    resolveInstrumentCelex({ actType: 'regulation', identifier: '3286/80/EEC' }),
+    '31980R3286',
+  );
+  assert.equal(
+    resolveInstrumentCelex({ actType: 'decision', identifier: '80/1186/EEC', hasNo: true }),
+    '31980D1186',
+  );
+  assert.equal(
+    resolveInstrumentCelex({ actType: 'decision', identifier: '2005/802/EC', hasNo: true }),
+    '32005D0802',
+  );
+  assert.equal(
+    resolveInstrumentCelex({ actType: 'regulation', identifier: '3448/93', institutionalIssuer: true }),
+    '31993R3448',
+  );
+  assert.equal(
     resolveInstrumentCelex({ actType: 'regulation', identifier: '2016/679' }),
     '32016R0679',
   );

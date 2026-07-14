@@ -1,5 +1,6 @@
 const fs = require("fs");
 const path = require("path");
+const zlib = require("zlib");
 const MiniSearch = require("minisearch");
 
 const {
@@ -199,11 +200,17 @@ class JsonLegalCacheStore {
 
   load() {
     try {
-      if (!fs.existsSync(this.cachePath)) {
+      // The full-corpus cache is far past GitHub's file-size limit raw, so the
+      // repo (and hence a fresh deploy) ships only search-cache.json.gz.
+      // Prefer the raw file when present (a local rebuild writes it), else
+      // fall back to the gzipped artifact.
+      const gzPath = `${this.cachePath}.gz`;
+      const useGz = !fs.existsSync(this.cachePath) && fs.existsSync(gzPath);
+      if (!useGz && !fs.existsSync(this.cachePath)) {
         this.payload = null;
         this.records = [];
         this.loadedAt = null;
-        this.loadError = `Search cache not found at ${this.cachePath}`;
+        this.loadError = `Search cache not found at ${this.cachePath} (or ${gzPath})`;
         this.byCelex = new Map();
         this.byEli = new Map();
         this.byOfficialReference = new Map();
@@ -212,7 +219,9 @@ class JsonLegalCacheStore {
         return false;
       }
 
-      const raw = fs.readFileSync(this.cachePath, "utf8");
+      const raw = useGz
+        ? zlib.gunzipSync(fs.readFileSync(gzPath)).toString("utf8")
+        : fs.readFileSync(this.cachePath, "utf8");
       const parsed = JSON.parse(raw);
       const records = Array.isArray(parsed.records)
         ? mergeSupplementalRecords(parsed.records)

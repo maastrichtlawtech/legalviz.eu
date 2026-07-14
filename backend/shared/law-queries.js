@@ -7,6 +7,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const zlib = require('zlib');
 const { JSDOM } = require('jsdom');
 const { getSharedPlaywrightPage, loadPlaywrightModule } = require('./eurlex-html-parser');
 const {
@@ -322,12 +323,41 @@ LIMIT 200`;
 const CASE_LAW_CACHE_FILE = 'case-law-cache-v5.json';
 const CASE_LAW_CACHE_FILES_LEGACY = ['case-law-cache-v4.json', 'case-law-cache-v3.json'];
 
+// The bulk-parsed corpus cache is ~50 MB, so parsing it on every request is no
+// longer acceptable. Memoize by (path, mtime, size): a save from enrichment
+// changes the mtime and invalidates the memo, so live pickup still works.
+let caseLawCacheMemo = null;
+
+// A gzipped copy of the bulk-parsed cache is committed so fresh deploys start
+// with the full precomputed corpus instead of re-enriching from EUR-Lex.
+const CASE_LAW_CACHE_SEED = path.join(__dirname, '..', 'search', 'data', `${CASE_LAW_CACHE_FILE}.gz`);
+
+function readCaseLawCacheFile(filePath) {
+  let stat;
+  try {
+    stat = fs.statSync(filePath);
+  } catch {
+    return null;
+  }
+  if (caseLawCacheMemo
+    && caseLawCacheMemo.path === filePath
+    && caseLawCacheMemo.mtimeMs === stat.mtimeMs
+    && caseLawCacheMemo.size === stat.size) {
+    return caseLawCacheMemo.cache;
+  }
+  const cache = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+  caseLawCacheMemo = { path: filePath, mtimeMs: stat.mtimeMs, size: stat.size, cache };
+  return cache;
+}
+
 function loadCaseLawCache(cacheDir) {
   try {
     const filePath = path.join(cacheDir, CASE_LAW_CACHE_FILE);
-    if (fs.existsSync(filePath)) {
-      return JSON.parse(fs.readFileSync(filePath, 'utf8'));
-    }
+    const memoized = readCaseLawCacheFile(filePath);
+    if (memoized) return memoized;
+    // A caller-provided legacy cache is more specific than the bundled seed
+    // (and lets existing deployments migrate their own entries). Check it
+    // before populating an otherwise empty cache directory from the corpus.
     const legacyName = CASE_LAW_CACHE_FILES_LEGACY.find((name) => fs.existsSync(path.join(cacheDir, name)));
     if (legacyName) {
       const legacy = JSON.parse(fs.readFileSync(path.join(cacheDir, legacyName), 'utf8'));
@@ -344,6 +374,16 @@ function loadCaseLawCache(cacheDir) {
       }
       return migrated;
     }
+    if (fs.existsSync(CASE_LAW_CACHE_SEED)) {
+      try {
+        fs.mkdirSync(cacheDir, { recursive: true });
+        fs.writeFileSync(filePath, zlib.gunzipSync(fs.readFileSync(CASE_LAW_CACHE_SEED)));
+        const seeded = readCaseLawCacheFile(filePath);
+        if (seeded) return seeded;
+      } catch {
+        // fall through to legacy migration / empty cache
+      }
+    }
     return {};
   } catch {
     return {};
@@ -354,6 +394,9 @@ function saveCaseLawCache(cacheDir, cache) {
   try {
     const filePath = path.join(cacheDir, CASE_LAW_CACHE_FILE);
     fs.writeFileSync(filePath, JSON.stringify(cache, null, 2), 'utf8');
+    // Refresh the memo in place so the next request doesn't re-parse ~50 MB.
+    const stat = fs.statSync(filePath);
+    caseLawCacheMemo = { path: filePath, mtimeMs: stat.mtimeMs, size: stat.size, cache };
   } catch {
     // best-effort
   }

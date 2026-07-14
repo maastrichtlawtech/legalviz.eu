@@ -568,13 +568,15 @@ function inferExternalActType(raw = "") {
   if (/\brecommendations?\b/i.test(value)) {
     return "recommendation";
   }
-  if (/\b(directives?|directiva|direttiva|diretiva|richtlinie|richtlijn|direktiv|dyrektyw[ay]|smernica|směrnice|treoir|οδηγία|директива|direktyva|direktīva|direktiva|irányelv)\b/i.test(value)) {
+  if (/\b(directives?|directiva|direttiva|diretiva|richtlinie|richtlijn|direktiv|direktiiv\w*|dyrektyw[ay]|smernica|směrnice|treoir|direktyva|direktīv\w*|direktiva|irányelv)\b/i.test(value)
+    || /οδηγία|директива/i.test(value)) {
     return "directive";
   }
   if (/\b(regulations?|règlement|reglamento|regolamento|regulamento|verordnung|verordening|förordning|forordning|rozporządzeni[ea]|nariadenie|nařízení|rialachán|κανονισμός|регламент|reglamentas|regulamentul|uredba|asetus|rendelet)\b/i.test(value)) {
     return "regulation";
   }
-  if (/\b(decisions?|decisión|decisione|decisão|decyzj[ai]|beschluss|besluit|beslut|rozhodnutie|rozhodnutí|cinneadh|απόφαση|решение|sprendimas|lēmums|odluka|határozat)\b/i.test(value)) {
+  if (/\b(decisions?|décision|decisión|decisiones|decisione|decisão|decyzj[ai]|beschluss|besluit|beslut|rozhodnutie|rozhodnutí|cinneadh|решение|sprendimas|lēmums|odluka|határozat|päätös)\b/i.test(value)
+    || /απόφαση/i.test(value)) {
     return "decision";
   }
   return null;
@@ -593,13 +595,30 @@ function normalizeFlattenedFootnoteIdentifier(identifier = "", followingText = "
   // valid here, and the punctuation makes this a bounded continuation rather
   // than a separate numbered provision.
   const splitYear = String(identifier).match(/^(\d{1,4})\/(\d)$/);
-  const continuation = String(followingText).match(/^\s*(?:\/\/\s*)?(\d)(?=\s*[,.;)])/);
+  const continuation = String(followingText).match(/^\s*(?:\/\/\s*)?(\d)(?=\s*(?:[,.;)]|\(\d+\)))/);
   return splitYear && continuation ? `${splitYear[1]}/${splitYear[2]}${continuation[1]}` : identifier;
 }
 
 function isClearlyNationalInstrumentContext(text, index) {
   const context = text.slice(Math.max(0, index - 120), index + 220);
   return /\b(?:regional|national|federal|state|provincial|municipal)\s+(?:government|law|decision)\b|\b(?:law|decision)\s+of\s+(?:the\s+)?(?:region|state|province)\b/i.test(context);
+}
+
+function isClearlyCaseLawContext(text, index) {
+  const context = text.slice(Math.max(0, index - 160), index + 160);
+  return /\b(?:judg(?:ment)?|decision)\s+of\s+the\s+(?:Court|General Court)\b|\b(?:in|Case|Joined Cases)\s+(?:the\s+)?case\b/i.test(context);
+}
+
+function hasInstitutionalIssuerContext(text, index) {
+  const preceding = text.slice(Math.max(0, index - 400), index);
+  const sentenceStart = Math.max(preceding.lastIndexOf("."), preceding.lastIndexOf(";"), preceding.lastIndexOf(":")) + 1;
+  const sentence = preceding.slice(sentenceStart);
+  // The match itself starts at "Regulation", so the issuer is immediately
+  // before `index` for the full citation. Later same-sentence short forms can
+  // inherit the already-stated issuer without widening the context past a
+  // sentence boundary.
+  return /\b(?:Council|Commission)\s*$/i.test(preceding)
+    || /\b(?:Council|Commission)\s+Regulation\b/i.test(sentence);
 }
 
 function parseExternalLawMeta(raw, target, { ecscAuthority = false, institutionalIssuer = false } = {}) {
@@ -891,7 +910,7 @@ export function extractCrossRefsFromText(text, lang) {
     const surroundingText = text.slice(m.index, m.index + 160);
     const institutionalContext = text.slice(Math.max(0, m.index - 120), m.index + 220);
     const ecscAuthority = /\bHigh Authority\b/i.test(text.slice(Math.max(0, m.index - 80), m.index + 80));
-    const institutionalIssuer = /\b(?:Council|Commission)\s*$/i.test(text.slice(Math.max(0, m.index - 24), m.index));
+    const institutionalIssuer = hasInstitutionalIssuerContext(text, m.index);
     const target = normalizeFlattenedFootnoteIdentifier(m[1], text.slice(m.index + m[0].length));
     externalRefs.push({
       type: "external",
@@ -903,10 +922,11 @@ export function extractCrossRefsFromText(text, lang) {
       // instruments of an external agreement body, not CELEX sector-3 acts.
       // Preserve them as explicit external citations rather than guessing a
       // Commission/Council decision from the number alone.
-      externalInstitutional: /\bof\s+the\s+(?:Joint|Association)\s+Committee\b|\b(?:[A-Z][A-Za-z]*(?:[-–][A-Za-z]+)*\s+)?Joint\s+Committee\b/i.test(institutionalContext),
+      externalInstitutional: /\bof\s+the\s+(?:Joint|Association)\s+(?:Committee|Council)\b|\b(?:[A-Z][A-Za-z]*(?:[-–][A-Za-z]+)*\s+)?(?:Joint\s+Committee|Association\s+Council)\b/i.test(institutionalContext),
       // A reference expressly tied to a regional/state government is a
       // national instrument, not an unresolved EU act.
       externalNational: isClearlyNationalInstrumentContext(text, m.index),
+      externalCaseLaw: isClearlyCaseLawContext(text, m.index),
       ecscAuthority,
       ...parseExternalLawMeta(m[0], target, { ecscAuthority, institutionalIssuer }),
     });
@@ -1080,7 +1100,7 @@ export function injectCrossRefLinks(html, lang) {
     while ((match = EXTERNAL_LAW_RE.exec(text)) !== null) {
       const target = normalizeFlattenedFootnoteIdentifier(match[1], text.slice(match.index + match[0].length));
       const ecscAuthority = /\bHigh Authority\b/i.test(text.slice(Math.max(0, match.index - 80), match.index + 80));
-      const institutionalIssuer = /\b(?:Council|Commission)\s*$/i.test(text.slice(Math.max(0, match.index - 24), match.index));
+      const institutionalIssuer = hasInstitutionalIssuerContext(text, match.index);
       const meta = parseExternalLawMeta(match[0], target, { ecscAuthority, institutionalIssuer });
       externalRefs.push({
         start: match.index,
@@ -1487,7 +1507,13 @@ export function parseFmxToCombined(xmlText) {
     // rendered and indexed several times.
     const unnumberedRoot = legalRoots[0] || root;
     const unnumberedBody = Array.from(unnumberedRoot.children).find((child) => child.tagName === "PROLOG")
-      || Array.from(unnumberedRoot.children).find((child) => child.tagName === "CONTENTS" && !child.closest("ANNEX"));
+      || Array.from(unnumberedRoot.children).find((child) => child.tagName === "CONTENTS" && !child.closest("ANNEX"))
+      || Array.from(unnumberedRoot.querySelectorAll("ENACTING\\.TERMS")).find((element) => allText(element))
+      // Older competition-decision summaries place every substantive section
+      // under PREAMBLE/GR.CONSID and leave ENACTING.TERMS empty. Selecting the
+      // preamble itself avoids relying on a compound selector for dotted FMX
+      // element names.
+      || unnumberedRoot.querySelector("PREAMBLE");
     const unnumberedText = unnumberedBody ? allText(unnumberedBody) : "";
     if (unnumberedText) {
       const article_number = "text";

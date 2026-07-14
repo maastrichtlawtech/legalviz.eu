@@ -73,7 +73,7 @@ test("parseEurlexHtmlToCombined retains unnumbered legacy decision measures", as
 
 test("parseEurlexHtmlToCombined retains unnumbered European Parliament decisions", async () => {
   const html = `<!DOCTYPE html><html lang="EN"><body><div id="TexteOnly"><p><TXT_TE>
-    <p>DECISION OF THE EUROPEAN PARLIAMENT</p><p>OF 16 NOVEMBER 1979</p>
+    <p>DECISION OF THE EUROPEAN PARLIAMENT OF 16 NOVEMBER 1979</p>
     <p>1. Grants a discharge to the Commission.</p><p>2. Instructs its President to communicate this Decision.</p>
   </TXT_TE></p></div></body></html>`;
   const parsed = await parseEurlexHtmlToCombined(html, "ENG");
@@ -81,6 +81,19 @@ test("parseEurlexHtmlToCombined retains unnumbered European Parliament decisions
   assert.equal(parsed.articles.length, 1);
   assert.equal(parsed.articles[0].display_label, "Decision text");
   assert.match(parsed.articles[0].article_html, /Grants a discharge/i);
+});
+
+test("parseEurlexHtmlToCombined retains narrative unnumbered Council decisions", async () => {
+  const html = `<!DOCTYPE html><html lang="EN"><body><div id="TexteOnly"><p><TXT_TE>
+    <p>COUNCIL DECISION OF 29 DECEMBER 1981 CONCERNING FISHERY ACTIVITIES</p>
+    <p>THE COUNCIL HAS DECIDED AS FOLLOWS:</p>
+    <p>FROM 1 JANUARY 1982 THE MEMBER STATES SHALL CONDUCT THEIR FISHING ACTIVITIES IN ACCORDANCE WITH THE USUAL SEASONAL CYCLES.</p>
+  </TXT_TE></p></div></body></html>`;
+  const parsed = await parseEurlexHtmlToCombined(html, "ENG");
+
+  assert.equal(parsed.articles.length, 1);
+  assert.equal(parsed.articles[0].is_unnumbered, true);
+  assert.match(parsed.articles[0].article_html, /FISHING ACTIVITIES/i);
 });
 
 const STRUCTURED_HTML = `<!DOCTYPE html>

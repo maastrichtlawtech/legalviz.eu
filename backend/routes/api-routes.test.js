@@ -326,8 +326,6 @@ test("GET /api/laws/:celex/case-law uses a short cache ttl", async () => {
   });
   const handler = app.routes.get("/api/laws/:celex/case-law");
   const res = createResponseRecorder();
-  const startedAt = Date.now();
-
   await handler({
     params: { celex: "31995L0046" },
     query: {},
@@ -339,7 +337,9 @@ test("GET /api/laws/:celex/case-law uses a short cache ttl", async () => {
   const entry = resolutionCache.get("case-law:31995L0046");
   assert.ok(entry, "Expected case-law response to be cached");
 
-  const ttlMs = entry.expiresAt - startedAt;
+  // Measure from cache insertion, not request start: the underlying lookup can
+  // legitimately take longer than the test tolerance under a busy full suite.
+  const ttlMs = entry.expiresAt - Date.now();
   assert.ok(ttlMs <= 5 * 60 * 1000 + 1_000, `Expected short cache ttl, got ${ttlMs}ms`);
   assert.ok(ttlMs >= 5 * 60 * 1000 - 1_000, `Expected short cache ttl, got ${ttlMs}ms`);
 });

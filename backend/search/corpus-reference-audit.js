@@ -57,6 +57,7 @@ function emptyStats() {
     refs: 0,
     externalInstitutional: 0,
     externalNational: 0,
+    externalCaseLaw: 0,
     invalidInternalRefs: 0,
     invalidInternalAnchors: 0,
     explicitUnresolved: 0,
@@ -83,9 +84,10 @@ function inspectParsedLaw(parsed, file, stats, knownCelex) {
         stats.invalidInternalRefs += 1;
         addSample(stats, `${path.basename(file)} ${location}: invalid Article ${ref.target}`);
       }
-      if (ref.type === "external" && (ref.externalInstitutional || ref.externalNational || ref.nationalLaw)) {
+      if (ref.type === "external" && (ref.externalInstitutional || ref.externalNational || ref.nationalLaw || ref.externalCaseLaw)) {
         if (ref.externalInstitutional) stats.externalInstitutional += 1;
         if (ref.externalNational || ref.nationalLaw) stats.externalNational += 1;
+        if (ref.externalCaseLaw) stats.externalCaseLaw += 1;
       } else if (ref.type === "external" && !ref.actCelex && !ref.contextual) {
         stats.explicitUnresolved += 1;
         addSample(stats, `${path.basename(file)} ${location}: unresolved ${ref.raw || ref.target || "external reference"}`);
@@ -135,7 +137,7 @@ async function auditFiles(kind, files, knownCelex = new Set()) {
 }
 
 function mergeStats(target, source) {
-  for (const key of ["scanned", "empty", "oversized", "errors", "refs", "externalInstitutional", "externalNational", "invalidInternalRefs", "invalidInternalAnchors", "explicitUnresolved", "missingResolvedTargets"]) {
+  for (const key of ["scanned", "empty", "oversized", "errors", "refs", "externalInstitutional", "externalNational", "externalCaseLaw", "invalidInternalRefs", "invalidInternalAnchors", "explicitUnresolved", "missingResolvedTargets"]) {
     target[key] += source[key] || 0;
   }
   for (const sample of source.samples || []) addSample(target, sample);

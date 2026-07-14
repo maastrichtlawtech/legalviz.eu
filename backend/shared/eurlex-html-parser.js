@@ -477,9 +477,14 @@ function parseSoleArticleBody(paragraphs, startIndex) {
 }
 
 function hasUnnumberedDecisionBody(paragraphs) {
-  return paragraphs.some((paragraph) =>
-    /^(?:(?:COUNCIL|COMMISSION|HIGH AUTHORITY)\s+(?:DECISION|RECOMMENDATION)|DECISION OF THE EUROPEAN PARLIAMENT)$/i.test(normalizeText(paragraph)),
-  ) && paragraphs.some((paragraph) => /^\d+\s*\./.test(normalizeText(paragraph)));
+  const hasDecisionHeading = paragraphs.some((paragraph) =>
+    /^(?:(?:COUNCIL|COMMISSION|HIGH AUTHORITY)\s+(?:DECISION|RECOMMENDATION)\b|DECISION OF THE EUROPEAN PARLIAMENT\b)/i.test(normalizeText(paragraph)),
+  );
+  const hasOperativeBody = paragraphs.some((paragraph) =>
+    /^\d+\s*\./.test(normalizeText(paragraph))
+    || /\b(?:HAS|HAVE)\s+DECIDED(?:\s+AS\s+FOLLOWS)?\s*:/i.test(normalizeText(paragraph)),
+  );
+  return hasDecisionHeading && hasOperativeBody;
 }
 
 function parseArticles(paragraphs) {

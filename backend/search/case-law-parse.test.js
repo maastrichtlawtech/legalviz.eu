@@ -87,6 +87,9 @@ test("parseCaseLawCorpus parses a corpus into the cache, is resumable, and merge
     const cacheDir = path.join(dir, "cache");
     fs.mkdirSync(path.join(corpusDir, "2019"), { recursive: true });
     fs.mkdirSync(cacheDir, { recursive: true });
+    // This test exercises a deliberately empty local cache rather than the
+    // production bundled corpus seed.
+    fs.writeFileSync(path.join(cacheDir, "case-law-cache-v5.json"), "{}");
     fs.writeFileSync(
       path.join(corpusDir, "2019", "62019CJ0311.html.gz"),
       zlib.gzipSync(Buffer.from(MODERN_JUDGMENT, "utf8")),

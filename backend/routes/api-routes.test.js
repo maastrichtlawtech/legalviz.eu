@@ -8,6 +8,7 @@ const { registerApiRoutes } = require("./api-routes");
 const { createParsedLawResolver } = require("../shared/parsed-law-service");
 const { createReferenceResolver } = require("../shared/reference-utils");
 const { ClientError, cacheGet, cacheSet, safeErrorResponse, toSearchLang } = require("../shared/api-utils");
+const { CitationGraphStore } = require("../search/citation-graph-store");
 const { JsonLegalCacheStore } = require("../search/legal-cache-store");
 
 const fixturePath = path.join(__dirname, "..", "search", "__fixtures__", "search-fixture.json");
@@ -218,6 +219,30 @@ test('GET article cited-by passes validated pagination to the citation graph', a
   assert.equal(res.statusCode, 200);
   assert.deepEqual(calls, [{ celex: '32016R0679', article: '6', pagination: { limit: 50, offset: 0 } }]);
   assert.equal(res.payload.counts.total, 1);
+});
+
+test('GET article cited-by returns normalized recital and annex units', async () => {
+  const graphPath = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'api-citation-graph-')), 'graph.json');
+  fs.writeFileSync(graphPath, JSON.stringify({
+    graphVersion: 1,
+    edges: [
+      { kind: 'legislation', sourceCelex: '32024R1689', sourceUnitType: 'recital', sourceUnit: 'recital_140', targetCelex: '32016R0679', targetArticle: '6' },
+      { kind: 'legislation', sourceCelex: '32024R1689', sourceUnitType: 'annex', sourceUnit: 'annex_I', targetCelex: '32016R0679', targetArticle: '6' },
+    ],
+  }));
+  const citationGraphStore = new CitationGraphStore(graphPath);
+  assert.equal(citationGraphStore.load(), true);
+  const { app } = registerTestRoutes({ citationGraphStore });
+  const handler = app.routes.get('/api/laws/:celex/articles/:n/cited-by');
+  const res = createResponseRecorder();
+
+  await handler({ params: { celex: '32016R0679', n: '6' }, query: {} }, res);
+
+  assert.equal(res.statusCode, 200);
+  assert.deepEqual(res.payload.citingProvisions.map(({ unitType, unit }) => ({ unitType, unit })), [
+    { unitType: 'annex', unit: 'I' },
+    { unitType: 'recital', unit: '140' },
+  ]);
 });
 
 test('GET article cited-by rejects pagination outside its bounds', async () => {

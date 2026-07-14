@@ -44,6 +44,25 @@ test("article queries count distinct sources and paginate the combined result", 
   assert.equal(second.citingProvisions.length + second.citingJudgments.length, 1);
 });
 
+test("article query public units remove recital and annex storage prefixes only", () => {
+  const sourceEdges = [
+    { kind: "legislation", sourceCelex: "32024R0001", sourceTitle: "Article source", sourceUnitType: "article", sourceUnit: "article_2", targetCelex: "32016R0679", targetArticle: "6" },
+    { kind: "legislation", sourceCelex: "32024R0002", sourceTitle: "Recital source", sourceUnitType: "recital", sourceUnit: "recital_140", targetCelex: "32016R0679", targetArticle: "6" },
+    { kind: "legislation", sourceCelex: "32024R0003", sourceTitle: "Annex source", sourceUnitType: "annex", sourceUnit: "annex_I", targetCelex: "32016R0679", targetArticle: "6" },
+    { kind: "legislation", sourceCelex: "32024R0004", sourceTitle: "Malformed source", sourceUnitType: "recital", sourceUnit: "recital_", targetCelex: "32016R0679", targetArticle: "6" },
+  ];
+  const store = new CitationGraphStore(writeGraph({ graphVersion: 1, edges: sourceEdges }));
+  assert.equal(store.load(), true);
+
+  const result = store.getArticleCitations("32016R0679", "6", { limit: 10 });
+  assert.deepEqual(result.citingProvisions.map(({ unitType, unit }) => ({ unitType, unit })), [
+    { unitType: "article", unit: "article_2" },
+    { unitType: "recital", unit: "140" },
+    { unitType: "annex", unit: "I" },
+    { unitType: "recital", unit: "recital_" },
+  ]);
+});
+
 test("act query separates act-only references from article references", () => {
   const store = new CitationGraphStore(writeGraph({ graphVersion: 1, edges }));
   store.load();

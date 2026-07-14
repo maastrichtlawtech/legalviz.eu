@@ -34,6 +34,16 @@ function distinctSources(edges) {
   return [...grouped.values()].sort(compareCitations);
 }
 
+function publicSourceUnit(edge) {
+  const unit = edge.sourceUnit;
+  if (typeof unit !== "string") return unit;
+  const unitType = String(edge.sourceUnitType || "").trim().toLowerCase();
+  if (unitType !== "recital" && unitType !== "annex") return unit;
+  const prefix = `${unitType}_`;
+  if (!unit.toLowerCase().startsWith(prefix) || unit.length === prefix.length) return unit;
+  return unit.slice(prefix.length);
+}
+
 function publicCitation(edge) {
   const references = edge._references || [{
       paragraph: edge.targetParagraph == null ? null : String(edge.targetParagraph),
@@ -45,7 +55,7 @@ function publicCitation(edge) {
   }
   return {
     celex: edge.sourceCelex, title: edge.sourceTitle || null,
-    unitType: edge.sourceUnitType, unit: edge.sourceUnit, references,
+    unitType: edge.sourceUnitType, unit: publicSourceUnit(edge), references,
   };
 }
 

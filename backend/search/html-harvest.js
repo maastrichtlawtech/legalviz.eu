@@ -146,7 +146,9 @@ async function harvestHtml(options = {}) {
 
   const targets = readTargets(targetsPath);
   const prior = readState(statePath) || {};
-  const startIndex = ensurePositiveInt(prior.nextIndex, 0) - 1 >= 0 ? ensurePositiveInt(prior.nextIndex, 0) : 0;
+  // ensurePositiveInt already floors a missing/zero nextIndex to 0, so a fresh
+  // run starts at the beginning and a resumed run picks up where it left off.
+  const startIndex = ensurePositiveInt(prior.nextIndex, 0);
   const missesPath = `${statePath}.misses.txt`;
   const failsPath = `${statePath}.fails.txt`;
 

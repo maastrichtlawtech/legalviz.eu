@@ -68,7 +68,6 @@ async function runWorker(variant, batchPath, outPath) {
   };
 
   const {
-    wrapForParsing,
     buildExcerptFromCombined,
     extractOfficialTitleAndExcerpt,
     extractTitleFromEurlexHtml,

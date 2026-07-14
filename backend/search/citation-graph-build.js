@@ -499,10 +499,19 @@ function formatSummaryReport(artifact) {
   return lines.join("\n");
 }
 
+function defaultCaseLawCachePath() {
+  // Derive from the single source of truth in law-queries so bumping
+  // CASE_LAW_CACHE_FILE (per the cache-version table) doesn't silently leave
+  // this builder reading a stale/missing file and dropping every judgment edge.
+  const { CASE_LAW_CACHE_FILE } = require("../shared/law-queries");
+  const cacheDir = process.env.CACHE_DIR || process.env.FMX_DIR || path.join(__dirname, "..", "law-cache");
+  return path.join(cacheDir, CASE_LAW_CACHE_FILE);
+}
+
 if (require.main === module) {
   const cliOptions = parseCliArgs(process.argv.slice(2));
   const outputPath = cliOptions.outputPath || DEFAULT_CITATION_GRAPH_PATH;
-  buildCitationGraphBatched({ ...cliOptions, progress: true, caseLawCachePath: process.env.CASE_LAW_CACHE_PATH || path.join(__dirname, "..", "law-cache", "case-law-cache-v4.json") })
+  buildCitationGraphBatched({ ...cliOptions, progress: true, caseLawCachePath: process.env.CASE_LAW_CACHE_PATH || defaultCaseLawCachePath() })
     .then((artifact) => console.log(`${formatSummaryReport(artifact)}\nWrote ${outputPath}`))
     .catch((error) => { console.error(error); process.exitCode = 1; });
 }

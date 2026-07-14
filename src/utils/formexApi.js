@@ -137,7 +137,7 @@ function createCombinedLawEnvelope(payload, rawXml = null) {
 // Bump whenever the shape of a cached API payload changes (e.g. renaming a
 // summary field) so stale cache-first entries are invalidated rather than
 // served for up to API_JSON_CACHE_MAX_AGE_MS under the old shape.
-const API_JSON_CACHE_VERSION = 2;
+const API_JSON_CACHE_VERSION = 1;
 // After this age, cache-first entries are revalidated against the network
 // (still served from cache if the network is unavailable).
 const API_JSON_CACHE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;

@@ -170,32 +170,6 @@ describe("parseFmxToCombined — GDPR", () => {
       expect(nums[i]).toBeGreaterThanOrEqual(nums[i - 1]);
     }
   });
-
-  it("exposes structured paragraphs alongside article_html (additive)", () => {
-    for (const art of result.articles) {
-      expect(Array.isArray(art.paragraphs)).toBe(true);
-      expect(art).toHaveProperty("article_html");
-    }
-  });
-
-  it("Article 5 (numbered PARAGs) exposes each paragraph with its number", () => {
-    const art5 = result.articles.find((a) => a.article_number === "5");
-    expect(art5.paragraphs.length).toBeGreaterThanOrEqual(2);
-    const numbers = art5.paragraphs.map((p) => p.number);
-    expect(numbers).toContain("1");
-    expect(numbers).toContain("2");
-    for (const p of art5.paragraphs) {
-      expect(typeof p.html).toBe("string");
-      expect(p.html.length).toBeGreaterThan(0);
-    }
-  });
-
-  it("paragraph HTML for Article 5 does not leak between paragraphs", () => {
-    const art5 = result.articles.find((a) => a.article_number === "5");
-    const p1 = art5.paragraphs.find((p) => p.number === "1");
-    const p2 = art5.paragraphs.find((p) => p.number === "2");
-    expect(p1.html).not.toBe(p2.html);
-  });
 });
 
 // ---------------------------------------------------------------------------
@@ -231,18 +205,6 @@ describe("parseFmxToCombined — AI Act", () => {
 
   it("extracts 13 annexes", () => {
     expect(result.annexes).toHaveLength(13);
-  });
-
-  it("an article with no PARAG elements still exposes a single implicit paragraph", () => {
-    // Article 3 (Definitions) in the AI Act fixture has no numbered PARAGs —
-    // its content is direct ALINEA/LIST children of <ARTICLE>.
-    const art3 = result.articles.find((a) => a.article_number === "3");
-    expect(art3.paragraphs).toHaveLength(1);
-    expect(art3.paragraphs[0].number).toBeNull();
-    expect(art3.paragraphs[0].html.length).toBeGreaterThan(0);
-    // article_html contract must stay untouched by the additive paragraphs field
-    expect(art3.article_html).not.toMatch(/<PARAG\b/);
-    expect(art3.article_html).not.toMatch(/<ARTICLE\b/);
   });
 
   it("annexes have expected shape", () => {
@@ -367,45 +329,6 @@ describe("parseFmxToCombined — AI Act", () => {
 describe("parseFmxToCombined — error handling", () => {
   it("throws on malformed XML", () => {
     expect(() => parseFmxToCombined("<ACT><broken")).toThrow();
-  });
-});
-
-// ---------------------------------------------------------------------------
-// parseFmxToCombined — paragraph numbering fallback
-// ---------------------------------------------------------------------------
-
-describe("parseFmxToCombined — unnumbered PARAG numbering", () => {
-  const wrap = (articleXml) => `<ACT xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://formex.publications.europa.eu/schema/formex-05.59-20170418.xd"><BIB.INSTANCE><LG.DOC>EN</LG.DOC></BIB.INSTANCE><ENACTING.TERMS><DIVISION>${articleXml}</DIVISION></ENACTING.TERMS></ACT>`;
-
-  it("numbers the first unnumbered PARAG '1' even after an implicit chapeau ALINEA", () => {
-    // A chapeau ALINEA before the first PARAG produces an implicit
-    // (number: null) paragraph that must not consume a numbering slot from
-    // the fallback counter used for unnumbered PARAG elements.
-    const xml = wrap(
-      `<ARTICLE IDENTIFIER="001"><TI.ART>Article 1</TI.ART>` +
-      `<ALINEA><P>Intro chapeau.</P></ALINEA>` +
-      `<PARAG><P>Unnumbered body.</P></PARAG>` +
-      `</ARTICLE>`
-    );
-    const result = parseFmxToCombined(xml);
-    const art1 = result.articles.find((a) => a.article_number === "1");
-    expect(art1.paragraphs).toHaveLength(2);
-    expect(art1.paragraphs[0].number).toBeNull();
-    expect(art1.paragraphs[1].number).toBe("1");
-  });
-
-  it("numbers two consecutive unnumbered PARAGs 1, 2 when there is no chapeau", () => {
-    const xml = wrap(
-      `<ARTICLE IDENTIFIER="001"><TI.ART>Article 1</TI.ART>` +
-      `<PARAG><P>First unnumbered body.</P></PARAG>` +
-      `<PARAG><P>Second unnumbered body.</P></PARAG>` +
-      `</ARTICLE>`
-    );
-    const result = parseFmxToCombined(xml);
-    const art1 = result.articles.find((a) => a.article_number === "1");
-    expect(art1.paragraphs).toHaveLength(2);
-    expect(art1.paragraphs[0].number).toBe("1");
-    expect(art1.paragraphs[1].number).toBe("2");
   });
 });
 

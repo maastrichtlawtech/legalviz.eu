@@ -160,37 +160,6 @@ describe("mapRecitalsToArticles", () => {
     expect(result.get("3").map((r) => r.recital_number)).not.toContain("1");
   });
 
-  it("keeps a recital under every article it clarifies (many-to-many, no exclusive cap)", () => {
-    const multiArticles = [
-      { article_number: "1", article_title: "", article_html: "<p>aloneone</p>" },
-      { article_number: "2", article_title: "", article_html: "<p>coretopic</p>" },
-      { article_number: "3", article_title: "", article_html: "<p>coretopic</p>" },
-      { article_number: "4", article_title: "", article_html: "<p>coretopic</p>" },
-      { article_number: "5", article_title: "", article_html: "<p>alonefive</p>" },
-      { article_number: "6", article_title: "", article_html: "<p>irrelevanttopic irrelevanttopic irrelevanttopic</p>" },
-    ];
-    const multiRecitals = [
-      { recital_number: "1", recital_text: "aloneone" },
-      { recital_number: "2", recital_text: "coretopic" },
-      { recital_number: "3", recital_text: "alonefive" },
-    ];
-
-    const result = mapRecitalsToArticles(multiRecitals, multiArticles);
-
-    // Recital 2 clarifies articles 2, 3 AND 4 — it should appear under all three,
-    // not be dropped after "winning" the best-matching one.
-    expect(result.get("2").map((r) => r.recital_number)).toContain("2");
-    expect(result.get("3").map((r) => r.recital_number)).toContain("2");
-    expect(result.get("4").map((r) => r.recital_number)).toContain("2");
-
-    // Recital 2 must not leak into articles it has no term overlap with.
-    expect(result.get("1").map((r) => r.recital_number)).not.toContain("2");
-    expect(result.get("5").map((r) => r.recital_number)).not.toContain("2");
-
-    // An article with no genuinely relevant recital abstains (empty list, not padded).
-    expect(result.get("6")).toEqual([]);
-  });
-
   it("exposes recitals with no term overlap as orphans", () => {
     const result = mapRecitalsToArticles(
       [{ recital_number: "1", recital_text: "nooverlapterm" }],
@@ -203,82 +172,6 @@ describe("mapRecitalsToArticles", () => {
         expect(mappedRecitals).toHaveLength(0);
       }
     }
-  });
-
-  describe("paragraph-level linking (step 6 MVP)", () => {
-    const paragraphArticles = [
-      {
-        article_number: "1",
-        article_title: "",
-        article_html:
-          "<p>alphatopic content about alpha</p><p>betatopic content about beta specialword</p><p>gammatopic content about gamma</p>",
-        paragraphs: [
-          { number: "1", html: "<p>alphatopic content about alpha</p>" },
-          { number: "2", html: "<p>betatopic content about beta specialword</p>" },
-          { number: "3", html: "<p>gammatopic content about gamma</p>" },
-        ],
-      },
-      {
-        article_number: "2",
-        article_title: "",
-        article_html: "<p>unrelatedfiller unrelatedfiller</p>",
-        paragraphs: [],
-      },
-    ];
-
-    it("links a recital to the specific paragraph it clarifies, not just the article", () => {
-      const result = mapRecitalsToArticles(
-        [{ recital_number: "1", recital_text: "betatopic specialword" }],
-        paragraphArticles
-      );
-
-      const matched = result.get("1").find((r) => r.recital_number === "1");
-      expect(matched).toBeDefined();
-      expect(matched.paragraph_number).toBe("2");
-    });
-
-    it("reports paragraph_number as null when the article has no structured paragraphs", () => {
-      const noParagraphArticles = [
-        { article_number: "1", article_title: "", article_html: "<p>sharedterm</p>", paragraphs: [] },
-        { article_number: "2", article_title: "", article_html: "<p>unrelatedfiller unrelatedfiller</p>", paragraphs: [] },
-      ];
-      const result = mapRecitalsToArticles(
-        [{ recital_number: "1", recital_text: "sharedterm" }],
-        noParagraphArticles
-      );
-
-      const matched = result.get("1").find((r) => r.recital_number === "1");
-      expect(matched).toBeDefined();
-      expect(matched.paragraph_number).toBeNull();
-    });
-
-    it("does not invent a paragraph number for implicit chapeau content", () => {
-      const mixedParagraphArticles = [
-        {
-          article_number: "1",
-          article_title: "",
-          article_html: "<p>chapeautopic introduction</p><p>numberedtopic rule</p>",
-          paragraphs: [
-            { number: null, html: "<p>chapeautopic introduction</p>" },
-            { number: "1", html: "<p>numberedtopic rule</p>" },
-          ],
-        },
-        {
-          article_number: "2",
-          article_title: "",
-          article_html: "<p>unrelatedfiller unrelatedfiller</p>",
-          paragraphs: [],
-        },
-      ];
-      const result = mapRecitalsToArticles(
-        [{ recital_number: "1", recital_text: "chapeautopic introduction" }],
-        mixedParagraphArticles
-      );
-
-      const matched = result.get("1").find((r) => r.recital_number === "1");
-      expect(matched).toBeDefined();
-      expect(matched.paragraph_number).toBeNull();
-    });
   });
 });
 

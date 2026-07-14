@@ -538,8 +538,16 @@ function extractOperativePartOldFormat(body) {
 
 function extractOperativePartFromText(fullText) {
   const operativePatterns = [
-    /On\s+those\s+grounds\s*,?\s*(?:the\s+Court\s*\([^)]*\)\s*hereby\s+(?:rules|declares|orders)\s*:?)/i,
-    /On\s+those\s+grounds\s*,?\s*THE\s+COURT\s*(?:\([^)]*\))?\s*(?:hereby\s+)?(?:rules|declares|orders)\s*:?/i,
+    // "On those grounds, THE COURT (Chamber), <in answer to the questions
+    // referred…> hereby rules/declares/orders:". The court routinely inserts a
+    // clause between "THE COURT" and the ruling verb (very common pre-2000), so
+    // allow arbitrary text in between rather than requiring them adjacent.
+    /On\s+those\s+grounds\s*,?[\s\S]{0,400}?\bhereby\s+(?:rules|declares|orders)\b\s*:?/i,
+    // Pre-1970 phrasing: "For these reasons, THE COURT … declares:" — the verb
+    // sometimes appears without "hereby".
+    /For\s+these\s+reasons\s*,?[\s\S]{0,500}?\b(?:hereby\s+)?(?:rules|declares|orders)\b\s*:?/i,
+    // Fallback: "THE COURT … hereby rules/declares/orders:" with no lead-in.
+    /\bTHE\s+COURT\b[\s\S]{0,300}?\bhereby\s+(?:rules|declares|orders)\b\s*:?/i,
   ];
 
   let operativeStart = -1;
@@ -562,7 +570,10 @@ function extractOperativePartFromText(fullText) {
   }
 
   const declarations = [];
-  const numberedPattern = /(?:^|\s)(\d+)\.\s+/g;
+  // Old uppercase judgments number points as "1 ." / "2 ." (space before the
+  // dot); cap at two digits so a trailing year like "1968 ." is not mistaken
+  // for a declaration number.
+  const numberedPattern = /(?:^|\s)(\d{1,2})\s*\.\s+/g;
   const matches = [...rawOperative.matchAll(numberedPattern)];
 
   if (matches.length > 0) {
@@ -587,6 +598,100 @@ function extractOperativePartFromText(fullText) {
  */
 function extractArticleCitations(document) {
   return extractArticleCitationsFromText(document.body?.textContent || '');
+}
+
+/**
+ * Extract the party name from EUR-Lex's DC.description / DC.title metadata — the
+ * OJ notice line "Judgment of the Court (Chamber) of DATE. - PARTY v PARTY. -
+ * SUBJECT. - Case C-…". This is populated consistently across every judgment era
+ * (unlike the body's name markup, which changed shape several times), so it is a
+ * far more reliable name source than scraping bold tags. Attribute values are
+ * already HTML-entity-decoded by the DOM parser (e.g. "G&ouml;bbels" -> "Göbbels").
+ */
+function nameFromDescription(document) {
+  const meta = (n) => document.querySelector(`meta[name="${n}"]`)?.getAttribute('content') || '';
+  const desc = meta('DC.description') || meta('DC.title') || '';
+  if (!/^(Judgment|Order|Opinion|Ruling|View)\b/i.test(desc)) return null;
+  // Segments are delimited by ". - "; the party name is the segment after the
+  // "Judgment of the Court … of DATE" preamble.
+  const segments = desc.split(/\.\s*[-–]\s*/).map((s) => s.trim()).filter(Boolean);
+  if (segments.length < 2) return null;
+  const candidate = segments[1];
+  if (!candidate || /^Case\s/i.test(candidate) || /^Reference\b/i.test(candidate)) return null;
+  return candidate.replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * Parse a judgment's raw HTML into structured details (name + operative
+ * declarations + article citations). Split out from fetchCaseDetails so the same
+ * parse can run OFFLINE against the locally-harvested case-law corpus — the
+ * network fetch and the (JSDOM-based, format-fragile) parse are independent, and
+ * decoupling them lets parser fixes reprocess the corpus with no re-scraping.
+ * Returns null for empty/too-short HTML.
+ */
+function parseCaseDetailsFromHtml(html) {
+  if (!html || html.length < 200) return null;
+
+  const dom = new JSDOM(html);
+  const doc = dom.window.document;
+
+  const operative = extractOperativePart(doc);
+  const citations = extractArticleCitations(doc);
+
+  // Also extract party name from the full HTML (more reliable than Range request).
+  // Modern format: <span class="coj-bold">Name</span>
+  // Older Curia format: <P class="C02AlineaAltA"><B>Name</B></P>
+  const cleanBold = (raw) => raw
+    .replace(/<[^>]+>/g, '')
+    .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&apos;/g, "'")
+    .replace(/&nbsp;/g, ' ')
+    .replace(/[,;]+$/, '').trim();
+
+  const modernPattern = /<span class="(?:coj-)?bold">([^<]+)<\/span>/g;
+  let boldMatches = [...html.matchAll(modernPattern)];
+  if (boldMatches.length === 0) {
+    const oldPattern = /<p\s+class="C02AlineaAlt[^"]*"[^>]*>([\s\S]*?)<\/p>/gi;
+    for (const pMatch of html.matchAll(oldPattern)) {
+      const bMatches = [...pMatch[1].matchAll(/<b>([\s\S]*?)<\/b>/gi)];
+      for (const b of bMatches) boldMatches.push(b);
+      if (boldMatches.length >= 2) break;
+    }
+  }
+  if (boldMatches.length === 0) {
+    // Pre-2004 OJ format: <font class="oj-font*"><b>Name</b></font>
+    // First hit is usually "Case C-XX/YY"; prefer the first non-case-number hit.
+    const legacyPattern = /<font[^>]+class="[^"]*oj-font[^"]*"[^>]*>\s*<b>([\s\S]*?)<\/b>\s*<\/font>/gi;
+    for (const m of html.matchAll(legacyPattern)) {
+      const spaced = m[1].replace(/<br\s*\/?>/gi, ' ');
+      const plain = cleanBold(spaced);
+      if (plain && !/^Case\s+[CT]-\d/i.test(plain)) {
+        boldMatches.push([m[0], spaced]);
+        break;
+      }
+    }
+  }
+
+  // Prefer the canonical OJ-notice name from metadata (works across all eras);
+  // fall back to scraping bold party markup from the body when it is absent.
+  let name = nameFromDescription(doc);
+  if (!name && boldMatches.length > 0) {
+    const first = cleanBold(boldMatches[0][1]);
+    if (first && boldMatches.length >= 2) {
+      const second = cleanBold(boldMatches[1][1]);
+      name = second ? `${first} v ${second}` : first;
+    } else {
+      name = first || null;
+    }
+  }
+
+  return {
+    name,
+    declarations: operative.declarations,
+    articlesCited: citations.articlesCited,
+    articleRefs: citations.articleRefs,
+    citationParserVersion: CITATION_PARSER_VERSION,
+  };
 }
 
 /**
@@ -633,66 +738,7 @@ async function fetchCaseDetails(caseCelex, { cacheDir, stats, timeoutMs = DEFAUL
       if (!res.ok) return null;
 
       const html = await res.text();
-      if (!html || html.length < 200) return null;
-
-      const dom = new JSDOM(html);
-      const doc = dom.window.document;
-
-      const operative = extractOperativePart(doc);
-      const citations = extractArticleCitations(doc);
-
-      // Also extract party name from the full HTML (more reliable than Range request).
-      // Modern format: <span class="coj-bold">Name</span>
-      // Older Curia format: <P class="C02AlineaAltA"><B>Name</B></P>
-      const cleanBold = (raw) => raw
-        .replace(/<[^>]+>/g, '')
-        .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
-        .replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&apos;/g, "'")
-        .replace(/&nbsp;/g, ' ')
-        .replace(/[,;]+$/, '').trim();
-
-      const modernPattern = /<span class="(?:coj-)?bold">([^<]+)<\/span>/g;
-      let boldMatches = [...html.matchAll(modernPattern)];
-      if (boldMatches.length === 0) {
-        const oldPattern = /<p\s+class="C02AlineaAlt[^"]*"[^>]*>([\s\S]*?)<\/p>/gi;
-        for (const pMatch of html.matchAll(oldPattern)) {
-          const bMatches = [...pMatch[1].matchAll(/<b>([\s\S]*?)<\/b>/gi)];
-          for (const b of bMatches) boldMatches.push(b);
-          if (boldMatches.length >= 2) break;
-        }
-      }
-      if (boldMatches.length === 0) {
-        // Pre-2004 OJ format: <font class="oj-font*"><b>Name</b></font>
-        // First hit is usually "Case C-XX/YY"; prefer the first non-case-number hit.
-        const legacyPattern = /<font[^>]+class="[^"]*oj-font[^"]*"[^>]*>\s*<b>([\s\S]*?)<\/b>\s*<\/font>/gi;
-        for (const m of html.matchAll(legacyPattern)) {
-          const spaced = m[1].replace(/<br\s*\/?>/gi, ' ');
-          const plain = cleanBold(spaced);
-          if (plain && !/^Case\s+[CT]-\d/i.test(plain)) {
-            boldMatches.push([m[0], spaced]);
-            break;
-          }
-        }
-      }
-
-      let name = null;
-      if (boldMatches.length > 0) {
-        const first = cleanBold(boldMatches[0][1]);
-        if (first && boldMatches.length >= 2) {
-          const second = cleanBold(boldMatches[1][1]);
-          name = second ? `${first} v ${second}` : first;
-        } else {
-          name = first || null;
-        }
-      }
-
-      return {
-        name,
-        declarations: operative.declarations,
-        articlesCited: citations.articlesCited,
-        articleRefs: citations.articleRefs,
-        citationParserVersion: CITATION_PARSER_VERSION,
-      };
+      return parseCaseDetailsFromHtml(html);
     } finally {
       clearTimeout(timeout);
     }
@@ -771,5 +817,10 @@ module.exports = {
   fetchImplementing,
   fetchCaseLaw,
   parseCitationsToRefs,
+  parseCaseDetailsFromHtml,
+  loadCaseLawCache,
+  saveCaseLawCache,
+  isPartialEntry,
+  CITATION_PARSER_VERSION,
   CASE_LAW_CACHE_FILE,
 };

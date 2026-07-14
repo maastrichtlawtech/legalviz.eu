@@ -525,6 +525,18 @@ describe("extractCrossRefsFromText — multilingual instruments", () => {
     }));
   });
 
+  it("recognises party-prefixed Joint Committee recommendations as external", () => {
+    const refs = extractCrossRefsFromText(
+      "Recommendation 1/79 of the EEC-Austria Joint Committee - Community transit",
+      getLangConfig("EN"),
+    );
+    expect(refs).toContainEqual(expect.objectContaining({
+      target: "1/79",
+      actCelex: null,
+      externalInstitutional: true,
+    }));
+  });
+
   it("keeps expressly regional instruments external to EU law", () => {
     const refs = extractCrossRefsFromText(
       "Law No 51 of the region of Lombardy and Decision No 11/21587 of the regional government",

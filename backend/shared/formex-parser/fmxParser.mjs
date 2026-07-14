@@ -32,7 +32,7 @@ const {
  * Bump this whenever the parser output changes (new fields, bug fixes, etc.)
  * so that cached parsed results are automatically re-parsed from raw XML.
  */
-export const PARSER_VERSION = 12;
+export const PARSER_VERSION = 13;
 
 // ---------------------------------------------------------------------------
 // FMX → HTML conversion helpers
@@ -889,6 +889,7 @@ export function extractCrossRefsFromText(text, lang) {
   EXTERNAL_LAW_RE.lastIndex = 0;
   while ((m = EXTERNAL_LAW_RE.exec(text)) !== null) {
     const surroundingText = text.slice(m.index, m.index + 160);
+    const institutionalContext = text.slice(Math.max(0, m.index - 120), m.index + 220);
     const ecscAuthority = /\bHigh Authority\b/i.test(text.slice(Math.max(0, m.index - 80), m.index + 80));
     const institutionalIssuer = /\b(?:Council|Commission)\s*$/i.test(text.slice(Math.max(0, m.index - 24), m.index));
     const target = normalizeFlattenedFootnoteIdentifier(m[1], text.slice(m.index + m[0].length));
@@ -902,7 +903,7 @@ export function extractCrossRefsFromText(text, lang) {
       // instruments of an external agreement body, not CELEX sector-3 acts.
       // Preserve them as explicit external citations rather than guessing a
       // Commission/Council decision from the number alone.
-      externalInstitutional: /\bof\s+the\s+(?:Joint|Association)\s+Committee\b/i.test(surroundingText),
+      externalInstitutional: /\bof\s+the\s+(?:Joint|Association)\s+Committee\b|\b(?:[A-Z][A-Za-z]*(?:[-–][A-Za-z]+)*\s+)?Joint\s+Committee\b/i.test(institutionalContext),
       // A reference expressly tied to a regional/state government is a
       // national instrument, not an unresolved EU act.
       externalNational: isClearlyNationalInstrumentContext(text, m.index),

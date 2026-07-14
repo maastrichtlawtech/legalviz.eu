@@ -9,10 +9,12 @@
 // it can extend the cache's year coverage back to the start of the corpus.
 //
 // Strategy:
-//   - Reuse the existing 2010-2026 records verbatim (they carry SPARQL-derived
-//     date/eli metadata that can't be reconstructed offline).
+//   - Reuse the existing 2010-2026 records verbatim (they carry a SPARQL-derived
+//     precise date + eli that can't be reconstructed offline).
 //   - Build pre-2010 additions from the corpus: title + excerpt from parsing the
-//     gzipped source, metadata (celex/year/type/eli) derived deterministically.
+//     gzipped source, metadata (celex/year/type/eli/date) derived
+//     deterministically. The date is year-only (from the CELEX) since the exact
+//     work_date_document isn't on disk — enough to render a date chip.
 //   - Merge and dedup by CELEX (existing > FMX > HTML).
 //
 // FMX parsing uses jsdom, which leaks: a single process OOMs around ~500 parses.
@@ -103,7 +105,7 @@ async function runWorker(variant, batchPath, outPath) {
       records.push({
         celex,
         title: null,
-        date: null,
+        date: deriveDateFromCelex(celex),
         eli: buildPrimaryEli(celex),
         type: inferType(celex),
         fmxAvailable: false,
@@ -117,7 +119,7 @@ async function runWorker(variant, batchPath, outPath) {
     records.push({
       celex,
       title,
-      date: null,
+      date: deriveDateFromCelex(celex),
       eli: buildPrimaryEli(celex),
       type: inferType(celex),
       fmxAvailable: variant === "fmx" && ok,
@@ -159,6 +161,16 @@ function inferType(celex) {
   if (marker === "L") return "directive";
   if (marker === "D") return "decision";
   return "unknown";
+}
+
+// Year-only date derived from the CELEX id. The real work_date_document can't
+// be reconstructed offline (it lives in SPARQL, not in the raw source on disk),
+// but the CELEX encodes the year (`3YYYY…`), which is enough to render a date
+// chip in the search modal instead of showing nothing. Returns null for a CELEX
+// we can't parse.
+function deriveDateFromCelex(celex) {
+  const match = String(celex || "").match(/^3(\d{4})([RLD])/);
+  return match ? match[1] : null;
 }
 
 function buildPrimaryEli(celex) {
@@ -333,7 +345,9 @@ async function driver() {
     push(rec);
   }
 
-  // Same ordering as buildSearchCache: newest first, undated (corpus) records last.
+  // Same ordering as buildSearchCache: newest first. Corpus records carry a
+  // year-only date, which still sorts correctly against the full ISO dates of
+  // reused records (both start with the year).
   merged.sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
 
   const years = merged.map((r) => Number(r.celexYear)).filter((y) => Number.isFinite(y));
@@ -389,4 +403,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { buildPrimaryEli, inferType, listCorpusFiles };
+module.exports = { buildPrimaryEli, deriveDateFromCelex, inferType, listCorpusFiles };

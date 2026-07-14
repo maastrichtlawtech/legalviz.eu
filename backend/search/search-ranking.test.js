@@ -19,3 +19,25 @@ test("determineMatchReason treats Law Enforcement Directive aliases as exact mat
     assert.equal(determineMatchReason(law, parsed), "alias_exact", `Expected alias_exact for ${query}`);
   }
 });
+
+test("enrichSearchRecord falls back to the CELEX year when no date is present", () => {
+  const record = enrichSearchRecord({
+    celex: "31998L0034",
+    title: "Directive 98/34/EC",
+    type: "directive",
+    date: null,
+    eli: "http://data.europa.eu/eli/dir/1998/34/oj",
+  });
+  assert.equal(record.date, "1998");
+});
+
+test("enrichSearchRecord keeps a precise ISO date when one is present", () => {
+  const record = enrichSearchRecord({
+    celex: "32016L0680",
+    title: "Directive (EU) 2016/680",
+    type: "directive",
+    date: "2016-04-27",
+    eli: "http://data.europa.eu/eli/dir/2016/680/oj",
+  });
+  assert.equal(record.date, "2016-04-27");
+});

@@ -2,7 +2,7 @@ const { JSDOM } = require("jsdom");
 const { createRequire } = require("module");
 
 const { ClientError } = require("./api-utils");
-const { referenceDedupeKey } = require("./legal-reference-core.cjs");
+const { referenceDedupeKey, enforceInternalReferenceIntegrity } = require("./legal-reference-core.cjs");
 
 const LANG_3_TO_2 = {
   BUL: "BG",
@@ -1033,31 +1033,6 @@ function buildHtmlCrossReferences({
     attach(`annex_${annex.annex_id}`, htmlToPlainText(annex.annex_html));
   }
   return crossReferences;
-}
-
-function stripInvalidArticleLinks(html, validArticles) {
-  return String(html || "").replace(
-    /<a\b(?=[^>]*\bclass="cross-ref")(?=[^>]*\bdata-ref-article="([^"]+)")[^>]*>([\s\S]*?)<\/a>/gi,
-    (match, target, label) => validArticles.has(target) ? match : label,
-  );
-}
-
-// HTML fallbacks can flatten a citation to an external predecessor act into a
-// bare "Article N".  As in the Formex parser, a bare article reference is
-// internal only when that article exists in the parsed current act.  Keep the
-// source text, but remove the unsafe internal edge and anchor.
-function enforceInternalReferenceIntegrity(parsed) {
-  const validArticles = new Set((parsed.articles || []).map((article) => String(article.article_number)));
-  const cleanHtml = (html) => stripInvalidArticleLinks(html, validArticles);
-  for (const article of parsed.articles || []) article.article_html = cleanHtml(article.article_html);
-  for (const recital of parsed.recitals || []) recital.recital_html = cleanHtml(recital.recital_html);
-  for (const annex of parsed.annexes || []) annex.annex_html = cleanHtml(annex.annex_html);
-  for (const [location, refs] of Object.entries(parsed.crossReferences || {})) {
-    const validRefs = refs.filter((ref) => ref.type !== "article" || validArticles.has(String(ref.target)));
-    if (validRefs.length) parsed.crossReferences[location] = validRefs;
-    else delete parsed.crossReferences[location];
-  }
-  return parsed;
 }
 
 async function loadHelpers() {

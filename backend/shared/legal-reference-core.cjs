@@ -487,6 +487,44 @@ function hydrateContextualRefs(refs, targetCelex) {
   });
 }
 
+/**
+ * Remove the internal cross-reference anchors whose target article does not
+ * exist in the parsed act, leaving the citation visible as plain text. A bare
+ * "Article N" is only a valid internal link when N is an article of the current
+ * act; flattened correlation tables and predecessor-act citations otherwise
+ * produce broken or guessed links.
+ */
+function stripInvalidArticleLinks(html, validArticles) {
+  return String(html || '').replace(
+    /<a\b(?=[^>]*\bclass="cross-ref")(?=[^>]*\bdata-ref-article="([^"]+)")[^>]*>([\s\S]*?)<\/a>/gi,
+    (match, target, label) => (validArticles.has(target) ? match : label),
+  );
+}
+
+/**
+ * Final integrity guard shared by both source formats (Formex XML and EUR-Lex
+ * HTML): no internal edge or anchor may target an article absent from the fully
+ * parsed act. Mutates `parsed` in place (article/recital/annex HTML and the
+ * crossReferences map) and returns it. `article.paragraphs[].html` is guarded
+ * defensively so the invariant extends to that field wherever it is produced.
+ */
+function enforceInternalReferenceIntegrity(parsed) {
+  const validArticles = new Set((parsed.articles || []).map((article) => String(article.article_number)));
+  const clean = (html) => stripInvalidArticleLinks(html, validArticles);
+  for (const article of parsed.articles || []) {
+    article.article_html = clean(article.article_html);
+    for (const paragraph of article.paragraphs || []) paragraph.html = clean(paragraph.html);
+  }
+  for (const recital of parsed.recitals || []) recital.recital_html = clean(recital.recital_html);
+  for (const annex of parsed.annexes || []) annex.annex_html = clean(annex.annex_html);
+  for (const [location, refs] of Object.entries(parsed.crossReferences || {})) {
+    const validRefs = refs.filter((ref) => ref.type !== 'article' || validArticles.has(String(ref.target)));
+    if (validRefs.length) parsed.crossReferences[location] = validRefs;
+    else delete parsed.crossReferences[location];
+  }
+  return parsed;
+}
+
 module.exports = {
   ACT_CELEX_MAP,
   MAX_ARTICLE_ACT_BRIDGE,
@@ -494,6 +532,7 @@ module.exports = {
   bindArticleRefsToExternalRefs,
   bindThereofArticleRefs,
   dedupeReferences,
+  enforceInternalReferenceIntegrity,
   hydrateContextualRefs,
   isArticleOfActBridge,
   normalizeYear,
@@ -501,4 +540,5 @@ module.exports = {
   referenceDedupeKey,
   resolveInstrumentCelex,
   scanArticleEnumerations,
+  stripInvalidArticleLinks,
 };

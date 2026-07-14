@@ -22,10 +22,12 @@ const {
   MAX_ARTICLE_ACT_BRIDGE,
   bindArticleRefsToExternalRefs,
   bindThereofArticleRefs,
+  enforceInternalReferenceIntegrity,
   parseInstrumentIdentifier,
   referenceDedupeKey,
   resolveInstrumentCelex,
   scanArticleEnumerations: scanSharedArticleEnumerations,
+  stripInvalidArticleLinks,
 } = legalReferenceCore;
 
 /**
@@ -970,13 +972,6 @@ function bindRefsToAmendmentScope(refs, articleTitle, lang) {
   });
 }
 
-function stripInvalidArticleLinks(html, validArticles) {
-  return String(html || "").replace(
-    /<a\b(?=[^>]*\bclass="cross-ref")(?=[^>]*\bdata-ref-article="([^"]+)")[^>]*>([\s\S]*?)<\/a>/gi,
-    (match, target, label) => validArticles.has(target) ? match : label,
-  );
-}
-
 /**
  * Extract structured REF.DOC.OJ cross-references directly from XML elements.
  * These are language-independent — they use XML attributes, not text patterns.
@@ -1628,23 +1623,9 @@ export function parseFmxToCombined(xmlText) {
   // absent from the fully parsed act. This catches malformed source tokens such
   // as "Article 1472)" (a flattened "Article 147(2)") and any attribution form
   // we intentionally did not guess. The citation remains visible as plain text.
-  for (const article of articles) {
-    article.article_html = stripInvalidArticleLinks(article.article_html, validArticleNumbers);
-    // Structured per-paragraph HTML (the recital paragraph-linking feature)
-    // is not produced on this branch, but guard it too so the integrity
-    // invariant automatically covers the field once that feature lands.
-    for (const paragraph of article.paragraphs || []) {
-      paragraph.html = stripInvalidArticleLinks(paragraph.html, validArticleNumbers);
-    }
-  }
-  for (const recital of recitals) {
-    recital.recital_html = stripInvalidArticleLinks(recital.recital_html, validArticleNumbers);
-  }
-  for (const [location, refs] of Object.entries(crossReferences)) {
-    const validRefs = refs.filter((ref) => ref.type !== "article" || validArticleNumbers.has(ref.target));
-    if (validRefs.length) crossReferences[location] = validRefs;
-    else delete crossReferences[location];
-  }
+  // Shared with the EUR-Lex HTML parser so both source formats enforce the same
+  // invariant (and defensively covers article.paragraphs[].html).
+  enforceInternalReferenceIntegrity({ articles, recitals, annexes, crossReferences });
 
   return { title, articles, recitals, annexes, definitions, langCode, crossReferences, parserVersion: PARSER_VERSION };
 }

@@ -4,6 +4,9 @@ const path = require('path');
 const { CASE_LAW_CACHE_FILE } = require('./law-queries');
 
 const FLUSH_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
+// Bump when the persisted analytics.json shape changes (see the cache-version
+// table in the root CLAUDE.md). Older files are migrated on load.
+const ANALYTICS_SCHEMA_VERSION = 2;
 const DAY_RETENTION = 90;
 const COUNTER_CAP = 1000;
 const DAILY_TOP_LIMIT = 20;
@@ -224,7 +227,7 @@ function createAnalytics({ cacheDir, now = () => new Date(), hashKey } = {}) {
       const persistedDays = {};
       for (const [date, daily] of Object.entries(days)) persistedDays[date] = serializeDaily(daily);
       const data = {
-        schemaVersion: 2,
+        schemaVersion: ANALYTICS_SCHEMA_VERSION,
         routeCounts: Object.fromEntries(routeCounts),
         celexCounts: Object.fromEntries(celexCounts),
         channelCounts: Object.fromEntries(channelCounts),
@@ -365,7 +368,7 @@ function createAnalytics({ cacheDir, now = () => new Date(), hashKey } = {}) {
     for (const [date, daily] of Object.entries(days)) publicDays[date] = publicDaily(daily);
     const todayPublic = publicDaily(today);
     return {
-      schemaVersion: 2,
+      schemaVersion: ANALYTICS_SCHEMA_VERSION,
       privacy: {
         uniqueUsers: 'daily estimate of anonymized network buckets from a keyed bitmap',
         searchQueriesStored: false,

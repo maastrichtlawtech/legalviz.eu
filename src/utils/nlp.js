@@ -1,11 +1,20 @@
 // NLP Algorithm Version - bump this when algorithm changes to invalidate cache
-export const NLP_VERSION = 13;
+export const NLP_VERSION = 15;
 
 const MONOTONICITY_BETA = 0.9;
 const MONOTONICITY_GAMMA = 2;
-const RAW_SIMILARITY_FLOOR = 0.15;
+// How close a candidate recital's score must be to an article's own top score
+// to also be considered relevant to that article (per-article secondary cutoff).
 const SECONDARY_SCORE_RATIO = 0.75;
-const MAX_ARTICLES_PER_RECITAL = 2;
+// An article only gets any recitals at all if its strongest candidate clears this
+// fraction of *this law's own* typical "strong match" strength (see
+// `computeRelevanceFloor`). This replaces a fixed absolute cosine floor — the
+// right similarity magnitude varies by law length/language, so the floor is
+// derived from the within-law distribution of scores instead of a hardcoded number.
+const ARTICLE_RELEVANCE_FLOOR_RATIO = 0.25;
+// Safety valve: caps how many recitals a single article can list even if many
+// tie above the secondary-ratio cutoff, so a pathological tie doesn't flood the UI.
+const MAX_RECITALS_PER_ARTICLE = 12;
 
 import { getStopWords } from "./languages.js";
 
@@ -121,23 +130,27 @@ const stripTags = (html) => {
 };
 
 /**
- * Map recitals to articles based on TF-IDF Cosine Similarity with a positional prior.
- * 
- * @param {Array} recitals - Array of { recital_number, recital_text, ... }
- * @param {Array} articles - Array of { article_number, article_title, article_html, ... }
- * @returns {Map} - Map where key is article_number, value is array of matching recitals.
- *                  Unmapped recital numbers are exposed under the reserved null key.
+ * Median of a numeric array (0 for an empty array).
  */
-export function mapRecitalsToArticles(recitals, articles) {
-  // Configuration
+function median(values) {
+  if (!values || values.length === 0) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 0
+    ? (sorted[mid - 1] + sorted[mid]) / 2
+    : sorted[mid];
+}
+
+/**
+ * Build the corpus vectors + IDF shared by both the article and recital sides
+ * of the retrieval (title-weighted article documents).
+ */
+function buildArticleCorpus(articles) {
   const TITLE_WEIGHT = 3; // How many times to repeat title tokens for weighting
 
-  // 1. Prepare Article Documents (Corpus)
-  // Weight article titles more heavily by repeating their tokens
   const articleDocs = articles.map(a => {
     const titleTokens = tokenize(a.article_title || "");
     const bodyTokens = tokenize(stripTags(a.article_html));
-    // Repeat title tokens for increased weight
     const weightedTitleTokens = [];
     for (let i = 0; i < TITLE_WEIGHT; i++) {
       weightedTitleTokens.push(...titleTokens);
@@ -145,104 +158,255 @@ export function mapRecitalsToArticles(recitals, articles) {
     return {
       id: a.article_number,
       tokens: [...weightedTitleTokens, ...bodyTokens],
-      original: a
     };
   });
 
-  // 2. Compute IDF on Articles
   const idf = computeIDF(articleDocs);
-
-  // 3. Vectorize Articles
   const articleVectors = articleDocs.map(doc => ({
     id: doc.id,
     ...computeTFIDFVector(doc.tokens, idf)
   }));
 
-  const articleToRecitals = new Map();
-  articles.forEach(a => articleToRecitals.set(a.article_number, []));
-  articleToRecitals.set(null, []);
+  return { idf, articleVectors };
+}
 
-  const recitalDenominator = Math.max(recitals.length - 1, 1);
-  const articleDenominator = Math.max(articles.length - 1, 1);
-
-  // 4. Process Recitals
-  recitals.forEach((r, recitalIndex) => {
+/**
+ * Prepare each recital's TF-IDF vector and top keywords once, against a
+ * given IDF (shared with the article corpus so scores are comparable).
+ */
+function prepareRecitalEntries(recitals, idf) {
+  return recitals.map((r, recitalIndex) => {
     const recitalText = r.recital_text || stripTags(r.recital_html) || "";
     const tokens = tokenize(recitalText);
     const recitalVec = computeTFIDFVector(tokens, idf);
 
-    // Extract top keywords based on TF-IDF scores
     const keywordScores = new Map();
     for (const token of tokens) {
       if (idf.has(token)) {
         const score = idf.get(token);
-        // Keep the highest score for each unique token
         if (!keywordScores.has(token) || keywordScores.get(token) < score) {
           keywordScores.set(token, score);
         }
       }
     }
-    // Sort by IDF score (higher = more distinctive) and take top 3
     const keywords = Array.from(keywordScores.entries())
       .sort((a, b) => b[1] - a[1])
       .slice(0, 3)
       .map(([term]) => term);
 
-    const scoredArticles = [];
-    // Gate on raw evidence; choose the article with the monotonicity-weighted score.
-    let strongestRawCos = 0;
+    return { recital: r, recitalIndex, recitalVec, keywords, text: recitalText };
+  });
+}
+
+/**
+ * Score every recital against every "target" (article or article paragraph),
+ * combining raw TF-IDF cosine similarity with a positional prior (targets/
+ * recitals that sit at a similar relative position in the law are more
+ * likely to be related — recitals are drafted roughly in article order).
+ *
+ * Returns a matrix: scoreMatrix[recitalIndex][targetIndex] = final score.
+ */
+function buildScoreMatrix(recitalEntries, targetVectors, recitalCount) {
+  const recitalDenominator = Math.max(recitalCount - 1, 1);
+  const targetDenominator = Math.max(targetVectors.length - 1, 1);
+
+  return recitalEntries.map(({ recitalVec, recitalIndex }) => {
     const rPos = recitalIndex / recitalDenominator;
+    return targetVectors.map((vec, targetIndex) => {
+      const rawCos = cosineSimilarity(recitalVec, vec);
+      const tPos = targetIndex / targetDenominator;
+      const positionalPrior = (1 - MONOTONICITY_BETA * Math.abs(rPos - tPos)) ** MONOTONICITY_GAMMA;
+      return rawCos * positionalPrior;
+    });
+  });
+}
 
-    articleVectors.forEach((aVec, articleIndex) => {
-      const rawCos = cosineSimilarity(recitalVec, aVec);
-      strongestRawCos = Math.max(strongestRawCos, rawCos);
-      const aPos = articleIndex / articleDenominator;
-      const positionalPrior = (1 - MONOTONICITY_BETA * Math.abs(rPos - aPos)) ** MONOTONICITY_GAMMA;
-      const score = rawCos * positionalPrior;
+/**
+ * For each target (article or paragraph), retrieve its own ranked list of
+ * relevant recitals independently — a recital may end up under several
+ * targets (many-to-many), unlike an exclusive-assignment/partition model.
+ *
+ * Gating is two-layered and entirely relative to *this law's* own score
+ * distribution (no hardcoded absolute cosine floor):
+ *  1. A target-level relevance floor: a target only gets any recitals if its
+ *     own strongest candidate clears a fraction (ARTICLE_RELEVANCE_FLOOR_RATIO)
+ *     of the median "best match" strength across all targets in this law.
+ *     This is what lets an irrelevant target abstain (a common, valid outcome).
+ *  2. A secondary-cutoff: among a target's candidates, keep those within
+ *     SECONDARY_SCORE_RATIO of that target's own top score (plus a sane cap),
+ *     so a target isn't flooded with weakly-related recitals.
+ *
+ * @returns {Array<Array<{recitalIndex:number, score:number}>>} selected candidates per target index
+ */
+function retrieveRecitalsPerTarget(scoreMatrix, targetCount) {
+  const targetBestScores = [];
+  for (let targetIndex = 0; targetIndex < targetCount; targetIndex += 1) {
+    let best = 0;
+    for (const row of scoreMatrix) {
+      if (row[targetIndex] > best) best = row[targetIndex];
+    }
+    targetBestScores.push(best);
+  }
 
-      scoredArticles.push({
-        id: aVec.id,
-        score,
-      });
+  const referenceStrength = median(targetBestScores.filter((s) => s > 0));
+  const relevanceFloor = referenceStrength * ARTICLE_RELEVANCE_FLOOR_RATIO;
+
+  const selectedPerTarget = [];
+  for (let targetIndex = 0; targetIndex < targetCount; targetIndex += 1) {
+    const candidates = [];
+    scoreMatrix.forEach((row, recitalIndex) => {
+      const score = row[targetIndex];
+      if (score > 0) candidates.push({ recitalIndex, score });
     });
 
-    // Apply threshold and assign
-    scoredArticles.sort((a, b) => b.score - a.score);
-    const bestScore = scoredArticles[0]?.score || 0;
-
-    if (strongestRawCos >= RAW_SIMILARITY_FLOOR && bestScore > 0) {
-      const selectedArticles = scoredArticles
-        .filter((candidate) => candidate.score >= bestScore * SECONDARY_SCORE_RATIO)
-        .slice(0, MAX_ARTICLES_PER_RECITAL);
-
-      for (const selectedArticle of selectedArticles) {
-        const list = articleToRecitals.get(selectedArticle.id);
-        if (list) {
-          // Store with score and keywords for later processing
-          list.push({ ...r, _score: selectedArticle.score, _keywords: keywords });
-        }
-      }
-    } else {
-      articleToRecitals.get(null).push(r.recital_number);
+    if (candidates.length === 0) {
+      selectedPerTarget.push([]);
+      continue;
     }
+
+    candidates.sort((a, b) => b.score - a.score);
+    const bestScore = candidates[0].score;
+
+    if (bestScore < relevanceFloor) {
+      selectedPerTarget.push([]); // abstain — nothing clears this law's relevance bar
+      continue;
+    }
+
+    const selected = candidates
+      .filter((c) => c.score >= bestScore * SECONDARY_SCORE_RATIO)
+      .slice(0, MAX_RECITALS_PER_ARTICLE);
+
+    selectedPerTarget.push(selected);
+  }
+
+  return selectedPerTarget;
+}
+
+/**
+ * STEP 6 MVP — paragraph-level linking.
+ *
+ * Given a recital already established as relevant to an article (step 4),
+ * find which of that article's structured `paragraphs` it most likely
+ * clarifies. Kept deliberately simple for the MVP: a small TF-IDF corpus
+ * scoped to *just this article's own paragraphs* (typically 2-10 documents),
+ * rather than a single law-wide paragraph index — cheap, and the article-level
+ * match has already narrowed the search space to one article.
+ *
+ * TODO (full UX, not in MVP scope): surface this per-paragraph link with real
+ * UI (e.g. jump-to-paragraph, highlight-in-place) instead of a numeric badge;
+ * consider a law-wide paragraph corpus if per-article scoping proves too
+ * narrow (e.g. a recital whose clearest match is a near-duplicate paragraph
+ * in a neighbouring article); reuse buildScoreMatrix/retrieveRecitalsPerTarget
+ * here too if/when multiple recitals need ranking against the same paragraph.
+ *
+ * @param {Array} paragraphs - article.paragraphs, i.e. [{ number, html }]
+ * @returns {{idf: Map, paragraphVectors: Array}|null} the scoped corpus, or
+ *   null when there's nothing to disambiguate (0-1 paragraphs).
+ */
+function buildParagraphCorpus(paragraphs) {
+  if (!paragraphs || paragraphs.length <= 1) return null;
+
+  const paragraphDocs = paragraphs.map((p) => ({
+    // Introductory/chapeau content is represented as an implicit paragraph
+    // with number: null. Keep it in the comparison corpus so it can win, but
+    // never invent a display number such as "0" for it.
+    id: p.number ?? null,
+    tokens: tokenize(stripTags(p.html)),
+  }));
+  const idf = computeIDF(paragraphDocs);
+  const paragraphVectors = paragraphDocs.map((doc) => ({
+    id: doc.id,
+    ...computeTFIDFVector(doc.tokens, idf),
+  }));
+  return { idf, paragraphVectors };
+}
+
+/**
+ * Match a single recital against a pre-built paragraph corpus (see
+ * `buildParagraphCorpus`). The corpus depends only on the article, so it is
+ * built once per article and reused across that article's matched recitals.
+ *
+ * @param {string} recitalText - plain-text (HTML-stripped) recital content
+ * @param {{idf: Map, paragraphVectors: Array}|null} corpus
+ * @returns {string|null} best-matching paragraph number, or null when there's
+ *   no corpus or no real term overlap.
+ */
+function matchParagraph(recitalText, corpus) {
+  if (!corpus) return null;
+
+  const recitalVec = computeTFIDFVector(tokenize(recitalText), corpus.idf);
+  if (recitalVec.magnitude === 0) return null;
+
+  let bestId = null;
+  let bestScore = 0;
+  for (const pVec of corpus.paragraphVectors) {
+    const score = cosineSimilarity(recitalVec, pVec);
+    if (score > bestScore) {
+      bestScore = score;
+      bestId = pVec.id;
+    }
+  }
+  // Only report a paragraph when there's genuine term overlap — otherwise
+  // this would just be reporting an arbitrary tie-break default.
+  return bestScore > 0 ? bestId : null;
+}
+
+/**
+ * Map recitals to articles based on TF-IDF Cosine Similarity with a positional prior.
+ *
+ * Retrieval runs *per article* (many-to-many): a recital that clarifies several
+ * articles will appear under all of them, rather than being exclusively assigned
+ * to at most a couple of "winning" articles.
+ *
+ * Also attaches a best-effort `paragraph_number` (step 6 MVP) to each matched
+ * recital when the article has structured paragraphs — see `matchParagraph`.
+ *
+ * @param {Array} recitals - Array of { recital_number, recital_text, ... }
+ * @param {Array} articles - Array of { article_number, article_title, article_html, paragraphs?, ... }
+ * @returns {Map} - Map where key is article_number, value is array of
+ *                  { recital_number, relevanceScore, keywords, paragraph_number },
+ *                  ranked by relevance. `paragraph_number` is null when the
+ *                  article has no structured paragraphs to disambiguate, or no
+ *                  single paragraph stands out.
+ *                  Recitals that don't clear the bar for any article are exposed
+ *                  under the reserved null key (array of recital_number).
+ */
+export function mapRecitalsToArticles(recitals, articles) {
+  const { idf, articleVectors } = buildArticleCorpus(articles);
+
+  const articleToRecitals = new Map();
+  articles.forEach(a => articleToRecitals.set(a.article_number, []));
+  articleToRecitals.set(null, []);
+
+  const recitalEntries = prepareRecitalEntries(recitals, idf);
+  const scoreMatrix = buildScoreMatrix(recitalEntries, articleVectors, recitals.length);
+  const selectedPerArticle = retrieveRecitalsPerTarget(scoreMatrix, articleVectors.length);
+
+  const paragraphsByArticle = new Map(articles.map((a) => [a.article_number, a.paragraphs]));
+  const assignedRecitalNumbers = new Set();
+
+  articleVectors.forEach((aVec, articleIndex) => {
+    const list = articleToRecitals.get(aVec.id);
+    if (!list) return;
+
+    const paragraphs = paragraphsByArticle.get(aVec.id);
+    // Build the article's paragraph corpus once and reuse it for every recital
+    // matched to this article (the corpus depends only on the article).
+    const paragraphCorpus = buildParagraphCorpus(paragraphs);
+
+    for (const { recitalIndex, score } of selectedPerArticle[articleIndex]) {
+      const { recital, keywords, text } = recitalEntries[recitalIndex];
+      const paragraph_number = matchParagraph(text, paragraphCorpus);
+      list.push({ recital_number: recital.recital_number, relevanceScore: score, keywords, paragraph_number });
+      assignedRecitalNumbers.add(recital.recital_number);
+    }
+
+    list.sort((a, b) => b.relevanceScore - a.relevanceScore);
   });
 
-  // 5. Sort by score and expose relevance score + keywords
-  for (const [articleId, recitalList] of articleToRecitals) {
-    if (articleId === null) continue;
-    if (recitalList.length > 0) {
-      // Sort by score descending
-      recitalList.sort((a, b) => (b._score || 0) - (a._score || 0));
-
-      // Return only recital_number + computed fields (not full recital object)
-      // This keeps cache small - HTML is looked up at render time from original data
-      const sortedList = recitalList.map(r => ({
-        recital_number: r.recital_number,
-        relevanceScore: r._score,
-        keywords: r._keywords
-      }));
-
-      articleToRecitals.set(articleId, sortedList);
+  for (const { recital } of recitalEntries) {
+    if (!assignedRecitalNumbers.has(recital.recital_number)) {
+      articleToRecitals.get(null).push(recital.recital_number);
     }
   }
 

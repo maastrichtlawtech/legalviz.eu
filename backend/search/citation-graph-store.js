@@ -1,5 +1,6 @@
 const fs = require("fs");
 const path = require("path");
+const zlib = require("zlib");
 const GRAPH_VERSION = 1;
 
 const DEFAULT_CITATION_GRAPH_PATH = process.env.CITATION_GRAPH_PATH || path.join(__dirname, "data", "citation-graph.json");
@@ -76,7 +77,21 @@ class CitationGraphStore {
 
   load() {
     try {
-      const parsed = JSON.parse(fs.readFileSync(this.graphPath, "utf8"));
+      // The graph is too large to commit, so a fresh deploy fetches
+      // citation-graph.json.gz as a GitHub Release asset at build time (see
+      // backend/Dockerfile). Prefer the raw file when present (a local rebuild
+      // writes it), else fall back to the gzipped artifact.
+      const gzPath = `${this.graphPath}.gz`;
+      const useGz = !fs.existsSync(this.graphPath) && fs.existsSync(gzPath);
+      if (!useGz && !fs.existsSync(this.graphPath)) {
+        const error = new Error(`Citation graph not found at ${this.graphPath} (or ${gzPath})`);
+        error.code = "ENOENT";
+        throw error;
+      }
+      const raw = useGz
+        ? zlib.gunzipSync(fs.readFileSync(gzPath)).toString("utf8")
+        : fs.readFileSync(this.graphPath, "utf8");
+      const parsed = JSON.parse(raw);
       if (parsed?.graphVersion !== GRAPH_VERSION) throw new Error(`Unsupported citation graph version ${parsed?.graphVersion}; expected ${GRAPH_VERSION}`);
       if (!Array.isArray(parsed.edges)) throw new Error("Citation graph edges must be an array");
       this.payload = parsed;

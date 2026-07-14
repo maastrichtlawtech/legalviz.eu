@@ -2,6 +2,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
+const zlib = require("node:zlib");
 const test = require("node:test");
 
 const { CitationGraphStore } = require("./citation-graph-store");
@@ -29,6 +30,22 @@ test("store rejects missing and incompatible artifacts without throwing", () => 
   const incompatible = new CitationGraphStore(writeGraph({ graphVersion: 99, edges: [] }));
   assert.equal(incompatible.load(), false);
   assert.match(incompatible.getStatus().error, /Unsupported citation graph version/);
+});
+
+test("store loads the gzipped artifact when the raw file is absent", () => {
+  // Fresh deploys ship only citation-graph.json.gz as a Release asset; the raw
+  // JSON exists only after a local rebuild and must win when both are present.
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "citation-store-gz-"));
+  const graphPath = path.join(dir, "citation-graph.json");
+  fs.writeFileSync(`${graphPath}.gz`, zlib.gzipSync(JSON.stringify({ graphVersion: 1, stats: { edges: 4 }, edges })));
+
+  const store = new CitationGraphStore(graphPath);
+  assert.equal(store.load(), true);
+  assert.deepEqual(store.getActCitations("32016R0679").totals, { provisions: 2, judgments: 1, total: 3 });
+
+  fs.writeFileSync(graphPath, JSON.stringify({ graphVersion: 1, stats: { edges: 0 }, edges: [] }));
+  assert.equal(store.load(), true);
+  assert.equal(store.getStatus().edges, 0);
 });
 
 test("article queries count distinct sources and paginate the combined result", () => {

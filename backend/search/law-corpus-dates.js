@@ -2,7 +2,7 @@
 // document"), persisted at harvest time so the offline corpus rebuild
 // (build-cache-from-corpus.js) can restore precise dates without re-querying
 // SPARQL. The raw law source gzipped on disk doesn't carry this date, so
-// without the manifest an offline rebuild can only derive a year from the CELEX.
+// without the manifest an offline rebuild has no date for these acts at all.
 //
 // One JSON object keyed by normalized CELEX, written atomically alongside the
 // corpus (<dataDir>/law-dates.json). Merges are additive: a new non-empty date
@@ -38,7 +38,28 @@ function readCorpusDates(dataDir) {
 // with both a CELEX and a truthy date are recorded. Returns the total entry
 // count after the merge.
 async function mergeCorpusDates(dataDir, records) {
-  const dates = readCorpusDates(dataDir);
+  const filePath = corpusDatesPath(dataDir);
+
+  // Start from the existing manifest so the merge is additive across runs (a
+  // later harvest of a subset of years must not drop dates gathered earlier).
+  let dates = {};
+  if (fs.existsSync(filePath)) {
+    try {
+      const parsed = JSON.parse(fs.readFileSync(filePath, "utf8"));
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        dates = parsed;
+      } else {
+        throw new Error("manifest is not a JSON object");
+      }
+    } catch {
+      // The manifest exists but is unreadable. Overwriting it with only this
+      // batch would silently discard every previously harvested date, so move
+      // the corrupt file aside for recovery and rebuild from this batch instead.
+      const salvage = `${filePath}.corrupt.${process.pid}.${Date.now()}`;
+      await fsp.rename(filePath, salvage).catch(() => {});
+    }
+  }
+
   for (const record of records || []) {
     const key = normalizeCelexKey(record && record.celex);
     const date = record && record.date;
@@ -46,7 +67,6 @@ async function mergeCorpusDates(dataDir, records) {
     dates[key] = date;
   }
   await fsp.mkdir(dataDir, { recursive: true });
-  const filePath = corpusDatesPath(dataDir);
   // Atomic write so an interrupted harvest never leaves a truncated manifest
   // that would later read back as corrupt (and silently lose every date).
   const tempPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;

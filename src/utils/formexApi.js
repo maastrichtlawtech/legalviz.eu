@@ -885,6 +885,31 @@ export async function searchLaws(query, { limit = 10, noRewrite = false, signal 
   return res.json();
 }
 
+/**
+ * Bulk CELEX → EuroVoc topics lookup. Returns a `{ CELEX: string[] }` map;
+ * CELEX ids without known topics are simply omitted. Used to backfill topics
+ * onto library laws opened before topics were persisted.
+ */
+export async function fetchTopicsForCelexes(celexes, { signal } = {}) {
+  const unique = Array.from(new Set(
+    (Array.isArray(celexes) ? celexes : [])
+      .map((celex) => String(celex || "").trim().toUpperCase())
+      .filter(Boolean),
+  ));
+  if (unique.length === 0) return {};
+
+  const params = new URLSearchParams({ celex: unique.join(",") });
+  const url = `${API_BASE}/api/topics?${params.toString()}`;
+  const res = await apiFetch(url, { signal });
+
+  if (!res.ok) {
+    await readApiError(res, `Topic lookup failed (${res.status})`);
+  }
+
+  const payload = await res.json();
+  return payload?.topics && typeof payload.topics === "object" ? payload.topics : {};
+}
+
 export async function fetchFormexByReference(reference, lang = "EN") {
   const query = buildReferenceQuery(reference, lang);
   const url = `${API_BASE}/api/laws/by-reference?${query}`;

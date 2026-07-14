@@ -182,6 +182,7 @@ cat input.xml | parse-fmx > output.json
 | `GET` | `/api/laws/:celex/articles/:n/case-law-digest?lang=ENG` | Cached static digest of CJEU case law interpreting one article. Zero-case results are cached without an LLM call. |
 | `GET` | `/api/laws/by-reference?actType=...&year=...&number=...` | Fetch law by official reference |
 | `GET` | `/api/search?q=keyword&limit=10` | Search law metadata |
+| `GET` | `/api/topics?celex=32016R0679,32024R1689` | Bulk EuroVoc topics for up to 200 CELEX ids (`{ topics: { CELEX: string[] } }`) |
 | `GET` | `/api/resolve-reference?actType=...&year=...&number=...` | Resolve legal reference to CELEX |
 | `GET` | `/api/resolve-url?url=...` | Resolve EUR-Lex URL to CELEX |
 | `POST` | `/mcp` | Model Context Protocol endpoint (see [MCP server](#mcp-server)) |

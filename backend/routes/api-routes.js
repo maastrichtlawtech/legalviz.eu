@@ -5,6 +5,7 @@ const path = require("path");
 const { ClientError } = require("../shared/api-utils");
 const { parseFmxXml } = require("../shared/fmx-parser-node");
 const { createSearchHandler } = require("../search/search-route");
+const { createTopicsHandler } = require("../search/topics-route");
 const { fetchMetadata, fetchAmendments, fetchImplementing, fetchCaseLaw } = require("../shared/law-queries");
 const { ChatProviderError } = require("../shared/openrouter-chat");
 const { ensureRecitalTitles } = require("../shared/recital-title-service");
@@ -565,6 +566,8 @@ function registerApiRoutes(app, deps) {
   });
 
   app.get('/api/search', rateLimitMiddleware, createSearchHandler(legalCacheStore));
+
+  app.get('/api/topics', rateLimitMiddleware, createTopicsHandler(legalCacheStore));
 
   app.get('/api/resolve-reference', rateLimitMiddleware, async (req, res) => {
     try {

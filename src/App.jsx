@@ -4,6 +4,7 @@ import { Landing } from "./components/Landing.jsx";
 import { LawViewer } from "./components/LawViewer.jsx";
 import { ThemeProvider } from "./components/ThemeProvider.jsx";
 import { runOneTimeMigrationReset } from "./utils/resetApp.js";
+import { runOneTimeTopicsBackfill } from "./utils/topicsBackfill.js";
 import { I18nProvider } from "./i18n/I18nProvider.jsx";
 import { useI18n } from "./i18n/useI18n.js";
 import { getLocaleHomePath, isSupportedUiLocale, normalizeUiLocale, SUPPORTED_UI_LOCALES } from "./i18n/localeMeta.js";
@@ -11,8 +12,13 @@ import { getLocaleHomePath, isSupportedUiLocale, normalizeUiLocale, SUPPORTED_UI
 function Layout() {
   useEffect(() => {
     runOneTimeMigrationReset().then((didReset) => {
-      if (!didReset) return;
-      window.location.replace(`${window.location.pathname}${window.location.search}${window.location.hash}`);
+      if (didReset) {
+        window.location.replace(`${window.location.pathname}${window.location.search}${window.location.hash}`);
+        return;
+      }
+      // No reset (which would reload anyway) — backfill EuroVoc topics onto
+      // library laws opened before topics were persisted. Best-effort.
+      runOneTimeTopicsBackfill().catch(() => {});
     });
   }, []);
 

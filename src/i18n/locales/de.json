@@ -75,7 +75,7 @@
     "placeholderLaws": "Primäre EU-Rechtsakte nach Titel, Referenz oder CELEX suchen",
     "placeholderMatches": "In zuletzt geöffneten Gesetzen suchen...",
     "searchingCurrentLaw": "Suche in {law}.",
-    "searchingLaws": "Suche in primären EU-Rechtsakten aus dem LegalViz-Index seit 2010. Sekundärrechtsakte sind noch nicht enthalten.",
+    "searchingLaws": "Suche in primären EU-Rechtsakten aus dem LegalViz-Index. Sekundärrechtsakte sind noch nicht enthalten.",
     "searchingMatches": "Suche in {count} zuletzt geöffneten {lawWord} auf {language}. Öffnen Sie ein Gesetz in dieser Sprache, um es durchsuchbar zu machen.",
     "shortcut": "Cmd+K",
     "submitLawSearch": "Gesetze suchen",

@@ -75,7 +75,7 @@
     "placeholderLaws": "Vyhledávání primárních právních aktů EU podle názvu, reference nebo CELEX",
     "placeholderMatches": "Vyhledávání v naposledy otevřených zákonech...",
     "searchingCurrentLaw": "Vyhledávání v {law}.",
-    "searchingLaws": "Vyhledávání primárních právních aktů EU z indexu LegalViz od roku 2010. Sekundární akty zatím nejsou zahrnuty.",
+    "searchingLaws": "Vyhledávání primárních právních aktů EU z indexu LegalViz. Sekundární akty zatím nejsou zahrnuty.",
     "searchingMatches": "Vyhledávání v {count} naposledy otevřených {lawWord} v jazyce {language}. Otevřete zákon v tomto jazyce, aby byl vyhledatelný.",
     "shortcut": "Cmd+K",
     "submitLawSearch": "Hledat zákony",

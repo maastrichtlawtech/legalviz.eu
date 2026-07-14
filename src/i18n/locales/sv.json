@@ -75,7 +75,7 @@
     "placeholderLaws": "Sök primära EU-rättsakter efter titel, referens eller CELEX",
     "placeholderMatches": "Sök i senast öppnade lagar...",
     "searchingCurrentLaw": "Söker i {law}.",
-    "searchingLaws": "Söker primära EU-rättsakter från LegalViz-indexet sedan 2010. Sekundära akter är ännu inte inkluderade.",
+    "searchingLaws": "Söker primära EU-rättsakter från LegalViz-indexet. Sekundära akter är ännu inte inkluderade.",
     "searchingMatches": "Söker i {count} senast öppnade {lawWord} på {language}.",
     "shortcut": "Cmd+K",
     "submitLawSearch": "Sök lagar",

@@ -75,7 +75,7 @@
     "placeholderLaws": "Ieškoti pirminių ES teisės aktų pagal pavadinimą, nuorodą arba CELEX",
     "placeholderMatches": "Ieškoti paskutiniuose atidarytuose įstatymuose...",
     "searchingCurrentLaw": "Ieškoma įstatyme {law}.",
-    "searchingLaws": "Ieškoma pirminių ES teisės aktų iš LegalViz indekso nuo 2010 m.",
+    "searchingLaws": "Ieškoma pirminių ES teisės aktų iš LegalViz indekso.",
     "searchingMatches": "Ieškoma {count} paskutinių atidarytų {lawWord} kalba {language}.",
     "shortcut": "Cmd+K",
     "submitLawSearch": "Ieškoti įstatymų",

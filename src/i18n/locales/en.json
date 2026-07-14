@@ -55,7 +55,7 @@
     "placeholderMatches": "Search across last opened law matches...",
     "initializing": "Initializing search...",
     "searchingCurrentLaw": "Searching within {law}.",
-    "searchingLaws": "Searching primary EU acts from the LegalViz index since 2010. Secondary acts are not included yet.",
+    "searchingLaws": "Searching primary EU acts from the LegalViz index. Secondary acts are not included yet.",
     "searchingMatches": "Searching {count} last opened {lawWord} in {language}. Open a law in this language to make it searchable.",
     "clear": "Clear search",
     "submitLawSearch": "Search laws",

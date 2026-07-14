@@ -75,7 +75,7 @@
     "placeholderLaws": "Fittex atti primarji tal-UE skont it-titlu, ir-referenza jew CELEX",
     "placeholderMatches": "Fittex fl-aħħar liġijiet miftuħa...",
     "searchingCurrentLaw": "Qed issir tfittxija f'{law}.",
-    "searchingLaws": "Qed jiġu mfittxija atti primarji tal-UE mill-indiċi ta' LegalViz mill-2010.",
+    "searchingLaws": "Qed jiġu mfittxija atti primarji tal-UE mill-indiċi ta' LegalViz.",
     "searchingMatches": "Qed issir tfittxija f'{count} {lawWord} miftuħa l-aħħar f'{language}.",
     "shortcut": "Cmd+K",
     "submitLawSearch": "Fittex liġijiet",

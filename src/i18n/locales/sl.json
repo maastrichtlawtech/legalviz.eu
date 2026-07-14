@@ -75,7 +75,7 @@
     "placeholderLaws": "Iskanje primarnih aktov EU po naslovu, referenci ali CELEX",
     "placeholderMatches": "Iskanje v zadnjih odprtih zakonih...",
     "searchingCurrentLaw": "Iskanje v {law}.",
-    "searchingLaws": "Iskanje primarnih aktov EU iz indeksa LegalViz od leta 2010.",
+    "searchingLaws": "Iskanje primarnih aktov EU iz indeksa LegalViz.",
     "searchingMatches": "Iskanje v {count} zadnjih odprtih {lawWord} v jeziku {language}.",
     "shortcut": "Cmd+K",
     "submitLawSearch": "Išči zakone",

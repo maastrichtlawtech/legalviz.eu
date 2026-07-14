@@ -75,7 +75,7 @@
     "placeholderLaws": "Cuardaigh gníomhartha príomha an AE de réir teidil, tagartha nó CELEX",
     "placeholderMatches": "Cuardaigh dlíthe a osclaíodh le déanaí...",
     "searchingCurrentLaw": "Ag cuardach laistigh de {law}.",
-    "searchingLaws": "Ag cuardach gníomhartha príomha AE ó innéacs LegalViz ó 2010.",
+    "searchingLaws": "Ag cuardach gníomhartha príomha AE ó innéacs LegalViz.",
     "searchingMatches": "Ag cuardach i {count} {lawWord} a osclaíodh le déanaí i {language}.",
     "shortcut": "Cmd+K",
     "submitLawSearch": "Cuardaigh dlíthe",

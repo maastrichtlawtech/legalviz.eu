@@ -75,7 +75,7 @@
     "placeholderLaws": "Hae EU:n ensisijaisia säädöksiä otsikon, viitteen tai CELEX-tunnuksen mukaan",
     "placeholderMatches": "Hae viimeksi avatuista laeista...",
     "searchingCurrentLaw": "Haetaan laista {law}.",
-    "searchingLaws": "Haetaan EU:n ensisijaisia säädöksiä LegalViz-indeksistä vuodesta 2010. Toissijaisia säädöksiä ei ole vielä mukana.",
+    "searchingLaws": "Haetaan EU:n ensisijaisia säädöksiä LegalViz-indeksistä. Toissijaisia säädöksiä ei ole vielä mukana.",
     "searchingMatches": "Haetaan {count} viimeksi avatusta {lawWord} kielellä {language}. Avaa laki tällä kielellä tehdäksesi siitä haettavan.",
     "shortcut": "Cmd+K",
     "submitLawSearch": "Hae lakeja",

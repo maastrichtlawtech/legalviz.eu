@@ -75,7 +75,7 @@
     "placeholderLaws": "Wyszukaj akty pierwotne UE według tytułu, odniesienia lub CELEX",
     "placeholderMatches": "Szukaj w ostatnio otwieranych prawach...",
     "searchingCurrentLaw": "Wyszukiwanie w {law}.",
-    "searchingLaws": "Wyszukiwanie aktów pierwotnych UE z indeksu LegalViz od 2010 r.",
+    "searchingLaws": "Wyszukiwanie aktów pierwotnych UE z indeksu LegalViz.",
     "searchingMatches": "Wyszukiwanie w {count} ostatnio otwieranych {lawWord} w języku {language}.",
     "shortcut": "Cmd+K",
     "submitLawSearch": "Szukaj praw",

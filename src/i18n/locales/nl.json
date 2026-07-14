@@ -75,7 +75,7 @@
     "placeholderLaws": "Zoek primaire EU-rechtshandelingen op titel, referentie of CELEX",
     "placeholderMatches": "Zoeken in laatst geopende wetten...",
     "searchingCurrentLaw": "Zoeken in {law}.",
-    "searchingLaws": "Zoeken naar primaire EU-rechtshandelingen uit de LegalViz-index sinds 2010. Secundaire handelingen zijn nog niet opgenomen.",
+    "searchingLaws": "Zoeken naar primaire EU-rechtshandelingen uit de LegalViz-index. Secundaire handelingen zijn nog niet opgenomen.",
     "searchingMatches": "Zoeken in {count} laatst geopende {lawWord} in het {language}.",
     "shortcut": "Cmd+K",
     "submitLawSearch": "Wetten zoeken",

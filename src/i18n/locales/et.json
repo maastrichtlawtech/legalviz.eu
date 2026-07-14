@@ -75,7 +75,7 @@
     "placeholderLaws": "Otsi ELi esmaseid õigusakte pealkirja, viite või CELEXi järgi",
     "placeholderMatches": "Otsi viimati avatud seadustest...",
     "searchingCurrentLaw": "Otsimine seadusest {law}.",
-    "searchingLaws": "ELi esmaste õigusaktide otsimine LegalVizi indeksist alates 2010. Teisesed õigusaktid ei ole veel kaasatud.",
+    "searchingLaws": "ELi esmaste õigusaktide otsimine LegalVizi indeksist. Teisesed õigusaktid ei ole veel kaasatud.",
     "searchingMatches": "Otsimine {count} viimati avatud {lawWord} keeles {language}. Avage seadus selles keeles, et muuta see otsitavaks.",
     "shortcut": "Cmd+K",
     "submitLawSearch": "Otsi seadusi",

@@ -75,7 +75,7 @@
     "placeholderLaws": "Elsődleges uniós jogi aktusok keresése cím, hivatkozás vagy CELEX szerint",
     "placeholderMatches": "Keresés a legutóbb megnyitott jogszabályokban...",
     "searchingCurrentLaw": "Keresés a(z) {law} jogszabályban.",
-    "searchingLaws": "Elsődleges uniós jogi aktusok keresése a LegalViz indexéből 2010 óta.",
+    "searchingLaws": "Elsődleges uniós jogi aktusok keresése a LegalViz indexéből.",
     "searchingMatches": "Keresés {count} legutóbb megnyitott {lawWord} nyelven: {language}.",
     "shortcut": "Cmd+K",
     "submitLawSearch": "Jogszabályok keresése",

@@ -75,7 +75,7 @@
     "placeholderLaws": "Buscar actos primarios de la UE por título, referencia o CELEX",
     "placeholderMatches": "Buscar en las últimas leyes abiertas...",
     "searchingCurrentLaw": "Buscando en {law}.",
-    "searchingLaws": "Buscando actos primarios de la UE en el índice de LegalViz desde 2010. Los actos secundarios aún no están incluidos.",
+    "searchingLaws": "Buscando actos primarios de la UE en el índice de LegalViz. Los actos secundarios aún no están incluidos.",
     "searchingMatches": "Buscando en {count} últimas {lawWord} abiertas en {language}. Abra una ley en este idioma para hacerla buscable.",
     "shortcut": "Cmd+K",
     "submitLawSearch": "Buscar leyes",

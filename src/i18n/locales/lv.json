@@ -75,7 +75,7 @@
     "placeholderLaws": "Meklēt ES primāros tiesību aktus pēc nosaukuma, atsauces vai CELEX",
     "placeholderMatches": "Meklēt pēdējos atvērtajos likumos...",
     "searchingCurrentLaw": "Meklēšana likumā {law}.",
-    "searchingLaws": "ES primāro tiesību aktu meklēšana no LegalViz indeksa kopš 2010. gada.",
+    "searchingLaws": "ES primāro tiesību aktu meklēšana no LegalViz indeksa.",
     "searchingMatches": "Meklēšana {count} pēdējos atvērtajos {lawWord} valodā {language}.",
     "shortcut": "Cmd+K",
     "submitLawSearch": "Meklēt likumus",

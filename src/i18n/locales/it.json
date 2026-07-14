@@ -75,7 +75,7 @@
     "placeholderLaws": "Cerca atti primari dell'UE per titolo, riferimento o CELEX",
     "placeholderMatches": "Cerca nelle ultime leggi aperte...",
     "searchingCurrentLaw": "Ricerca in {law}.",
-    "searchingLaws": "Ricerca di atti primari dell'UE dall'indice LegalViz dal 2010. Gli atti secondari non sono ancora inclusi.",
+    "searchingLaws": "Ricerca di atti primari dell'UE dall'indice LegalViz. Gli atti secondari non sono ancora inclusi.",
     "searchingMatches": "Ricerca in {count} ultime {lawWord} aperte in {language}.",
     "shortcut": "Cmd+K",
     "submitLawSearch": "Cerca leggi",

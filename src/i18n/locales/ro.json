@@ -75,7 +75,7 @@
     "placeholderLaws": "Căutați acte primare UE după titlu, referință sau CELEX",
     "placeholderMatches": "Căutare în ultimele legi deschise...",
     "searchingCurrentLaw": "Se caută în {law}.",
-    "searchingLaws": "Se caută acte primare UE din indexul LegalViz din 2010.",
+    "searchingLaws": "Se caută acte primare UE din indexul LegalViz.",
     "searchingMatches": "Se caută în {count} ultime {lawWord} deschise în {language}.",
     "shortcut": "Cmd+K",
     "submitLawSearch": "Caută legi",

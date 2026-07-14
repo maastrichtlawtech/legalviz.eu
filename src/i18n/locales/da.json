@@ -75,7 +75,7 @@
     "placeholderLaws": "Søg i primære EU-retsakter efter titel, reference eller CELEX",
     "placeholderMatches": "Søg i sidst åbnede love...",
     "searchingCurrentLaw": "Søger i {law}.",
-    "searchingLaws": "Søger i primære EU-retsakter fra LegalViz-indekset siden 2010. Sekundære retsakter er endnu ikke inkluderet.",
+    "searchingLaws": "Søger i primære EU-retsakter fra LegalViz-indekset. Sekundære retsakter er endnu ikke inkluderet.",
     "searchingMatches": "Søger i {count} sidst åbnede {lawWord} på {language}. Åbn en lov på dette sprog for at gøre den søgbar.",
     "shortcut": "Cmd+K",
     "submitLawSearch": "Søg love",

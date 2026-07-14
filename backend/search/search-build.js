@@ -125,7 +125,11 @@ function getChallengeDelayMs(attempt) {
 // Each is retried with exponential backoff + jitter up to `maxAttempts`. A 404
 // is treated as a hard, non-retriable miss (many old acts simply lack an FMX
 // payload). Returns the successful Response; callers pull .text()/.json()/bytes.
-async function requestWithRetry(url, { headers = {}, maxAttempts = DEFAULT_MAX_REQUEST_ATTEMPTS } = {}) {
+async function requestWithRetry(url, {
+  headers = {},
+  maxAttempts = DEFAULT_MAX_REQUEST_ATTEMPTS,
+  sleepImpl = sleep,
+} = {}) {
   let attempt = 0;
   let lastError = null;
 
@@ -142,16 +146,18 @@ async function requestWithRetry(url, { headers = {}, maxAttempts = DEFAULT_MAX_R
       });
     } catch (error) {
       lastError = error;
+      if (attempt >= maxAttempts) break;
       const delayMs = getChallengeDelayMs(attempt);
       logProgress(`Network error for ${url} on attempt ${attempt} (${error.message}); retrying in ${delayMs}ms`);
-      await sleep(delayMs);
+      await sleepImpl(delayMs);
       continue;
     }
 
     if (isChallengeResponse(response)) {
+      if (attempt >= maxAttempts) break;
       const delayMs = getChallengeDelayMs(attempt);
       logProgress(`Challenge for ${url} on attempt ${attempt}; retrying in ${delayMs}ms`);
-      await sleep(delayMs);
+      await sleepImpl(delayMs);
       continue;
     }
 
@@ -162,9 +168,10 @@ async function requestWithRetry(url, { headers = {}, maxAttempts = DEFAULT_MAX_R
     }
 
     if (response.status === 429 || response.status >= 500) {
+      if (attempt >= maxAttempts) break;
       const delayMs = getChallengeDelayMs(attempt);
       logProgress(`HTTP ${response.status} for ${url} on attempt ${attempt}; retrying in ${delayMs}ms`);
-      await sleep(delayMs);
+      await sleepImpl(delayMs);
       continue;
     }
 

@@ -251,6 +251,34 @@ describe("mapRecitalsToArticles", () => {
       expect(matched).toBeDefined();
       expect(matched.paragraph_number).toBeNull();
     });
+
+    it("does not invent a paragraph number for implicit chapeau content", () => {
+      const mixedParagraphArticles = [
+        {
+          article_number: "1",
+          article_title: "",
+          article_html: "<p>chapeautopic introduction</p><p>numberedtopic rule</p>",
+          paragraphs: [
+            { number: null, html: "<p>chapeautopic introduction</p>" },
+            { number: "1", html: "<p>numberedtopic rule</p>" },
+          ],
+        },
+        {
+          article_number: "2",
+          article_title: "",
+          article_html: "<p>unrelatedfiller unrelatedfiller</p>",
+          paragraphs: [],
+        },
+      ];
+      const result = mapRecitalsToArticles(
+        [{ recital_number: "1", recital_text: "chapeautopic introduction" }],
+        mixedParagraphArticles
+      );
+
+      const matched = result.get("1").find((r) => r.recital_number === "1");
+      expect(matched).toBeDefined();
+      expect(matched.paragraph_number).toBeNull();
+    });
   });
 });
 

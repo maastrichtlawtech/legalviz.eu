@@ -306,8 +306,11 @@ function retrieveRecitalsPerTarget(scoreMatrix, targetCount) {
 function buildParagraphCorpus(paragraphs) {
   if (!paragraphs || paragraphs.length <= 1) return null;
 
-  const paragraphDocs = paragraphs.map((p, idx) => ({
-    id: p.number ?? String(idx),
+  const paragraphDocs = paragraphs.map((p) => ({
+    // Introductory/chapeau content is represented as an implicit paragraph
+    // with number: null. Keep it in the comparison corpus so it can win, but
+    // never invent a display number such as "0" for it.
+    id: p.number ?? null,
     tokens: tokenize(stripTags(p.html)),
   }));
   const idf = computeIDF(paragraphDocs);

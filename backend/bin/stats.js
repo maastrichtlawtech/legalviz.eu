@@ -105,10 +105,9 @@ function print(d) {
     { label: 'celex', get: (r) => r.celex },
     { label: 'count', get: (r) => r.count },
   ]);
-  section('Top searches', d.topSearches, [
-    { label: 'q', get: (r) => r.q },
-    { label: 'count', get: (r) => r.count },
-  ]);
+  if (Number.isFinite(d.totalSearches)) {
+    console.log(`\nSearches: ${d.totalSearches} total (query text is not stored)`);
+  }
 
   if (d.caseLawCache) {
     console.log('\nCase-law cache:');

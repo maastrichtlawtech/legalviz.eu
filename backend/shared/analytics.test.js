@@ -37,7 +37,7 @@ test('recordMcpTool feeds route, celex, and search counters', () => {
   assert.ok(stats.topRoutes.some((r) => r.route === 'mcp:get_law_part' && r.count === 1));
   assert.ok(stats.topRoutes.some((r) => r.route === 'mcp:search_eu_law'));
   assert.ok(stats.topCelexes.some((c) => c.celex === '32016R0679'));
-  assert.ok(stats.topSearches.some((s) => s.q === 'right to erasure'), 'search query is lowercased');
+  assert.equal(stats.totalSearches, 1);
   analytics.shutdown();
 });
 

@@ -55,8 +55,8 @@ function createAnalytics({ cacheDir } = {}) {
 
   const routeCounts = new Map();
   const celexCounts = new Map();
-  const searchCounts = new Map();
   const channelCounts = new Map(); // all-time: 'web' | 'api' | 'mcp' -> count
+  let totalSearches = 0;
   let dayCounts = {};
   let dayUniques = {};
   let dayChannels = {}; // date -> { web, api, mcp }
@@ -72,8 +72,10 @@ function createAnalytics({ cacheDir } = {}) {
         const saved = JSON.parse(fs.readFileSync(analyticsFile, 'utf8'));
         if (saved.routeCounts) for (const [k, v] of Object.entries(saved.routeCounts)) routeCounts.set(k, v);
         if (saved.celexCounts) for (const [k, v] of Object.entries(saved.celexCounts)) celexCounts.set(k, v);
-        if (saved.searchCounts) for (const [k, v] of Object.entries(saved.searchCounts)) searchCounts.set(k, v);
         if (saved.channelCounts) for (const [k, v] of Object.entries(saved.channelCounts)) channelCounts.set(k, v);
+        // Legacy formats persisted per-query counts; keep the aggregate total, drop the raw text.
+        totalSearches = Number(saved.totalSearches) || Object.values(saved.searchCounts || {})
+          .reduce((sum, count) => sum + (Number(count) || 0), 0);
         if (saved.dayCounts) dayCounts = saved.dayCounts;
         if (saved.dayUniques) dayUniques = saved.dayUniques;
         if (saved.dayChannels) dayChannels = saved.dayChannels;
@@ -117,8 +119,8 @@ function createAnalytics({ cacheDir } = {}) {
       const data = {
         routeCounts: Object.fromEntries(routeCounts),
         celexCounts: Object.fromEntries(celexCounts),
-        searchCounts: Object.fromEntries(searchCounts),
         channelCounts: Object.fromEntries(channelCounts),
+        totalSearches,
         dayCounts,
         dayUniques,
         dayChannels,
@@ -166,11 +168,7 @@ function createAnalytics({ cacheDir } = {}) {
       }
 
       if (route && route.includes('search') && res.statusCode === 200) {
-        const q = String(req.query?.q || '').toLowerCase().trim().slice(0, 120);
-        if (q) {
-          searchCounts.set(q, (searchCounts.get(q) || 0) + 1);
-          capMap(searchCounts);
-        }
+        totalSearches++;
       }
     });
     next();
@@ -193,10 +191,8 @@ function createAnalytics({ cacheDir } = {}) {
       capMap(celexCounts);
     }
 
-    const q = String(query || '').toLowerCase().trim().slice(0, 120);
-    if (q) {
-      searchCounts.set(q, (searchCounts.get(q) || 0) + 1);
-      capMap(searchCounts);
+    if (String(query || '').trim()) {
+      totalSearches++;
     }
   }
 
@@ -232,7 +228,6 @@ function createAnalytics({ cacheDir } = {}) {
     rolloverDayIfNeeded();
     const topCelexes = topN(celexCounts).map(({ key, count }) => ({ celex: key, count }));
     const topRoutes = topN(routeCounts).map(({ key, count }) => ({ route: key, count }));
-    const topSearches = topN(searchCounts).map(({ key, count }) => ({ q: key, count }));
     return {
       uptimeSec: Math.floor((Date.now() - startTime) / 1000),
       today: { date: todayDate, requests: todayRequests, uniqueUsers: todayIps.size, channels: { ...todayChannels } },
@@ -240,9 +235,9 @@ function createAnalytics({ cacheDir } = {}) {
       dayUniques,
       dayChannels,
       channels: Object.fromEntries(channelCounts),
+      totalSearches,
       topCelexes,
       topRoutes,
-      topSearches,
       caseLawCache: getCaseLawCacheStats(),
     };
   }

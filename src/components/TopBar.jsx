@@ -8,7 +8,7 @@ import { LanguageSelector } from "./LanguageSelector.jsx";
 import { searchContent, searchIndex as searchWithIndex, buildSearchIndex } from "../utils/nlp.js";
 import { useI18n } from "../i18n/useI18n.js";
 import { searchLaws as searchLawsApi } from "../utils/formexApi.js";
-import { buildImportedLawCandidate, getCanonicalLawRoute } from "../utils/lawRouting.js";
+import { buildImportedLawCandidate, getCanonicalLawRoute, parseCelexQuery } from "../utils/lawRouting.js";
 import { saveLawMeta } from "../utils/library.js";
 
 // Law search hits the network per query, so wait for a typing pause before
@@ -244,6 +244,17 @@ export function SearchBox({
     setIsLawSearchLoading(true);
     setLastLawSearchQuery(trimmedQuery);
 
+    // A typed CELEX can be opened directly regardless of the search index, so
+    // surface it as a result even when the backend finds no (or no exact) match.
+    const celexQuery = parseCelexQuery(trimmedQuery);
+    const buildCelexResult = () => ({
+      celex: celexQuery,
+      title: "",
+      search_kind: "law",
+      id: celexQuery,
+      directCelex: true,
+    });
+
     searchLawsApi(trimmedQuery, { limit: 12, signal: controller.signal })
       .then((payload) => {
         const nextResults = Array.isArray(payload?.results)
@@ -253,12 +264,20 @@ export function SearchBox({
             id: item.celex,
           }))
           : [];
-        setResults(nextResults);
+        const hasCelexExact = celexQuery
+          && nextResults.some((item) => String(item.celex || "").toUpperCase() === celexQuery);
+        setResults(celexQuery && !hasCelexExact ? [buildCelexResult(), ...nextResults] : nextResults);
         setSelectedIndex(-1);
       })
       .catch((error) => {
         if (error?.name === "AbortError") return;
         console.error("Failed to search laws", error);
+        // Even if the index lookup fails, a valid CELEX can still be opened.
+        if (celexQuery) {
+          setResults([buildCelexResult()]);
+          setSelectedIndex(-1);
+          return;
+        }
         setResults([]);
         setLawSearchError(error?.message || t("search.apiUnavailable"));
       })
@@ -838,6 +857,9 @@ export function SearchBox({
                             </span>
                             {item.search_kind !== "law" && item.score > 100 && (
                               <span className="flex-shrink-0 text-[10px] bg-green-100 text-green-700 px-1.5 rounded-full font-medium dark:bg-green-900/50 dark:text-green-200">{t("search.bestMatch")}</span>
+                            )}
+                            {item.directCelex && (
+                              <span className="flex-shrink-0 text-[10px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-medium dark:bg-emerald-900/50 dark:text-emerald-200">{t("search.openDirectly")}</span>
                             )}
                             {item.law_label && (
                               <span className="flex-shrink-0 text-[10px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full font-medium dark:bg-gray-800 dark:text-gray-400">

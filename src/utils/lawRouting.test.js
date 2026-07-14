@@ -10,6 +10,7 @@ import {
   buildImportedLawCandidate,
   getActTypeChoices,
   parseOfficialReferenceSlug,
+  parseCelexQuery,
 } from "./lawRouting.js";
 import { SUPPORTED_UI_LOCALES } from "../i18n/localeMeta.js";
 
@@ -226,5 +227,62 @@ describe("parseOfficialReferenceSlug", () => {
         expect(parsed).toEqual(ref);
       }
     }
+  });
+});
+
+describe("parseCelexQuery", () => {
+  it("recognizes a bare sector-3 CELEX", () => {
+    expect(parseCelexQuery("32016R0679")).toBe("32016R0679");
+    expect(parseCelexQuery("32022L2555")).toBe("32022L2555");
+    expect(parseCelexQuery("32022D2065")).toBe("32022D2065");
+  });
+
+  it("normalizes casing and stray whitespace", () => {
+    expect(parseCelexQuery("  32016r0679  ")).toBe("32016R0679");
+    expect(parseCelexQuery("32016 R 0679")).toBe("32016R0679");
+  });
+
+  it("strips a leading CELEX: prefix", () => {
+    expect(parseCelexQuery("celex:32016R0679")).toBe("32016R0679");
+    expect(parseCelexQuery("CELEX 32016R0679")).toBe("32016R0679");
+  });
+
+  it("accepts the optional disambiguation suffix", () => {
+    expect(parseCelexQuery("32004R0139(01)")).toBe("32004R0139(01)");
+  });
+
+  it("returns null for non-CELEX queries", () => {
+    expect(parseCelexQuery("gdpr")).toBeNull();
+    expect(parseCelexQuery("regulation 2016/679")).toBeNull();
+    expect(parseCelexQuery("")).toBeNull();
+    expect(parseCelexQuery(null)).toBeNull();
+  });
+
+  it("returns null for non-legislative sectors and unsupported types", () => {
+    expect(parseCelexQuery("62019CJ0311")).toBeNull(); // case law (sector 6)
+    expect(parseCelexQuery("32016X0679")).toBeNull(); // unsupported doc type
+  });
+
+  it("extracts a CELEX from an EUR-Lex legal-content URL", () => {
+    expect(parseCelexQuery("https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32016R0679"))
+      .toBe("32016R0679");
+    expect(parseCelexQuery("https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX%3A32016R0679"))
+      .toBe("32016R0679");
+    expect(parseCelexQuery("https://eur-lex.europa.eu/legal-content/DE/ALL/?uri=CELEX:32022L2555&qid=1"))
+      .toBe("32022L2555");
+  });
+
+  it("derives a CELEX from an EUR-Lex ELI URL", () => {
+    expect(parseCelexQuery("https://eur-lex.europa.eu/eli/reg/2016/679/oj")).toBe("32016R0679");
+    expect(parseCelexQuery("https://eur-lex.europa.eu/eli/dir/2015/2366/oj")).toBe("32015L2366");
+    expect(parseCelexQuery("http://eur-lex.europa.eu/eli/dec/2020/12/oj")).toBe("32020D0012");
+  });
+
+  it("rejects non-EUR-Lex URLs and non-sector-3 URLs", () => {
+    expect(parseCelexQuery("https://example.com/?uri=CELEX:32016R0679")).toBeNull();
+    expect(parseCelexQuery("https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:62019CJ0311"))
+      .toBeNull();
+    expect(parseCelexQuery("https://eur-lex.europa.eu/homepage.html")).toBeNull();
+    expect(parseCelexQuery("not a url")).toBeNull();
   });
 });

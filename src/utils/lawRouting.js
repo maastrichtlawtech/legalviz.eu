@@ -164,6 +164,60 @@ export function getActTypeChoices() {
   return Array.from(VALID_ACT_TYPES);
 }
 
+// Sector-3 CELEX shape: "3" + 4-digit year + act-type letter + 1-4 digit
+// number, with an optional "(NN)" disambiguation suffix (e.g. "32016R0679").
+const SECTOR3_CELEX = /^3\d{4}[RLD]\d{1,4}(?:\(\d+\))?$/;
+const ELI_TYPE_TO_CELEX_LETTER = { reg: "R", dir: "L", dec: "D" };
+
+function extractSector3CelexFromText(text) {
+  const match = String(text).match(/CELEX(?::|%3A)(3\d{4}[RLD]\d{1,4}(?:\(\d+\))?)/i);
+  return match ? match[1].toUpperCase() : null;
+}
+
+// An ELI path (/eli/reg/2016/679/oj) maps deterministically onto a sector-3
+// CELEX: reg->R, dir->L, dec->D, with the number zero-padded to 4 digits.
+function celexFromEliSegments(segments) {
+  const eliIndex = segments.indexOf("eli");
+  if (eliIndex === -1) return null;
+  const letter = ELI_TYPE_TO_CELEX_LETTER[String(segments[eliIndex + 1] || "").toLowerCase()];
+  const year = segments[eliIndex + 2] || "";
+  const number = segments[eliIndex + 3] || "";
+  if (!letter || !/^\d{4}$/.test(year) || !/^\d{1,4}$/.test(number)) return null;
+  return `3${year}${letter}${String(number).padStart(4, "0")}`;
+}
+
+// Recognize a CELEX id -- or a pasted EUR-Lex URL -- typed into the search box
+// so the law can be opened directly, even when it is not in the backend search
+// index. Accepts:
+//   - a bare CELEX, with a stray "CELEX:" prefix and loose spacing/casing
+//     ("celex:32016R0679", "32016 R 0679", "32016r0679");
+//   - a EUR-Lex URL carrying the CELEX (...?uri=CELEX:32016R0679);
+//   - a EUR-Lex ELI URL (.../eli/reg/2016/679/oj).
+// Always normalizes to the compact upper-case CELEX, or returns null. Scoped to
+// sector-3 legislative acts (regulation/directive/decision) -- the only shape
+// the reader can resolve to an official reference and load.
+export function parseCelexQuery(input) {
+  const raw = String(input || "").trim();
+  if (!raw) return null;
+
+  if (/^https?:\/\//i.test(raw)) {
+    let url;
+    try {
+      url = new URL(raw);
+    } catch {
+      return null;
+    }
+    if (!/(?:^|\.)eur-lex\.europa\.eu$/i.test(url.hostname)) return null;
+    const fromUri = extractSector3CelexFromText(url.searchParams.get("uri") || "")
+      || extractSector3CelexFromText(url.href);
+    if (fromUri) return fromUri;
+    return celexFromEliSegments(url.pathname.split("/").filter(Boolean));
+  }
+
+  const compact = raw.replace(/^celex\s*[:.-]?\s*/i, "").toUpperCase().replace(/\s+/g, "");
+  return SECTOR3_CELEX.test(compact) ? compact : null;
+}
+
 export function parseOfficialReferenceSlug(slug) {
   const match = String(slug || "").match(/^(regulation|directive|decision)-(\d{4})-(\d{1,4})$/);
   if (!match) return null;

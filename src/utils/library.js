@@ -79,6 +79,7 @@ function normalizeLawMetaEntry(entry) {
     officialReference: routeCandidate?.officialReference || null,
     slug: routeCandidate?.slug || null,
     eurlex: entry.eurlex || null,
+    topics: Array.isArray(entry.topics) ? entry.topics.filter(Boolean) : null,
     addedAt: entry.addedAt || Date.now(),
   };
 }
@@ -97,13 +98,20 @@ export async function saveLawMeta(entry) {
   const normalized = normalizeLawMetaEntry(entry);
   if (!normalized) return null;
 
-  const saved = await upsertLawMeta(normalized.celex, {
+  const updates = {
     label: normalized.label,
     raw: normalized.raw,
     officialReference: normalized.officialReference,
     eurlex: normalized.eurlex || buildEurlexCelexUrl(normalized.celex),
     addedAt: normalized.addedAt || Date.now(),
-  });
+  };
+  // Only persist topics when we actually have some, so a later save without
+  // them (or markLawOpened) never wipes previously stored EuroVoc topics.
+  if (normalized.topics && normalized.topics.length > 0) {
+    updates.topics = normalized.topics;
+  }
+
+  const saved = await upsertLawMeta(normalized.celex, updates);
   dispatchLibraryUpdate();
   return saved;
 }
@@ -157,6 +165,7 @@ export async function getLibraryLaws() {
       officialReference: candidate?.officialReference || officialReference || null,
       slug: candidate?.slug || null,
       eurlex: meta?.eurlex || buildEurlexCelexUrl(celex),
+      topics: Array.isArray(meta?.topics) ? meta.topics : null,
       addedAt: meta?.addedAt || 0,
       timestamp: meta?.lastOpened || null,
       route: getCanonicalLawRoute(candidate),

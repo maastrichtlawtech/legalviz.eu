@@ -171,6 +171,18 @@ function LawLibraryCard({ law, onOpen, t }) {
               </span>
             ) : null}
           </div>
+          {Array.isArray(law?.topics) && law.topics.length > 0 ? (
+            <div className="mt-2 flex flex-wrap gap-1">
+              {law.topics.slice(0, 3).map((topic) => (
+                <span
+                  key={topic}
+                  className="max-w-[10rem] flex-shrink-0 truncate rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-400"
+                >
+                  {topic}
+                </span>
+              ))}
+            </div>
+          ) : null}
         </div>
 
       </div>

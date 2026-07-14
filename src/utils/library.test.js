@@ -45,6 +45,31 @@ describe("saveLawMeta", () => {
       })
     );
   });
+
+  it("persists EuroVoc topics when provided", async () => {
+    upsertLawMeta.mockResolvedValue({ celex: "32016R0679" });
+    await saveLawMeta({
+      celex: "32016R0679",
+      label: "GDPR",
+      topics: ["data protection", "personal data", ""],
+    });
+    expect(upsertLawMeta).toHaveBeenCalledWith(
+      "32016R0679",
+      expect.objectContaining({
+        topics: ["data protection", "personal data"],
+      })
+    );
+  });
+
+  it("does not clobber stored topics when saving without them", async () => {
+    upsertLawMeta.mockResolvedValue({ celex: "32016R0679" });
+    await saveLawMeta({
+      celex: "32016R0679",
+      label: "GDPR",
+    });
+    const updates = upsertLawMeta.mock.calls[0][1];
+    expect(updates).not.toHaveProperty("topics");
+  });
 });
 
 describe("markLawOpened", () => {
@@ -131,6 +156,28 @@ describe("getLibraryLaws", () => {
 
     const laws = await getLibraryLaws();
     expect(laws.map((law) => law.celex)).toEqual(["32016R0679"]);
+  });
+
+  it("exposes stored EuroVoc topics on library laws", async () => {
+    getAllLawMeta.mockResolvedValue([
+      { celex: "32016R0679", lastOpened: 1000, topics: ["data protection", "personal data"] },
+    ]);
+    listCachedCelexes.mockResolvedValue([]);
+
+    const laws = await getLibraryLaws();
+    const gdpr = laws.find((l) => l.celex === "32016R0679");
+    expect(gdpr.topics).toEqual(["data protection", "personal data"]);
+  });
+
+  it("defaults topics to null when none are stored", async () => {
+    getAllLawMeta.mockResolvedValue([
+      { celex: "32016R0679", lastOpened: 1000 },
+    ]);
+    listCachedCelexes.mockResolvedValue([]);
+
+    const laws = await getLibraryLaws();
+    const gdpr = laws.find((l) => l.celex === "32016R0679");
+    expect(gdpr.topics).toBeNull();
   });
 
   it("sorts by lastOpened timestamp descending", async () => {

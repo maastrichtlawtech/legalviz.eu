@@ -104,6 +104,7 @@ export function Landing({ forcedLocale = null }) {
           celex: item.celex,
           label: item.title,
           officialReference,
+          topics: item.topics,
         }).catch(() => {});
       }
 

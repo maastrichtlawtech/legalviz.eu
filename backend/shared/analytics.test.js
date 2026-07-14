@@ -5,9 +5,9 @@ const { createAnalytics } = require('./analytics');
 const { CASE_LAW_CACHE_FILE } = require('./law-queries');
 
 // Drive the finish handler the way Express would.
-function hit(analytics, req) {
+function hit(analytics, req, statusCode = 200) {
   let onFinish;
-  const res = { on: (event, cb) => { if (event === 'finish') onFinish = cb; } };
+  const res = { statusCode, on: (event, cb) => { if (event === 'finish') onFinish = cb; } };
   analytics.middleware(req, res, () => {});
   onFinish();
 }
@@ -53,9 +53,13 @@ test('persists channel counters across a flush/reload cycle', () => {
   first.shutdown(); // flush to disk
 
   const persisted = JSON.parse(fs.readFileSync(path.join(cacheDir, 'analytics.json'), 'utf8'));
+  assert.equal(persisted.schemaVersion, 2);
   assert.equal(persisted.channelCounts.mcp, 1);
   assert.equal(persisted.channelCounts.web, 1);
   assert.deepEqual(persisted.today.channels, { web: 1, api: 0, mcp: 1 });
+  assert.equal(typeof persisted.today.uniqueSketch, 'string');
+  assert.equal('uniqueIps' in persisted.today, false);
+  assert.equal('searchCounts' in persisted, false);
 
   // A fresh instance hydrates the persisted channel state.
   const second = createAnalytics({ cacheDir });
@@ -104,4 +108,72 @@ test('getClientIp prefers req.ip and falls back to the socket address', () => {
   const stats = analytics.getStats();
   assert.equal(stats.today.uniqueUsers, 2);
   analytics.shutdown();
+});
+
+test('exposes useful per-day aggregates without identifiers or query text', () => {
+  let current = new Date('2026-07-12T23:59:00Z');
+  const analytics = createAnalytics({
+    now: () => current,
+    hashKey: 'test-only-secret',
+  });
+
+  hit(analytics, baseReq({
+    ip: '203.0.113.10',
+    path: '/api/search',
+    route: { path: '/api/search' },
+    query: { q: 'possibly sensitive phrase' },
+    headers: { 'x-legalviz-client': 'web' },
+  }));
+  hit(analytics, baseReq({
+    ip: '203.0.113.99', // Same anonymized /24 bucket.
+    path: '/api/search',
+    route: { path: '/api/search' },
+    query: { q: 'another phrase' },
+  }), 503);
+
+  current = new Date('2026-07-13T00:01:00Z');
+  const stats = analytics.getStats();
+  assert.deepEqual(stats.days['2026-07-12'], {
+    requests: 2,
+    uniqueUsersEstimate: 1,
+    channels: { web: 1, api: 1, mcp: 0 },
+    searches: 1,
+  });
+  assert.equal(JSON.stringify(stats).includes('sensitive phrase'), false);
+  analytics.shutdown();
+});
+
+test('migrates legacy history and archives a stale persisted today', () => {
+  const os = require('node:os');
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const cacheDir = fs.mkdtempSync(path.join(os.tmpdir(), 'analytics-migration-'));
+  fs.writeFileSync(path.join(cacheDir, 'analytics.json'), JSON.stringify({
+    dayCounts: { '2026-07-10': 12 },
+    dayUniques: { '2026-07-10': 4 },
+    today: {
+      date: '2026-07-12',
+      requests: 7,
+      uniqueIps: ['203.0.113.0', '198.51.100.0'],
+      channels: { web: 5, api: 2, mcp: 0 },
+    },
+    searchCounts: { private: 3, terms: 2 },
+  }), 'utf8');
+
+  const analytics = createAnalytics({
+    cacheDir,
+    now: () => new Date('2026-07-13T12:00:00Z'),
+    hashKey: 'test-only-secret',
+  });
+  const stats = analytics.getStats();
+  assert.equal(stats.days['2026-07-10'].requests, 12);
+  assert.equal(stats.days['2026-07-10'].uniqueUsersEstimate, 4);
+  assert.equal(stats.days['2026-07-12'].requests, 7);
+  assert.equal(stats.days['2026-07-12'].uniqueUsersEstimate, 2);
+  assert.equal(stats.totalSearches, 5);
+
+  analytics.shutdown();
+  const persisted = fs.readFileSync(path.join(cacheDir, 'analytics.json'), 'utf8');
+  assert.equal(persisted.includes('uniqueIps'), false);
+  assert.equal(persisted.includes('private'), false);
 });

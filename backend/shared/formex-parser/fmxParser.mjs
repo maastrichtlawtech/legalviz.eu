@@ -353,7 +353,10 @@ function buildArticleBodyAndParagraphs(articleEl, idPrefix, lang) {
 
     if (isElement && node.tagName === "PARAG") {
       flushImplicit();
-      const noP = node.querySelector("NO\\.PARAG");
+      // Use this PARAG's *own* number element, not a descendant one — a nested
+      // sub-PARAG carries its own NO.PARAG that querySelector would otherwise
+      // pick up when the outer PARAG has none.
+      const noP = Array.from(node.children).find((c) => c.tagName === "NO.PARAG");
       const number = noP
         ? allText(noP).replace(/[.\s]+$/, "").trim()
         : String(paragraphs.filter((p) => p.number != null).length + 1);

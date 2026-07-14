@@ -143,7 +143,7 @@ async function harvestHtml(options = {}) {
 
   const targets = readTargets(targetsPath);
   const prior = readState(statePath) || {};
-  const startIndex = ensurePositiveInt(prior.nextIndex, 0) - 1 >= 0 ? ensurePositiveInt(prior.nextIndex, 0) : 0;
+  const startIndex = ensurePositiveInt(prior.nextIndex, 0);
   const missesPath = `${statePath}.misses.txt`;
   const failsPath = `${statePath}.fails.txt`;
 
@@ -154,17 +154,23 @@ async function harvestHtml(options = {}) {
 
   logProgress(`Targets ${targets.length}, resuming at ${startIndex} (saved=${saved} missing=${missing} failed=${failed})`);
 
-  let processedThisRun = 0;
+  // `visitedThisRun` drives the checkpoint cadence (every target we look at,
+  // including cheap skips). `fetchedThisRun` bounds maxRecords, which exists to
+  // recycle the process against slow memory growth — only real downloads cost
+  // memory, so an all-skipped resume region shouldn't exhaust the budget.
+  let visitedThisRun = 0;
+  let fetchedThisRun = 0;
   let index = startIndex;
 
   for (; index < targets.length; index += 1) {
-    if (maxRecords && processedThisRun >= maxRecords) break;
+    if (maxRecords && fetchedThisRun >= maxRecords) break;
     const celex = targets[index];
-    processedThisRun += 1;
+    visitedThisRun += 1;
 
     if (hasCorpusHtml(corpusDir, celex)) {
       skipped += 1;
     } else {
+      fetchedThisRun += 1;
       try {
         const result = await fetchImpl({ celex, eurlexBase, cacheDir, timeoutMs });
         if (result?.rawHtml && !isEmptyShellHtml(result.rawHtml)) {
@@ -187,7 +193,7 @@ async function harvestHtml(options = {}) {
       if (delayMs) await sleep(delayMs);
     }
 
-    if (processedThisRun % 20 === 0 || index + 1 === targets.length) {
+    if (visitedThisRun % 20 === 0 || index + 1 === targets.length) {
       await writeStateAtomically(statePath, {
         nextIndex: index + 1, total: targets.length, saved, skipped, missing, failed,
         finished: index + 1 >= targets.length, updatedAt: new Date().toISOString(),

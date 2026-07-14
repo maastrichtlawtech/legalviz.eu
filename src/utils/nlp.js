@@ -299,12 +299,11 @@ function retrieveRecitalsPerTarget(scoreMatrix, targetCount) {
  * in a neighbouring article); reuse buildScoreMatrix/retrieveRecitalsPerTarget
  * here too if/when multiple recitals need ranking against the same paragraph.
  *
- * @param {string} recitalText - plain-text (HTML-stripped) recital content
  * @param {Array} paragraphs - article.paragraphs, i.e. [{ number, html }]
- * @returns {string|null} best-matching paragraph number, or null when there's
- *   nothing to disambiguate (0-1 paragraphs) or no real term overlap.
+ * @returns {{idf: Map, paragraphVectors: Array}|null} the scoped corpus, or
+ *   null when there's nothing to disambiguate (0-1 paragraphs).
  */
-function findBestParagraph(recitalText, paragraphs) {
+function buildParagraphCorpus(paragraphs) {
   if (!paragraphs || paragraphs.length <= 1) return null;
 
   const paragraphDocs = paragraphs.map((p, idx) => ({
@@ -316,13 +315,28 @@ function findBestParagraph(recitalText, paragraphs) {
     id: doc.id,
     ...computeTFIDFVector(doc.tokens, idf),
   }));
+  return { idf, paragraphVectors };
+}
 
-  const recitalVec = computeTFIDFVector(tokenize(recitalText), idf);
+/**
+ * Match a single recital against a pre-built paragraph corpus (see
+ * `buildParagraphCorpus`). The corpus depends only on the article, so it is
+ * built once per article and reused across that article's matched recitals.
+ *
+ * @param {string} recitalText - plain-text (HTML-stripped) recital content
+ * @param {{idf: Map, paragraphVectors: Array}|null} corpus
+ * @returns {string|null} best-matching paragraph number, or null when there's
+ *   no corpus or no real term overlap.
+ */
+function matchParagraph(recitalText, corpus) {
+  if (!corpus) return null;
+
+  const recitalVec = computeTFIDFVector(tokenize(recitalText), corpus.idf);
   if (recitalVec.magnitude === 0) return null;
 
   let bestId = null;
   let bestScore = 0;
-  for (const pVec of paragraphVectors) {
+  for (const pVec of corpus.paragraphVectors) {
     const score = cosineSimilarity(recitalVec, pVec);
     if (score > bestScore) {
       bestScore = score;
@@ -342,7 +356,7 @@ function findBestParagraph(recitalText, paragraphs) {
  * to at most a couple of "winning" articles.
  *
  * Also attaches a best-effort `paragraph_number` (step 6 MVP) to each matched
- * recital when the article has structured paragraphs — see `findBestParagraph`.
+ * recital when the article has structured paragraphs — see `matchParagraph`.
  *
  * @param {Array} recitals - Array of { recital_number, recital_text, ... }
  * @param {Array} articles - Array of { article_number, article_title, article_html, paragraphs?, ... }
@@ -373,10 +387,13 @@ export function mapRecitalsToArticles(recitals, articles) {
     if (!list) return;
 
     const paragraphs = paragraphsByArticle.get(aVec.id);
+    // Build the article's paragraph corpus once and reuse it for every recital
+    // matched to this article (the corpus depends only on the article).
+    const paragraphCorpus = buildParagraphCorpus(paragraphs);
 
     for (const { recitalIndex, score } of selectedPerArticle[articleIndex]) {
       const { recital, keywords, text } = recitalEntries[recitalIndex];
-      const paragraph_number = findBestParagraph(text, paragraphs);
+      const paragraph_number = matchParagraph(text, paragraphCorpus);
       list.push({ recital_number: recital.recital_number, relevanceScore: score, keywords, paragraph_number });
       assignedRecitalNumbers.add(recital.recital_number);
     }

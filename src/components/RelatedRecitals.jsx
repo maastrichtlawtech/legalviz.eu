@@ -25,14 +25,14 @@ function RecitalTitle({ recital, t }) {
 }
 
 // STEP 6 MVP indication: a small "¶N" badge noting which paragraph of the
-// current article this recital was matched to (see nlp.js findBestParagraph).
+// current article this recital was matched to (see nlp.js matchParagraph).
 // TODO (full UX): jump-to-paragraph / in-place highlight instead of a static badge.
-function ParagraphBadge({ paragraphNumber }) {
+function ParagraphBadge({ paragraphNumber, t }) {
   if (!paragraphNumber) return null;
   return (
     <span
       className="ml-1 align-super text-xs font-normal text-gray-400 dark:text-gray-500"
-      title={`Paragraph ${paragraphNumber}`}
+      title={`${t("common.paragraph")} ${paragraphNumber}`}
     >
       ¶{paragraphNumber}
     </span>
@@ -56,7 +56,7 @@ function RecitalTitleList({ recitals, onSelectRecital, t }) {
                 ({recital.recital_number})
               </span>{" "}
               <RecitalTitle recital={recital} t={t} />
-              <ParagraphBadge paragraphNumber={recital.paragraph_number} />
+              <ParagraphBadge paragraphNumber={recital.paragraph_number} t={t} />
             </button>
             {index < recitals.length - 1 ? "," : "."}
           </React.Fragment>

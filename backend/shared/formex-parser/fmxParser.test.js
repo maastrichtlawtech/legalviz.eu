@@ -1,3 +1,8 @@
+// NOTE: This is a Vitest test, not a node:test file like the rest of backend/.
+// The Formex parser is shared code the frontend imports directly, so this test
+// runs under the frontend runner via the `test.include` glob in vite.config.js
+// (`npm run test:web` / root `npm test`). It is NOT picked up by `backend/ npm
+// test`, whose glob (`shared/*.test.js`) matches only the top level of shared/.
 import { beforeAll, describe, it, expect } from "vitest";
 import { readFileSync } from "fs";
 import { dirname, resolve } from "path";

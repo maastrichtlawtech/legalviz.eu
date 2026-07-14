@@ -563,7 +563,8 @@ Current test coverage includes:
 | `RATE_LIMIT_MAX` | Per-IP request cap for the 15-minute window. |
 | `TIMEOUT_MS` | HTTP request timeout in ms. Default `30000`. |
 | `SEARCH_CACHE_PATH` | Optional override for the search cache JSON path. |
-| `ANALYTICS_TOKEN` | Optional Plausible/analytics token for the `/api/_stats` endpoint. |
+| `ANALYTICS_TOKEN` | Token required by the `/api/_stats` endpoint; also used as the analytics sketch key unless `ANALYTICS_HASH_KEY` is set. |
+| `ANALYTICS_HASH_KEY` | Optional stable secret used to key privacy-preserving daily unique-user estimates. Set this separately to allow analytics-token rotation without resetting deduplication. |
 | `OPENROUTER_API_KEY` | Fallback OpenRouter key used by static summaries and recital titles when the feature-specific key is not set. |
 | `OPENROUTER_BASE_URL` | Override (default `https://openrouter.ai/api/v1`). |
 | `LAW_SUMMARY_OPENROUTER_API_KEY` | Optional OpenRouter key used for law summaries and article case-law digests. Falls back to `ARTICLE_QA_OPENROUTER_API_KEY`, then `OPENROUTER_API_KEY`. |

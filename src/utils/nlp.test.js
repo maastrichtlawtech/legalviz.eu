@@ -173,6 +173,24 @@ describe("mapRecitalsToArticles", () => {
       }
     }
   });
+
+  it("uses language-specific stop words when a langCode is passed", () => {
+    // "der"/"verordnung" are German stop words but not English ones. Passing
+    // "DE" strips them, so the recital and article share no matchable term and
+    // the recital falls through as an orphan.
+    const deArticles = [
+      { article_number: "1", article_title: "", article_html: "<p>der verordnung</p>" },
+      { article_number: "2", article_title: "", article_html: "<p>fillertwo fillertwo</p>" },
+    ];
+    const deRecitals = [{ recital_number: "1", recital_text: "der verordnung" }];
+
+    expect(
+      mapRecitalsToArticles(deRecitals, deArticles).get("1").map((r) => r.recital_number)
+    ).toContain("1");
+    expect(
+      mapRecitalsToArticles(deRecitals, deArticles, "DE").get(null)
+    ).toEqual(["1"]);
+  });
 });
 
 describe("buildSearchIndex + searchIndex", () => {

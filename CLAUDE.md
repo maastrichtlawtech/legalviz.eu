@@ -23,6 +23,8 @@ npm run test:api              # backend tests: node --test search/*.test.js shar
 Single test file (frontend, vitest): `npx vitest run src/utils/nlp.test.js`
 Single test file (backend, node:test): `cd backend && node --test search/search-ranking.test.js`
 
+The fmxParser.test.js is a vitest test (not part of the backend node:test glob).
+
 Backend CLI (`eurlex`) commands are documented in [backend/README.md](backend/README.md); run via `npx eurlex <command>` from `backend/` after `npm install`.
 
 Requires Node.js v24+.
@@ -61,6 +63,7 @@ Nearly every expensive operation — Formex parsing, TF‑IDF recital mapping, C
 | Law-summary JSON schema / prompt | `SCHEMA_VERSION` / `PROMPT_VERSION` | `backend/shared/law-summary-service.js` |
 | Article-digest JSON schema / prompt | `SCHEMA_VERSION` / `PROMPT_VERSION` | `backend/shared/article-digest-service.js` |
 | Whole-law digest JSON schema / prompt | `SCHEMA_VERSION` / `PROMPT_VERSION` | `backend/shared/case-law-digest-service.js` |
+| Persisted analytics shape (`analytics.json` fields) | `ANALYTICS_SCHEMA_VERSION` | `backend/shared/analytics.js` |
 
 `PARSER_VERSION` is **shared with the frontend** (imported into `src/utils/formexApi.js`), so bumping it re-parses the browser IndexedDB cache too. When you bump `CASE_LAW_CACHE_FILE`, also update `CASE_LAW_CACHE_VERSION` in `article-digest-service.js` **and** `case-law-digest-service.js` — they are kept in lock-step so digests regenerate when enrichment shape changes.
 

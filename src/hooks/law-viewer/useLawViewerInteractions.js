@@ -136,11 +136,12 @@ export function useLawViewerInteractions({
           celex: result.resolved.celex,
           officialReference: reference,
         });
-        await saveLawMeta({
+        // Best-effort bookkeeping: never let a stuck IndexedDB block navigation.
+        saveLawMeta({
           celex: result.resolved.celex,
           officialReference: reference,
           label: refLike?.raw || refLike?.label || refLike?.target || `CELEX ${result.resolved.celex}`,
-        });
+        }).catch(() => {});
         navigate(getCanonicalLawRoute(
           targetLaw,
           refLike?.articleNumber ? "article" : null,

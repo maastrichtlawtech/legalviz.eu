@@ -789,6 +789,16 @@ export async function fetchArticleCaseLawDigest(celex, articleNumber, lang = "EN
   }));
 }
 
+export async function fetchArticleCitedBy(celex, articleNumber) {
+  const key = `${celex}_cited_by_${articleNumber}`;
+  return getInFlightRequest(`article-cited-by:${key}`, () => fetchJsonWithCache({
+    cacheKey: key,
+    url: `${API_BASE}/api/laws/${encodeURIComponent(celex)}/articles/${encodeURIComponent(articleNumber)}/cited-by?limit=200`,
+    errorLabel: "Article cited-by fetch failed",
+    cacheFirst: true,
+  }));
+}
+
 export async function fetchCaseLawDigest(celex, lang = "EN") {
   const apiLang = toApiLang(lang);
   const key = `${celex}_${apiLang}_case_law_digest`;

@@ -20,6 +20,7 @@ import { SEO } from "./SEO.jsx";
 import { GeneralRecitals, RelatedRecitals } from "./RelatedRecitals.jsx";
 import { RelatedCaseLaw } from "./RelatedCaseLaw.jsx";
 import { CrossReferences } from "./CrossReferences.jsx";
+import { CitedByPanel } from "./CitedByPanel.jsx";
 import { useI18n } from "../i18n/useI18n.js";
 import { useLandingLibrary } from "../hooks/useLandingLibrary.js";
 import { useLandingSearchIndex } from "../hooks/useLandingSearchIndex.js";
@@ -378,6 +379,12 @@ export function LawViewer() {
                   currentLang={displayedFormexLang}
                   onOpenExternalReference={interactions.handleOpenExternalLaw}
                   isExternalReferencePending={interactions.isExternalReferencePending}
+                />
+                <CitedByPanel
+                  celex={source.effectiveCelex}
+                  articleNumber={selection.selected.id}
+                  currentLang={displayedFormexLang}
+                  onOpenLaw={interactions.handleOpenLawByCelex}
                 />
               </>
             ) : null}

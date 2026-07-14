@@ -183,6 +183,9 @@ test("legal cache store backfills missing dates from the sidecar without overrid
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "legal-cache-store-dates-"));
   const cachePath = path.join(tempDir, "cache.json");
   const datesPath = path.join(tempDir, "dates.json");
+  // Keep the test hermetic: point EuroVoc at a missing path so it can't fall
+  // back to the large committed sidecar, which is irrelevant to date backfill.
+  const noEurovocPath = path.join(tempDir, "no-eurovoc.json");
   fs.writeFileSync(cachePath, JSON.stringify({
     records: [
       {
@@ -210,7 +213,7 @@ test("legal cache store backfills missing dates from the sidecar without overrid
     "32020R0123": "1999-12-31",
   }));
 
-  const store = new JsonLegalCacheStore(cachePath, undefined, datesPath);
+  const store = new JsonLegalCacheStore(cachePath, noEurovocPath, datesPath);
   assert.equal(store.load(), true);
 
   assert.equal(store.getByCelex("31968R0260")?.date, "1968-02-29");
@@ -224,6 +227,7 @@ test("legal cache store leaves dates untouched when the sidecar is missing or ha
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "legal-cache-store-dates-missing-"));
   const cachePath = path.join(tempDir, "cache.json");
   const datesPath = path.join(tempDir, "dates.json");
+  const noEurovocPath = path.join(tempDir, "no-eurovoc.json");
   fs.writeFileSync(cachePath, JSON.stringify({
     records: [
       {
@@ -239,12 +243,12 @@ test("legal cache store leaves dates untouched when the sidecar is missing or ha
   // A null sidecar entry (endpoint had no date) must not throw or fabricate one.
   fs.writeFileSync(datesPath, JSON.stringify({ "31968R0260": null }));
 
-  const store = new JsonLegalCacheStore(cachePath, undefined, datesPath);
+  const store = new JsonLegalCacheStore(cachePath, noEurovocPath, datesPath);
   assert.equal(store.load(), true);
   assert.equal(store.getByCelex("31968R0260")?.date, null);
 
   const missingDatesPath = path.join(os.tmpdir(), `missing-dates-${Date.now()}.json`);
-  const store2 = new JsonLegalCacheStore(cachePath, undefined, missingDatesPath);
+  const store2 = new JsonLegalCacheStore(cachePath, noEurovocPath, missingDatesPath);
   assert.equal(store2.load(), true);
   assert.equal(store2.getByCelex("31968R0260")?.date, null);
 });

@@ -42,8 +42,20 @@ function parseArgs(argv) {
   }
   options.limit = Number.parseInt(String(options.limit || "0"), 10) || 0;
   options.saveEvery = Math.max(1, Number.parseInt(String(options.saveEvery || "5"), 10) || 5);
-  options.all = Boolean(options.all);
+  // A bare `--all` parses to `true`; an explicit `--all false`/`--all 0` must
+  // stay false rather than being coerced truthy by a bare Boolean() cast.
+  options.all = parseBoolFlag(options.all);
   return options;
+}
+
+// A flag with no value (`--all`) arrives as boolean true; a flag with an
+// explicit value (`--all false`) arrives as that string. Treat the common
+// falsey spellings as false and everything else present as true.
+function parseBoolFlag(value) {
+  if (typeof value === "string") {
+    return !["false", "0", "no", "off", ""].includes(value.trim().toLowerCase());
+  }
+  return Boolean(value);
 }
 
 function sleep(ms) {

@@ -17,7 +17,7 @@ function distinctSources(edges) {
     const key = sourceKey(edge);
     let source = grouped.get(key);
     if (!source) {
-      source = { ...edge, _references: [] };
+      source = { ...edge, _references: [], _referenceKeys: new Set() };
       grouped.set(key, source);
     }
     const reference = {
@@ -25,8 +25,11 @@ function distinctSources(edges) {
       point: edge.targetPoint == null ? null : String(edge.targetPoint),
       raw: edge.raw || null,
     };
-    const referenceKey = JSON.stringify(reference);
-    if (!source._references.some((item) => JSON.stringify(item) === referenceKey)) source._references.push(reference);
+    const referenceKey = `${reference.paragraph ?? ""}|${reference.point ?? ""}|${reference.raw ?? ""}`;
+    if (!source._referenceKeys.has(referenceKey)) {
+      source._referenceKeys.add(referenceKey);
+      source._references.push(reference);
+    }
   }
   return [...grouped.values()].sort(compareCitations);
 }
@@ -147,4 +150,4 @@ class CitationGraphStore {
   }
 }
 
-module.exports = { CitationGraphStore, DEFAULT_CITATION_GRAPH_PATH, distinctSources };
+module.exports = { CitationGraphStore, DEFAULT_CITATION_GRAPH_PATH, GRAPH_VERSION, distinctSources };

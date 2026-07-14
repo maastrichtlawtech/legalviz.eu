@@ -56,7 +56,7 @@ Nearly every expensive operation — Formex parsing, TF‑IDF recital mapping, C
 | When you change… | Bump | In |
 |---|---|---|
 | Parser output (fields, shape, bug fix) | `PARSER_VERSION` | `backend/shared/formex-parser/fmxParser.mjs` |
-| Citation graph edge/artifact shape | `GRAPH_VERSION` | `backend/search/citation-graph-build.js` |
+| Citation graph edge/artifact shape | `GRAPH_VERSION` | `backend/search/citation-graph-store.js` (shared by builder and store) |
 | CJEU enrichment shape (declarations, `articleRefs`) | `CASE_LAW_CACHE_FILE` → `case-law-cache-vN.json` (keep the legacy-migration path) | `backend/shared/law-queries.js` |
 | Recital-title prompt/output format | `CACHE_VERSION` | `backend/shared/recital-title-service.js` |
 | Law-summary JSON schema / prompt | `SCHEMA_VERSION` / `PROMPT_VERSION` | `backend/shared/law-summary-service.js` |

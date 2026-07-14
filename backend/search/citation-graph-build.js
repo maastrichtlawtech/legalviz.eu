@@ -5,7 +5,7 @@ const { promisify } = require("util");
 const { Worker } = require("worker_threads");
 
 const gunzip = promisify(zlib.gunzip);
-const GRAPH_VERSION = 1;
+const { GRAPH_VERSION } = require("./citation-graph-store");
 // This is intentionally lower than search-build's excerpt guard. A corpus run
 // showed that 31993R2454 (2.97 MiB decompressed, 125 annexes) could exhaust a
 // 4 GiB heap during full cross-reference parsing before the old 6 MiB guard

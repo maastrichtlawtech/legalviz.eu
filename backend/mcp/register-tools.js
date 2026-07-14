@@ -390,20 +390,9 @@ function registerTools(server, deps) {
       requireCelex(celex);
       record('get_citing_provisions', { celex, ...(article ? { article } : {}) });
       const store = requireCitationGraph(citationGraphStore);
-      try {
-        return jsonResult(article
-          ? store.getArticleCitations(celex, article, { limit, offset })
-          : store.getActCitations(celex));
-      } catch (err) {
-        if (err?.code === 'citation_graph_unavailable') {
-          throw new ClientError(
-            'The citation graph is not loaded on the server yet. Please try again shortly.',
-            503,
-            'citation_graph_unavailable'
-          );
-        }
-        throw err;
-      }
+      return jsonResult(article
+        ? store.getArticleCitations(celex, article, { limit, offset })
+        : store.getActCitations(celex));
     })
   );
 

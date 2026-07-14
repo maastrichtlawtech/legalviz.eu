@@ -1,3 +1,5 @@
+import { closeFormexDb } from "./formexApi.js";
+
 const FORMEX_DB_NAME = "formex-cache";
 const MIGRATION_VERSION_KEY = "legalviz-migration-version";
 const CURRENT_MIGRATION_VERSION = "2026-03-v2-meta-upgrade";
@@ -79,6 +81,10 @@ async function unregisterServiceWorkers() {
 async function clearLocalBrowserData() {
   removeAppStorageKeys();
   clearSessionStorage();
+  // Close our own IndexedDB connection first so the delete below isn't
+  // blocked by this very tab. Other tabs release theirs via the
+  // versionchange handler installed in formexApi's openDb().
+  await closeFormexDb();
   await deleteIndexedDb(FORMEX_DB_NAME);
   await clearBrowserCaches();
   await unregisterServiceWorkers();

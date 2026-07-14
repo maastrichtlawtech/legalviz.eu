@@ -84,7 +84,8 @@ export function Landing({ forcedLocale = null }) {
   const activeLocale = forcedLocale || locale;
 
   const handleOpenLaw = useCallback(async (law) => {
-    await markLawOpened(law.celex);
+    // Best-effort bookkeeping: never let a stuck IndexedDB block navigation.
+    markLawOpened(law.celex).catch(() => {});
     navigate(localizePath(law.route, locale));
   }, [locale, localizePath, markLawOpened, navigate]);
 
@@ -98,11 +99,12 @@ export function Landing({ forcedLocale = null }) {
       });
 
       if (officialReference) {
-        await saveLawMeta({
+        // Best-effort bookkeeping: never let a stuck IndexedDB block navigation.
+        saveLawMeta({
           celex: item.celex,
           label: item.title,
           officialReference,
-        });
+        }).catch(() => {});
       }
 
       navigate(getCanonicalLawRoute(targetLaw, null, null, locale));

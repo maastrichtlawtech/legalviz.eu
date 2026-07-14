@@ -1013,11 +1013,12 @@ export function TopBar({
       });
 
       if (officialReference) {
-        await saveLawMeta({
+        // Best-effort bookkeeping: never let a stuck IndexedDB block navigation.
+        saveLawMeta({
           celex: item.celex,
           label: item.title,
           officialReference,
-        });
+        }).catch(() => {});
       }
 
       navigate(getCanonicalLawRoute(targetLaw, null, null, locale));

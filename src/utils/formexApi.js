@@ -60,8 +60,24 @@ export class FormexApiError extends Error {
 // IndexedDB helpers
 // ---------------------------------------------------------------------------
 
+// A pending indexedDB.deleteDatabase() (e.g. the "reset whole app" flow in
+// another tab) queues every later open() behind it, so an open that never
+// settles would otherwise hang all cache/meta operations indefinitely.
+const OPEN_DB_TIMEOUT_MS = 3000;
+
+let dbPromise = null;
+
 function openDb() {
-  return new Promise((resolve, reject) => {
+  if (dbPromise) return dbPromise;
+
+  const promise = new Promise((resolve, reject) => {
+    let settled = false;
+    const settle = (fn, value) => {
+      if (settled) return;
+      settled = true;
+      fn(value);
+    };
+
     try {
       const req = indexedDB.open(DB_NAME, CACHE_VERSION);
       req.onupgradeneeded = () => {
@@ -73,13 +89,54 @@ function openDb() {
           db.createObjectStore(META_STORE_NAME, { keyPath: "celex" });
         }
       };
-      req.onsuccess = () => resolve(req.result);
-      req.onerror = () => reject(req.error);
-      req.onblocked = () => reject(new Error("IndexedDB open blocked"));
+      req.onsuccess = () => {
+        const db = req.result;
+        if (settled) {
+          // The timeout already rejected this attempt; don't leak the handle.
+          try { db.close(); } catch { /* ignore */ }
+          return;
+        }
+        // Release the connection when another tab (or the reset flow) asks to
+        // delete or upgrade the database. Without this, deleteDatabase() blocks
+        // forever and wedges IndexedDB for every tab until browser restart.
+        db.onversionchange = () => {
+          try { db.close(); } catch { /* ignore */ }
+          if (dbPromise === promise) dbPromise = null;
+        };
+        db.onclose = () => {
+          if (dbPromise === promise) dbPromise = null;
+        };
+        settle(resolve, db);
+      };
+      req.onerror = () => settle(reject, req.error);
+      req.onblocked = () => settle(reject, new Error("IndexedDB open blocked"));
+      setTimeout(() => settle(reject, new Error("IndexedDB open timed out")), OPEN_DB_TIMEOUT_MS);
     } catch (err) {
-      reject(err);
+      settle(reject, err);
     }
   });
+
+  dbPromise = promise;
+  promise.catch(() => {
+    if (dbPromise === promise) dbPromise = null;
+  });
+  return promise;
+}
+
+/**
+ * Close this tab's shared IndexedDB connection so a following
+ * deleteDatabase() is not blocked by our own handle.
+ */
+export async function closeFormexDb() {
+  const promise = dbPromise;
+  dbPromise = null;
+  if (!promise) return;
+  try {
+    const db = await promise;
+    db.close();
+  } catch {
+    // ignore — connection never opened or already closed
+  }
 }
 
 function makeCacheKey(celex, lang = "EN") {

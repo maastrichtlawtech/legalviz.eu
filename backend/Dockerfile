@@ -29,6 +29,26 @@ RUN PW_VERSION=$(node -p "require('playwright-core/package.json').version") \
 # path/variant changes without failing the build.
 RUN ls -1 /ms-playwright/ || true
 
+# Precomputed data caches are NOT committed to git — a ~48 MB blob would bloat
+# history permanently. They ship as GitHub Release assets (public repo, no auth)
+# and are fetched here into the exact paths the server reads at startup:
+#   search/data/search-cache.json.gz      -> gunzipped by legal-cache-store.js
+#   search/data/case-law-cache-v5.json.gz -> materialized by law-queries.js
+# Placed before `COPY . .` so this (large) layer stays cached across code
+# changes and only re-runs when DATA_RELEASE_TAG is bumped for a new data build.
+ARG DATA_RELEASE_REPO=maastrichtlawtech/legalviz.eu
+ARG DATA_RELEASE_TAG=data-v5
+RUN command -v curl >/dev/null 2>&1 \
+    || (apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*)
+RUN mkdir -p search/data \
+    && for asset in search-cache.json.gz case-law-cache-v5.json.gz; do \
+         echo "Fetching data asset: $asset ($DATA_RELEASE_TAG)" \
+         && curl -fSL --retry 3 --retry-delay 2 \
+              -o "search/data/$asset" \
+              "https://github.com/${DATA_RELEASE_REPO}/releases/download/${DATA_RELEASE_TAG}/$asset"; \
+       done \
+    && ls -lh search/data/*.gz
+
 COPY . .
 
 # Ensure cache directory exists (can be overridden with Railway volume mount via CACHE_DIR)

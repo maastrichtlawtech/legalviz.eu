@@ -200,10 +200,10 @@ class JsonLegalCacheStore {
 
   load() {
     try {
-      // The full-corpus cache is far past GitHub's file-size limit raw, so the
-      // repo (and hence a fresh deploy) ships only search-cache.json.gz.
-      // Prefer the raw file when present (a local rebuild writes it), else
-      // fall back to the gzipped artifact.
+      // The full-corpus cache is far too large to commit, so a fresh deploy
+      // fetches search-cache.json.gz as a GitHub Release asset at build time
+      // (see backend/Dockerfile). Prefer the raw file when present (a local
+      // rebuild writes it), else fall back to the gzipped artifact.
       const gzPath = `${this.cachePath}.gz`;
       const useGz = !fs.existsSync(this.cachePath) && fs.existsSync(gzPath);
       if (!useGz && !fs.existsSync(this.cachePath)) {

@@ -328,8 +328,9 @@ const CASE_LAW_CACHE_FILES_LEGACY = ['case-law-cache-v4.json', 'case-law-cache-v
 // changes the mtime and invalidates the memo, so live pickup still works.
 let caseLawCacheMemo = null;
 
-// A gzipped copy of the bulk-parsed cache is committed so fresh deploys start
-// with the full precomputed corpus instead of re-enriching from EUR-Lex.
+// A gzipped copy of the bulk-parsed cache is fetched into search/data/ at Docker
+// build time (a GitHub Release asset; see backend/Dockerfile) so fresh deploys
+// start with the full precomputed corpus instead of re-enriching from EUR-Lex.
 const CASE_LAW_CACHE_SEED = path.join(__dirname, '..', 'search', 'data', `${CASE_LAW_CACHE_FILE}.gz`);
 
 function readCaseLawCacheFile(filePath) {

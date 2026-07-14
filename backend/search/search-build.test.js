@@ -1,7 +1,13 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 
-const { buildYearQuery, extractTitleFromEurlexHtml, harvestPrimaryActs, normalizeYearQueryActTypes } = require("./search-build");
+const {
+  buildYearQuery,
+  extractTitleFromEurlexHtml,
+  harvestPrimaryActs,
+  normalizeYearQueryActTypes,
+  requestWithRetry,
+} = require("./search-build");
 
 test("extractTitleFromEurlexHtml prefers WT.z_docTitle metadata", () => {
   const html = `
@@ -81,4 +87,27 @@ test("harvestPrimaryActs paginates based on raw SPARQL bindings", async () => {
   });
   assert.equal(calls, 2);
   assert.deepEqual(records.map((record) => record.celex), ["32001D0006(01)", "32001D0011", "32001R0045"]);
+});
+
+test("requestWithRetry does not sleep after its final failed attempt", async () => {
+  const originalFetch = global.fetch;
+  let sleeps = 0;
+  global.fetch = async () => ({
+    ok: false,
+    status: 503,
+    headers: { get: () => null },
+  });
+
+  try {
+    await assert.rejects(
+      requestWithRetry("https://example.test/unavailable", {
+        maxAttempts: 1,
+        sleepImpl: async () => { sleeps += 1; },
+      }),
+      /Exhausted 1 attempts/
+    );
+    assert.equal(sleeps, 0);
+  } finally {
+    global.fetch = originalFetch;
+  }
 });

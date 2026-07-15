@@ -48,9 +48,19 @@ test("extractTitleFromEurlexHtml falls back to the title element in the page bod
 test("buildYearQuery can target only directives and regulations", () => {
   const query = buildYearQuery({ year: 2001, limit: 200, offset: 0, actTypes: ["regulation", "directive"] });
   assert.match(query, /\^32001\[RL\]/);
-  assert.match(query, /\/eli\/\(reg\|dir\)\/2001\/\[0-9\]\+\/oj\$/);
+  assert.match(query, /\/eli\/\(reg\|dir\)\/\[0-9\]\+\/\[0-9\]\+\/oj\$/);
   assert.doesNotMatch(query, /\[RLD\]/);
   assert.doesNotMatch(query, /dec/);
+});
+
+test("buildYearQuery does not couple the ELI year to the CELEX year", () => {
+  // ECB decisions are adopted (CELEX-dated) one year but ELI-numbered under the
+  // following year's OJ (e.g. 32014D0055 -> /eli/dec/2015/425/oj). The harvest
+  // for the CELEX year must still accept these, so the ELI filter is year-agnostic.
+  const query = buildYearQuery({ year: 2014, limit: 200, offset: 0 });
+  assert.match(query, /\^32014\[RLD\]/);
+  assert.match(query, /\/eli\/\(reg\|dir\|dec\)\/\[0-9\]\+\/\[0-9\]\+\/oj\$/);
+  assert.doesNotMatch(query, /\/eli\/\([^)]+\)\/2014\//);
 });
 
 test("normalizeYearQueryActTypes drops unknown values and deduplicates", () => {

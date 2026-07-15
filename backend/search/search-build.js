@@ -73,6 +73,14 @@ function normalizeYearQueryActTypes(actTypes) {
   return [...new Set(normalized)];
 }
 
+// The ELI filter matches a primary reg/dir/dec ELI but deliberately does NOT
+// require the ELI's year segment to equal `safeYear`. Some acts are adopted
+// (and CELEX-dated) in one year but published in the OJ — and therefore
+// ELI-numbered — the following year (e.g. ECB capital-key decision 32014D0055
+// -> /eli/dec/2015/425/oj). The CELEX filter already scopes this iteration to
+// `safeYear`; coupling the ELI year to it too would drop such cross-year acts
+// from both the CELEX-year pass (ELI year is year+1) and the year+1 pass
+// (CELEX year is `safeYear`). See issue #85.
 function buildYearQuery({ year, limit, offset, actTypes }) {
   const safeYear = Number.parseInt(year, 10);
   const selectedActTypes = normalizeYearQueryActTypes(actTypes);
@@ -94,7 +102,7 @@ WHERE {
 
   FILTER(REGEX(STR(?celex), "^3${safeYear}[${celexMarkers}]"))
   FILTER(!CONTAINS(?celex, "R("))
-  FILTER(REGEX(STR(?eli), "/eli/(${eliTokens})/${safeYear}/[0-9]+/oj$"))
+  FILTER(REGEX(STR(?eli), "/eli/(${eliTokens})/[0-9]+/[0-9]+/oj$"))
 }
 ORDER BY ?celex
 LIMIT ${limit}

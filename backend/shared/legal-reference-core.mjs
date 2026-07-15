@@ -2,6 +2,13 @@
  * Runtime-neutral legal-reference primitives shared by the browser Formex
  * parser and the Node case-law parser. Keep this module dependency-free: Vite
  * imports it into the browser bundle while CommonJS backend code requires it.
+ *
+ * ESM with named exports only. The browser needs real `export` statements —
+ * Vite's dev server serves source files untransformed, so a CommonJS
+ * `module.exports` here is unresolvable in the browser even though `vite build`
+ * would paper over it. CommonJS callers reach it through Node's require(esm)
+ * (Node >=22.12); a default export would surface there as `.default`, so keep
+ * the exports named.
  */
 
 const MAX_ARTICLE_ACT_BRIDGE = 200;
@@ -525,7 +532,7 @@ function enforceInternalReferenceIntegrity(parsed) {
   return parsed;
 }
 
-module.exports = {
+export {
   ACT_CELEX_MAP,
   MAX_ARTICLE_ACT_BRIDGE,
   MAX_THEREOF_ANTECEDENT_DISTANCE,

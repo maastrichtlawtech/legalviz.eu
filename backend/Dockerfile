@@ -1,4 +1,4 @@
-# Official Playwright image: bundles Node.js (22 LTS), the browser binaries,
+# Official Playwright image: bundles Node.js (24), the browser binaries,
 # and all of Chromium's system dependencies, so the build needs neither an
 # apt-get step nor a browser download from cdn.playwright.dev.
 #

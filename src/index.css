@@ -2,7 +2,34 @@
 
 @variant dark (&:where(.dark, .dark *));
 
-@theme {}
+/*
+ * Design tokens (see design/legalviz-redesign-mockups.html for the source palette).
+ * EU-grounded identity: ink navy + cool paper neutral, EU blue for interactive
+ * elements, Official-Journal gold as the editorial accent (AI features, recitals,
+ * active markers), green reserved for legal-status signaling only.
+ *
+ * Pairing convention: each light-mode token has a dark-mode counterpart meant to be
+ * applied via the `dark:` variant, e.g. `text-eu-blue dark:text-eu-blue-bright`,
+ * `bg-eu-gold-soft dark:bg-eu-gold-soft-dark`. Don't reuse a light token under `dark:`.
+ */
+@theme {
+  --color-eu-navy: #1c2f6e;
+  --color-eu-blue: #1f3b8f;
+  --color-eu-blue-bright: #93aaf0;
+  --color-eu-blue-soft: #e9edf9;
+  --color-eu-blue-soft-dark: #1d2540;
+  --color-eu-gold: #b9861c;
+  --color-eu-gold-deep: #94690f;
+  --color-eu-gold-bright: #d2a53e;
+  --color-eu-gold-soft: #f5ecd6;
+  --color-eu-gold-soft-dark: #2e2712;
+  --color-ink: #171d33;
+  --color-paper: #f2f3f7;
+  --color-paper-dark: #0d1017;
+  --color-panel-dark: #151a25;
+
+  --font-display: "Merriweather", Charter, "Iowan Old Style", Georgia, serif;
+}
 
 /* Article typography */
 .prose {

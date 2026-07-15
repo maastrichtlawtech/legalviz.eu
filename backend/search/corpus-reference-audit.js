@@ -17,7 +17,6 @@ const { execFileSync } = require("child_process");
 
 const { parseFmxXml } = require("../shared/fmx-parser-node.js");
 const { parseEurlexHtmlToCombined } = require("../shared/eurlex-html-parser.js");
-const { wrapForParsing, buildExcerptFromCombined } = require("./search-build.js");
 
 const DATA_DIR = path.join(__dirname, "data");
 const CORPORA = {
@@ -27,6 +26,21 @@ const CORPORA = {
 // Keep aligned with search-build's DOM safety limit. The app intentionally
 // leaves these raw FMX blobs available but does not parse them into a DOM.
 const MAX_FMX_PARSE_BYTES = 6 * 1024 * 1024;
+
+// Keep this tool independent of search-build: the audit parses raw law files
+// directly and must not require optional search-index/database dependencies.
+function wrapForParsing(xml) {
+  const withoutDecls = String(xml || "").replace(/<\?xml[\s\S]*?\?>/g, "").trim();
+  return `<FMX.COLLECTION>${withoutDecls}</FMX.COLLECTION>`;
+}
+
+function hasExtractedText(parsed) {
+  return [
+    ...(parsed.articles || []).map((article) => article.article_html),
+    ...(parsed.recitals || []).map((recital) => recital.recital_html),
+    ...(parsed.annexes || []).map((annex) => annex.annex_html),
+  ].some((html) => String(html || "").replace(/<[^>]+>/g, "").trim());
+}
 
 function listCorpusFiles({ root, extension }) {
   if (!fs.existsSync(root)) return [];
@@ -72,7 +86,7 @@ function addSample(stats, text) {
 
 function inspectParsedLaw(parsed, file, stats, knownCelex) {
   const validArticles = new Set((parsed.articles || []).map((article) => String(article.article_number)));
-  if (!(buildExcerptFromCombined(parsed) || "")) {
+  if (!hasExtractedText(parsed)) {
     stats.empty += 1;
     addSample(stats, `${path.basename(file)}: no searchable extracted text`);
   }
@@ -84,7 +98,7 @@ function inspectParsedLaw(parsed, file, stats, knownCelex) {
         stats.invalidInternalRefs += 1;
         addSample(stats, `${path.basename(file)} ${location}: invalid Article ${ref.target}`);
       }
-      if (ref.type === "external" && (ref.externalInstitutional || ref.externalNational || ref.nationalLaw || ref.externalCaseLaw)) {
+      if (ref.type === "external" && (ref.externalInstitutional || ref.externalNational || ref.nationalLaw || ref.externalCaseLaw || ref.treaty || ref.protocol)) {
         if (ref.externalInstitutional) stats.externalInstitutional += 1;
         if (ref.externalNational || ref.nationalLaw) stats.externalNational += 1;
         if (ref.externalCaseLaw) stats.externalCaseLaw += 1;

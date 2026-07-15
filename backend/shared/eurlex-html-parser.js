@@ -1053,6 +1053,7 @@ async function loadHelpers() {
       return {
         injectCrossRefLinks: parserMod.injectCrossRefLinks,
         extractCrossRefsFromText: parserMod.extractCrossRefsFromText,
+        repairCorroboratedTruncatedInstrumentIdentifiers: parserMod.repairCorroboratedTruncatedInstrumentIdentifiers,
         getLangConfig: langMod.getLangConfig,
       };
     })();
@@ -1065,7 +1066,12 @@ async function parseEurlexHtmlToCombined(htmlText, lang = "ENG") {
   const dom = new JSDOM(htmlText, { url: "https://eur-lex.europa.eu/" });
   const document = dom.window.document;
   const langCode = normalizeText(document.documentElement.getAttribute("lang") || LANG_3_TO_2[lang] || "EN").toUpperCase();
-  const { injectCrossRefLinks, extractCrossRefsFromText, getLangConfig } = await loadHelpers();
+  const {
+    injectCrossRefLinks,
+    extractCrossRefsFromText,
+    repairCorroboratedTruncatedInstrumentIdentifiers,
+    getLangConfig,
+  } = await loadHelpers();
   const langConfig = getLangConfig(langCode);
 
   // Populate the crossReferences map (empty as built by each branch) so the
@@ -1078,7 +1084,9 @@ async function parseEurlexHtmlToCombined(htmlText, lang = "ENG") {
       extractCrossRefsFromText,
       langConfig,
     });
-    return enforceInternalReferenceIntegrity(parsed);
+    const checked = enforceInternalReferenceIntegrity(parsed);
+    repairCorroboratedTruncatedInstrumentIdentifiers(Object.values(checked.crossReferences).flat());
+    return checked;
   };
 
   const hasStructuredLayout = Boolean(
@@ -1238,7 +1246,7 @@ async function parseEurlexHtmlToCombined(htmlText, lang = "ENG") {
     footnotesByNumber,
   });
 
-  return enforceInternalReferenceIntegrity({
+  const parsed = enforceInternalReferenceIntegrity({
     title,
     articles: strippedArticles,
     recitals,
@@ -1247,6 +1255,8 @@ async function parseEurlexHtmlToCombined(htmlText, lang = "ENG") {
     langCode,
     crossReferences,
   });
+  repairCorroboratedTruncatedInstrumentIdentifiers(Object.values(parsed.crossReferences).flat());
+  return parsed;
 }
 
 async function loadPlaywrightModule(modulePath = null) {

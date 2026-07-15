@@ -34,7 +34,7 @@ const {
  * Bump this whenever the parser output changes (new fields, bug fixes, etc.)
  * so that cached parsed results are automatically re-parsed from raw XML.
  */
-export const PARSER_VERSION = 14;
+export const PARSER_VERSION = 15;
 
 // ---------------------------------------------------------------------------
 // FMX → HTML conversion helpers
@@ -609,6 +609,49 @@ function parseExternalLawMeta(raw, target, { ecscAuthority = false, institutiona
   };
 }
 
+/**
+ * A legal act commonly gives the full institutional form once, then repeats a
+ * short form such as "Regulation 1408/71". The number/year order is genuinely
+ * ambiguous for old instruments, so never guess it in isolation. Within one
+ * parsed document, though, an exact same-type/same-identifier match is safe
+ * when every resolved occurrence names the same CELEX act.
+ */
+export function repairCorroboratedTruncatedInstrumentIdentifiers(refs) {
+  for (const ref of refs) {
+    if (
+      ref.type !== "external"
+      || !ref.actType
+      || ref.actCelex
+      || ref.externalInstitutional
+      || ref.externalNational
+      || ref.externalCaseLaw
+    ) continue;
+
+    const candidates = [...new Map(refs
+      .filter((candidate) => (
+        candidate.type === "external"
+        && candidate.actType === ref.actType
+        && candidate.target === ref.target
+        && candidate.actCelex
+        && !candidate.externalInstitutional
+        && !candidate.externalNational
+        && !candidate.externalCaseLaw
+      ))
+      .map((candidate) => [candidate.actCelex, candidate])).values()];
+
+    if (candidates.length !== 1) continue;
+    const candidate = candidates[0];
+    Object.assign(ref, {
+      actCelex: candidate.actCelex,
+      identifier: candidate.identifier,
+      year: candidate.year,
+      number: candidate.number,
+      suffix: candidate.suffix,
+    });
+  }
+  return refs;
+}
+
 // Canonical dedup key for a cross-reference. Crucially includes articleNumber so
 // distinct "Article 6 of Reg X" / "Article 9 of Reg X" edges are not collapsed
 // into one (the act identifier alone is not unique), plus OJ coordinates so
@@ -935,6 +978,10 @@ export function extractCrossRefsFromText(text, lang) {
     seriesRefs.externalRefs,
     lang.code,
   );
+  repairCorroboratedTruncatedInstrumentIdentifiers([
+    ...mergedRefs.externalRefs,
+    ...thereofRefs.externalRefs,
+  ]);
 
   for (const ref of mergedRefs.articleRefs) addRef(ref);
   for (const ref of recitalRefs) addRef(ref);
@@ -1334,6 +1381,21 @@ export function parseFmxToCombined(xmlText) {
   const articles = [];
   const crossReferences = {};  // articleNumber → [refs]
 
+  // The legal basis in a preamble is often the sole fully-qualified occurrence
+  // of an instrument subsequently cited in a recital using a short form. Keep
+  // those source citations visible in the graph and make them available to the
+  // final document-wide corroboration pass below.
+  const visaSeen = new Set();
+  const visaRefs = Array.from(root.querySelectorAll("PREAMBLE > GR\\.VISA > VISA, PREAMBLE > VISA"))
+    .flatMap((visa) => extractCrossRefsFromText(allText(visa), lang))
+    .filter((ref) => {
+      const key = crossRefDedupeKey(ref);
+      if (visaSeen.has(key)) return false;
+      visaSeen.add(key);
+      return true;
+    });
+  if (visaRefs.length) crossReferences.preamble = visaRefs;
+
   function classifyDivisionRole(tiText, depth) {
     if (lang.chapter.test(tiText)) return "chapter";
     if (lang.section.test(tiText)) return depth === 0 ? "chapter" : "section";
@@ -1625,6 +1687,7 @@ export function parseFmxToCombined(xmlText) {
   // Shared with the EUR-Lex HTML parser so both source formats enforce the same
   // invariant (and defensively covers article.paragraphs[].html).
   enforceInternalReferenceIntegrity({ articles, recitals, annexes, crossReferences });
+  repairCorroboratedTruncatedInstrumentIdentifiers(Object.values(crossReferences).flat());
 
   return { title, articles, recitals, annexes, definitions, langCode, crossReferences, parserVersion: PARSER_VERSION };
 }

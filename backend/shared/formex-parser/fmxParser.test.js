@@ -624,6 +624,34 @@ describe("extractCrossRefsFromText — multilingual instruments", () => {
       actCelex: "32000R2040",
     }));
   });
+
+  it("resolves an unlabelled historical short form when the same text corroborates it", () => {
+    const refs = extractCrossRefsFromText(
+      "Regulation (EEC) No 1408/71; Regulation 1408/71.",
+      getLangConfig("EN"),
+    );
+    expect(refs.filter((ref) => ref.target === "1408/71")).toEqual([
+      expect.objectContaining({ actCelex: "31971R1408" }),
+    ]);
+  });
+});
+
+describe("parseFmxToCombined — preamble citation context", () => {
+  it("uses a fully-qualified visa citation to resolve a recital short form", () => {
+    const xml =
+      `<ACT xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://formex.publications.europa.eu/schema/formex-05.59-20170418.xd">` +
+      `<BIB.INSTANCE><LG.DOC>EN</LG.DOC></BIB.INSTANCE>` +
+      `<PREAMBLE><GR.VISA><VISA><P>Having regard to Council Regulation (EC) No 3286/94.</P></VISA></GR.VISA>` +
+      `<GR.CONSID><CONSID><NP><NO.P>(1)</NO.P><TXT>That investigation was not conducted under Regulation 3286/94.</TXT></NP></CONSID></GR.CONSID></PREAMBLE>` +
+      `<ENACTING.TERMS><DIVISION><ARTICLE IDENTIFIER="001"><TI.ART>Article 1</TI.ART><ALINEA><P>Text.</P></ALINEA></ARTICLE></DIVISION></ENACTING.TERMS>` +
+      `</ACT>`;
+    const result = parseFmxToCombined(xml);
+    expect(result.crossReferences.preamble).toContainEqual(expect.objectContaining({ actCelex: "31994R3286" }));
+    expect(result.crossReferences.recital_1).toContainEqual(expect.objectContaining({
+      target: "3286/94",
+      actCelex: "31994R3286",
+    }));
+  });
 });
 
 describe("parseFmxToCombined — amendment scope", () => {

@@ -49,6 +49,12 @@ and case-law details. Build it from the two release-format JSON inputs with
 strict. Without SQLite, the existing JSON files remain the local-development
 fallback.
 
+To enable reverse-citation queries, also build the citation graph from the local corpus:
+
+```bash
+npm run build:citation-graph
+```
+
 ## CLI
 
 The `eurlex` command exposes the same functionality as the API server so you can work with EU legislation locally without running the server.
@@ -467,6 +473,24 @@ curl "http://localhost:3000/api/search?q=digital%20markets%20act&limit=5"
 
 If the search cache has not been built yet, `/api/search` returns `503` with `code=search_cache_unavailable`.
 
+## Citation Graph
+
+The offline citation graph provides reverse lookups across the locally harvested legislation corpus and cached CJEU case law:
+
+```bash
+npm run build:citation-graph
+curl "http://localhost:3000/api/laws/32016R0679/articles/6/cited-by?limit=50&offset=0"
+curl "http://localhost:3000/api/laws/32016R0679/cited-by"
+```
+
+The article endpoint returns paginated citing provisions and judgments. The act endpoint returns aggregate counts split between act-only and article-specific citations. The MCP endpoint exposes the same data through `get_citing_provisions`; omit its `article` argument to request act-level counts. If the artifact has not been built or cannot be loaded, these queries return `503` with `code=citation_graph_unavailable`.
+
+The default artifact is `search/data/citation-graph.json`. Restart the API after rebuilding it, because it is loaded once at startup. Like the search and case-law caches, the graph is **not committed** — a fresh deploy fetches `citation-graph.json.gz` as a **GitHub Release asset** at Docker build time (see `backend/Dockerfile`, `DATA_RELEASE_TAG`); the store gunzips it at startup when the raw file is absent, and a local rebuild still wins. To publish a new build: rebuild the graph against the current corpus and case-law cache, `gzip -k` the artifact, upload `citation-graph.json.gz` to the `DATA_RELEASE_TAG` release, and redeploy.
+
+The v1 graph covers the FMX corpus only: HTML-only laws are counted in artifact coverage metadata but are not parsed. To prevent annex-heavy documents from exhausting builder memory, decompressed FMX larger than 1 MiB is parsed only when complete uppercase annex siblings can be removed and the remaining `ACT` also fits below 1 MiB. Those laws are explicitly reported as operative-only and their annex citations are not covered. Unsafe or still-oversized documents are skipped; override the guard only with adequate memory using `--maxXmlBytes <bytes>`. The 1 MiB default is empirical: a 2.97 MiB act with 125 annexes exhausted a 4 GiB heap during full-DOM parsing.
+
+The CLI additionally parses deterministic batches in disposable worker threads (100 laws by default), releasing the parser DOM heap between batches. If a worker fails, its batch is recursively split until the offending law can be recorded and skipped without abandoning the build. Use `--batchSize <count>` to tune the isolation interval. Progress is printed after each completed worker batch.
+
 ## Search Cache Build
 
 The search cache is built manually and loaded at server startup.
@@ -674,6 +698,7 @@ Current test coverage includes:
 | `TIMEOUT_MS` | HTTP request timeout in ms. Default `30000`. |
 | `DATA_SQLITE_PATH` | Optional strict path to the precomputed SQLite store. Missing or incompatible files do not fall back to JSON. |
 | `SEARCH_CACHE_PATH` | Optional override for the legacy/local search cache JSON path. An explicit non-default path forces JSON unless `DATA_SQLITE_PATH` is set. |
+| `CITATION_GRAPH_PATH` | Optional override for the citation graph JSON path. Defaults to `search/data/citation-graph.json`. |
 | `ANALYTICS_TOKEN` | Token required by the `/api/_stats` endpoint; also used as the analytics sketch key unless `ANALYTICS_HASH_KEY` is set. |
 | `ANALYTICS_HASH_KEY` | Optional stable secret used to key privacy-preserving daily unique-user estimates. Set this separately to allow analytics-token rotation without resetting deduplication. |
 | `OPENROUTER_API_KEY` | Fallback OpenRouter key used by static summaries and recital titles when the feature-specific key is not set. |

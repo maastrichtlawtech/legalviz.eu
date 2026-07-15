@@ -165,6 +165,28 @@ export function useLawViewerInteractions({
     }
   }, [currentContentLang, getExternalReferenceKey, locale, navigate, openFallbackReference, resolveReferenceInput]);
 
+  const handleOpenLawByCelex = useCallback(async (celex, { articleNumber = null, label = null } = {}) => {
+    const normalizedCelex = String(celex || "").trim().toUpperCase();
+    if (!normalizedCelex) return;
+    const targetLaw = buildImportedLawCandidate({ celex: normalizedCelex, label });
+
+    try {
+      await saveLawMeta({
+        celex: normalizedCelex,
+        label: label || `CELEX ${normalizedCelex}`,
+      });
+    } catch (error) {
+      console.warn(`[LawViewer] Could not save metadata for ${normalizedCelex}`, error);
+    }
+
+    navigate(getCanonicalLawRoute(
+      targetLaw,
+      articleNumber != null && String(articleNumber).trim() !== "" ? "article" : null,
+      articleNumber,
+      locale
+    ));
+  }, [locale, navigate]);
+
   const handleContentClick = useCallback((event) => {
     const link = event.target.closest("a.cross-ref");
     if (link) {
@@ -218,6 +240,7 @@ export function useLawViewerInteractions({
   return {
     onCrossRefArticle,
     handleOpenExternalLaw,
+    handleOpenLawByCelex,
     handleContentClick,
     isExternalReferencePending,
     isResolvingExternalLaw: pendingExternalReferenceKey != null,

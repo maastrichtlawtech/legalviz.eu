@@ -212,6 +212,26 @@
     "external": "Viittaukset muuhun lainsäädäntöön:",
     "resolving": "Ratkaistaan…"
   },
+  "citedBy": {
+    "title": "Viitattu kohteessa",
+    "subtitle": "Säännökset ja tuomiot, jotka viittaavat tähän artiklaan",
+    "loading": "Ladataan viittauksia…",
+    "legislationLabel": "Lainsäädäntö ({count})",
+    "judgmentsLabel": "Tuomiot ({count})",
+    "empty": "Nykyaikaisessa korpuksessa ei ole vielä tunnettuja viittauksia.",
+    "unavailable": "Viittaukset eivät ole juuri nyt saatavilla.",
+    "footnote": "Määrät ovat alaraja nykyaikaisen lainsäädäntökorpuksen (vuoden 2004 jälkeen) perusteella; tuomioiden kattavuus on osittainen.",
+    "andMore": "Ja {count} muuta, joita ei näytetä.",
+    "showAll": "Näytä kaikki {count} palautettua viittausta",
+    "showLess": "Näytä vähemmän viittauksia",
+    "openLaw": "Avaa {law}, {unit}",
+    "reference": "→ Art. {article}{paragraph}{point}",
+    "unit": {
+      "article": "Artikla {n}",
+      "recital": "Johdanto-osan kappale {n}",
+      "annex": "Liite {n}"
+    }
+  },
   "lawViewer": {
     "notAvailableTitle": "Tämä laki ei ole vielä saatavilla täällä",
     "notAvailableMessage": "Emme löytäneet strukturoitua tekstiversiota, jota käytämme tämän lain näyttämiseen LegalViz:ssä. Laki voi silti olla saatavilla EUR-Lex:ssä.",

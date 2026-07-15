@@ -216,6 +216,26 @@
     "external": "References to other legislation:",
     "resolving": "Resolving…"
   },
+  "citedBy": {
+    "title": "Cited by",
+    "subtitle": "Provisions and judgments that cite this article",
+    "loading": "Loading citations…",
+    "legislationLabel": "Legislation ({count})",
+    "judgmentsLabel": "Judgments ({count})",
+    "empty": "No known citations in the modern corpus yet.",
+    "unavailable": "Citations are unavailable right now.",
+    "footnote": "Counts are a lower bound from the modern (post-2004) legislation corpus; judgment coverage is partial.",
+    "andMore": "And {count} more not shown.",
+    "showAll": "Show all {count} returned citations",
+    "showLess": "Show fewer citations",
+    "openLaw": "Open {law}, {unit}",
+    "reference": "→ Art. {article}{paragraph}{point}",
+    "unit": {
+      "article": "Article {n}",
+      "recital": "Recital {n}",
+      "annex": "Annex {n}"
+    }
+  },
   "lawViewer": {
     "notAvailableTitle": "This law is not available here yet",
     "notAvailableMessage": "We couldn't find the structured text version we use to display this law in LegalViz. The law itself may still be available on EUR-Lex.",

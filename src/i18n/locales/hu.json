@@ -212,6 +212,26 @@
     "external": "Hivatkozások más jogszabályokra:",
     "resolving": "Feloldás…"
   },
+  "citedBy": {
+    "title": "Hivatkozik rá",
+    "subtitle": "E cikkre hivatkozó rendelkezések és ítéletek",
+    "loading": "Hivatkozások betöltése…",
+    "legislationLabel": "Jogszabályok ({count})",
+    "judgmentsLabel": "Ítéletek ({count})",
+    "empty": "A modern korpuszban még nincsenek ismert hivatkozások.",
+    "unavailable": "A hivatkozások jelenleg nem érhetők el.",
+    "footnote": "A számok alsó határt jelentenek a modern (2004 utáni) jogszabályi korpusz alapján; az ítéletek lefedettsége részleges.",
+    "andMore": "És további {count}, amelyek nem jelennek meg.",
+    "showAll": "Mind a(z) {count} visszaadott hivatkozás megjelenítése",
+    "showLess": "Kevesebb hivatkozás megjelenítése",
+    "openLaw": "{law}, {unit} megnyitása",
+    "reference": "→ Art. {article}{paragraph}{point}",
+    "unit": {
+      "article": "Cikk {n}",
+      "recital": "Preambulumbekezdés {n}",
+      "annex": "Melléklet {n}"
+    }
+  },
   "lawViewer": {
     "notAvailableTitle": "Ez a jogszabály még nem érhető el itt",
     "notAvailableMessage": "Nem találtuk meg azt a strukturált szövegverziót, amelyet a jogszabály megjelenítésére használunk a LegalVizben. Maga a jogszabály még mindig elérhető lehet az EUR-Lexen.",

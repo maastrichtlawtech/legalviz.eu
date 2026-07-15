@@ -212,6 +212,26 @@
     "external": "Henvisninger til anden lovgivning:",
     "resolving": "Løser…"
   },
+  "citedBy": {
+    "title": "Citeret af",
+    "subtitle": "Bestemmelser og domme, der citerer denne artikel",
+    "loading": "Indlæser citater…",
+    "legislationLabel": "Lovgivning ({count})",
+    "judgmentsLabel": "Domme ({count})",
+    "empty": "Endnu ingen kendte citater i det moderne korpus.",
+    "unavailable": "Citater er ikke tilgængelige lige nu.",
+    "footnote": "Antallene er en nedre grænse fra det moderne lovgivningskorpus (efter 2004); dækningen af domme er delvis.",
+    "andMore": "Og {count} mere, der ikke vises.",
+    "showAll": "Vis alle {count} returnerede citater",
+    "showLess": "Vis færre citater",
+    "openLaw": "Åbn {law}, {unit}",
+    "reference": "→ Art. {article}{paragraph}{point}",
+    "unit": {
+      "article": "Artikel {n}",
+      "recital": "Betragtning {n}",
+      "annex": "Bilag {n}"
+    }
+  },
   "lawViewer": {
     "notAvailableTitle": "Denne lov er ikke tilgængelig her endnu",
     "notAvailableMessage": "Vi kunne ikke finde den strukturerede tekstversion, som vi bruger til at vise denne lov i LegalViz. Loven selv kan stadig være tilgængelig på EUR-Lex.",

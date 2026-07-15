@@ -212,6 +212,26 @@
     "external": "Hänvisningar till annan lagstiftning:",
     "resolving": "Löser…"
   },
+  "citedBy": {
+    "title": "Citeras av",
+    "subtitle": "Bestämmelser och domar som citerar denna artikel",
+    "loading": "Laddar citat…",
+    "legislationLabel": "Lagstiftning ({count})",
+    "judgmentsLabel": "Domar ({count})",
+    "empty": "Inga kända citat i det moderna korpuset ännu.",
+    "unavailable": "Citat är inte tillgängliga just nu.",
+    "footnote": "Antalen är en nedre gräns från det moderna lagstiftningskorpuset (efter 2004); täckningen av domar är partiell.",
+    "andMore": "Och {count} till som inte visas.",
+    "showAll": "Visa alla {count} returnerade citat",
+    "showLess": "Visa färre citat",
+    "openLaw": "Öppna {law}, {unit}",
+    "reference": "→ Art. {article}{paragraph}{point}",
+    "unit": {
+      "article": "Artikel {n}",
+      "recital": "Skäl {n}",
+      "annex": "Bilaga {n}"
+    }
+  },
   "lawViewer": {
     "notAvailableTitle": "Denna lag är ännu inte tillgänglig här",
     "notAvailableMessage": "Vi kunde inte hitta den strukturerade textversion som vi använder för att visa denna lag i LegalViz. Själva lagen kan fortfarande vara tillgänglig på EUR-Lex.",

@@ -212,6 +212,26 @@
     "external": "Références à d'autres textes législatifs :",
     "resolving": "Résolution…"
   },
+  "citedBy": {
+    "title": "Cité par",
+    "subtitle": "Dispositions et arrêts qui citent cet article",
+    "loading": "Chargement des citations…",
+    "legislationLabel": "Législation ({count})",
+    "judgmentsLabel": "Arrêts ({count})",
+    "empty": "Aucune citation connue dans le corpus moderne pour l'instant.",
+    "unavailable": "Les citations ne sont pas disponibles pour le moment.",
+    "footnote": "Les décomptes constituent une limite inférieure issue du corpus législatif moderne (postérieur à 2004) ; la couverture des arrêts est partielle.",
+    "andMore": "Et {count} autres non affichés.",
+    "showAll": "Afficher les {count} citations renvoyées",
+    "showLess": "Afficher moins de citations",
+    "openLaw": "Ouvrir {law}, {unit}",
+    "reference": "→ art. {article}{paragraph}{point}",
+    "unit": {
+      "article": "Article {n}",
+      "recital": "Considérant {n}",
+      "annex": "Annexe {n}"
+    }
+  },
   "lawViewer": {
     "notAvailableTitle": "Cette loi n'est pas disponible ici pour l'instant",
     "notAvailableMessage": "Nous n'avons pas pu trouver la version structurée que nous utilisons pour afficher cette loi dans LegalViz. La loi elle-même peut toujours être disponible sur EUR-Lex.",

@@ -212,6 +212,26 @@
     "external": "Tagairtí do dhlithe eile:",
     "resolving": "Á réiteach…"
   },
+  "citedBy": {
+    "title": "Luaite ag",
+    "subtitle": "Forálacha agus breithiúnais a luann an t-airteagal seo",
+    "loading": "Luanna á lódáil…",
+    "legislationLabel": "Reachtaíocht ({count})",
+    "judgmentsLabel": "Breithiúnais ({count})",
+    "empty": "Níl aon luanna aitheanta sa chorpas nua-aimseartha go fóill.",
+    "unavailable": "Níl na luanna ar fáil faoi láthair.",
+    "footnote": "Is íosteorainn iad na líonta ón gcorpas reachtaíochta nua-aimseartha (i ndiaidh 2004); tá clúdach na mbreithiúnas páirteach.",
+    "andMore": "Agus {count} eile nach dtaispeántar.",
+    "showAll": "Taispeáin gach ceann de na {count} luanna a aisíocadh",
+    "showLess": "Taispeáin níos lú luanna",
+    "openLaw": "Oscail {law}, {unit}",
+    "reference": "→ Art. {article}{paragraph}{point}",
+    "unit": {
+      "article": "Airteagal {n}",
+      "recital": "Aithris {n}",
+      "annex": "Iarscríbhinn {n}"
+    }
+  },
   "lawViewer": {
     "notAvailableTitle": "Níl an dlí seo ar fáil anseo fós",
     "notAvailableMessage": "Níorbh fhéidir linn an leagan struchtúrtha téacsa a fháil a úsáidimid chun an dlí seo a thaispeáint i LegalViz. D'fhéadfadh an dlí féin a bheith ar fáil ar EUR-Lex fós.",

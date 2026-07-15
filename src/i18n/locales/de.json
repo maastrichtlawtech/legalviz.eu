@@ -212,6 +212,26 @@
     "external": "Verweise auf andere Rechtsvorschriften:",
     "resolving": "Wird aufgelöst…"
   },
+  "citedBy": {
+    "title": "Zitiert von",
+    "subtitle": "Bestimmungen und Urteile, die diesen Artikel zitieren",
+    "loading": "Zitate werden geladen…",
+    "legislationLabel": "Rechtsvorschriften ({count})",
+    "judgmentsLabel": "Urteile ({count})",
+    "empty": "Noch keine bekannten Zitate im modernen Korpus.",
+    "unavailable": "Zitate sind derzeit nicht verfügbar.",
+    "footnote": "Die Zahlen sind eine Untergrenze aus dem modernen Rechtsvorschriftenkorpus (nach 2004); die Abdeckung der Urteile ist unvollständig.",
+    "andMore": "Und {count} weitere nicht angezeigt.",
+    "showAll": "Alle {count} zurückgegebenen Zitate anzeigen",
+    "showLess": "Weniger Zitate anzeigen",
+    "openLaw": "{law}, {unit} öffnen",
+    "reference": "→ Art. {article}{paragraph}{point}",
+    "unit": {
+      "article": "Artikel {n}",
+      "recital": "Erwägungsgrund {n}",
+      "annex": "Anhang {n}"
+    }
+  },
   "lawViewer": {
     "notAvailableTitle": "Dieses Gesetz ist hier noch nicht verfügbar",
     "notAvailableMessage": "Wir konnten die strukturierte Textversion nicht finden, die wir verwenden, um dieses Gesetz in LegalViz anzuzeigen. Das Gesetz selbst ist möglicherweise noch auf EUR-Lex verfügbar.",

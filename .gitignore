@@ -44,6 +44,8 @@ backend/search/data/eurovoc.json
 backend/search/data/case-law-harvest-state.json*
 backend/search/data/case-law-targets.txt
 backend/search/data/search-cache-historical*.json
+backend/search/data/citation-graph.json
+backend/search/data/citation-graph.json.gz
 backend/search/data/*.backup
 backend/search/data/*.bak
 backend/search/data/eurlex-cookies.json

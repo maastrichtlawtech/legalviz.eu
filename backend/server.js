@@ -3,6 +3,7 @@ const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
 const { JsonLegalCacheStore, DEFAULT_SEARCH_CACHE_PATH } = require('./search/search-index');
+const { CitationGraphStore, DEFAULT_CITATION_GRAPH_PATH } = require('./search/citation-graph-store');
 const { registerApiRoutes } = require('./routes/api-routes');
 const { registerMcpEndpoint } = require('./mcp/mcp-http');
 const { createParsedLawResolver } = require('./shared/parsed-law-service');
@@ -49,6 +50,7 @@ const HTML_CACHE_LIMIT_MB = parseInt(process.env.HTML_CACHE_LIMIT_MB) || 200; //
 const resolutionCache = new Map(); // key -> { expiresAt, value }
 const RESOLUTION_CACHE_MS = 24 * 60 * 60 * 1000;
 const legalCacheStore = new JsonLegalCacheStore(process.env.SEARCH_CACHE_PATH || DEFAULT_SEARCH_CACHE_PATH);
+const citationGraphStore = new CitationGraphStore(process.env.CITATION_GRAPH_PATH || DEFAULT_CITATION_GRAPH_PATH);
 const rateLimitMiddleware = createRateLimitMiddleware({
   windowMs: RATE_LIMIT_WINDOW_MS,
   max: RATE_LIMIT_MAX
@@ -60,6 +62,7 @@ if (!fs.existsSync(CACHE_DIR)) {
 }
 
 legalCacheStore.load();
+citationGraphStore.load();
 const analytics = createAnalytics({ cacheDir: CACHE_DIR, dataStore: legalCacheStore });
 
 // Middleware
@@ -200,6 +203,7 @@ registerApiRoutes(app, {
   cacheSet,
   findDownloadUrls,
   findFmx4Uri,
+  citationGraphStore,
   legalCacheStore,
   parseReferenceText,
   parseStructuredReference,
@@ -219,6 +223,7 @@ registerApiRoutes(app, {
 
 registerMcpEndpoint(app, {
   analytics,
+  citationGraphStore,
   legalCacheStore,
   resolveEurlexUrl,
   resolveParsedLaw,
@@ -234,6 +239,7 @@ const server = app.listen(PORT, () => {
   console.log(`Cache directory: ${CACHE_DIR} (FMX: ${STORAGE_LIMIT_MB} MB, HTML: ${HTML_CACHE_LIMIT_MB} MB)`);
   console.log(`Rate limit: ${RATE_LIMIT_MAX} req/15min per IP`);
   console.log(`Search cache: ${legalCacheStore.getStatus().ready ? 'loaded' : 'not loaded'} (${legalCacheStore.activePath})`);
+  console.log(`Citation graph: ${citationGraphStore.getStatus().ready ? 'loaded' : 'not loaded'} (${citationGraphStore.graphPath})`);
 });
 
 let shuttingDown = false;

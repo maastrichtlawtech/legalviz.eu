@@ -29,10 +29,18 @@ FROM dependencies AS data-builder
 # and converted again.
 COPY search/build-sqlite-data.js search/search-ranking.js ./search/
 
+# Precomputed data caches are NOT committed to git — a ~48 MB blob would bloat
+# history permanently. They ship as GitHub Release assets (public repo, no auth)
+# and are fetched here, then converted into the runtime SQLite store:
+#   search/data/search-cache.json.gz      -> title/alias index + FTS5 excerpts
+#   search/data/case-law-cache-v5.json.gz -> folded into data.sqlite
+#   search/data/citation-graph.json.gz     -> gunzipped by citation-graph-store.js
+# Placed before `COPY . .` so this (large) layer stays cached across code
+# changes and only re-runs when DATA_RELEASE_TAG is bumped for a new data build.
 ARG DATA_RELEASE_REPO=maastrichtlawtech/legalviz.eu
 ARG DATA_RELEASE_TAG=data-v6
 RUN mkdir -p search/data \
-    && for asset in search-cache.json.gz case-law-cache-v5.json.gz; do \
+    && for asset in search-cache.json.gz case-law-cache-v5.json.gz citation-graph.json.gz; do \
          echo "Fetching data asset: $asset ($DATA_RELEASE_TAG)" \
          && curl -fSL --retry 3 --retry-delay 2 \
               -o "search/data/$asset" \
@@ -46,6 +54,7 @@ FROM dependencies AS final
 COPY . .
 COPY --from=data-builder /app/search/data/data.sqlite ./search/data/data.sqlite
 COPY --from=data-builder /app/search/data/data.sqlite.manifest.json ./search/data/data.sqlite.manifest.json
+COPY --from=data-builder /app/search/data/citation-graph.json.gz ./search/data/citation-graph.json.gz
 
 RUN mkdir -p law-cache
 

@@ -56,6 +56,11 @@ function makeDeps(overrides = {}) {
     resolveParsedLaw: async () => FIXTURE_LAW,
     FMX_DIR: path.join(os.tmpdir(), 'mcp-test-nonexistent'),
     analytics: { recordMcpTool: () => {} },
+    citationGraphStore: {
+      isReady: () => true,
+      getArticleCitations: (celex, article, pagination) => ({ celex, article, citingProvisions: [], citingJudgments: [], counts: { total: 0 }, pagination }),
+      getActCitations: (celex) => ({ celex, byArticle: [], counts: { total: 0 } }),
+    },
     ...overrides,
   };
 }
@@ -78,13 +83,65 @@ function parseResult(result) {
   return JSON.parse(result.content[0].text);
 }
 
-test('lists the five expected tools', async () => {
+test('lists the expected tools', async () => {
   await withClient(makeDeps(), async (client) => {
     const { tools } = await client.listTools();
     assert.deepEqual(
       tools.map((t) => t.name).sort(),
-      ['get_case_law', 'get_law_part', 'get_law_relations', 'resolve', 'search_eu_law']
+      ['get_case_law', 'get_citing_provisions', 'get_law_part', 'get_law_relations', 'resolve', 'search_eu_law']
     );
+  });
+});
+
+test('get_citing_provisions returns article details with pagination', async () => {
+  const calls = [];
+  const deps = makeDeps({
+    citationGraphStore: {
+      isReady: () => true,
+      getArticleCitations: (celex, article, pagination) => {
+        calls.push({ celex, article, pagination });
+        return { celex, article, citingProvisions: [{ celex: '32024R1689', unit: '6' }], citingJudgments: [], counts: { total: 1 }, pagination };
+      },
+    },
+  });
+  await withClient(deps, async (client) => {
+    const body = parseResult(await client.callTool({
+      name: 'get_citing_provisions',
+      arguments: { celex: '32016R0679', article: '6', limit: 20, offset: 5 },
+    }));
+    assert.equal(body.counts.total, 1);
+    assert.deepEqual(calls, [{ celex: '32016R0679', article: '6', pagination: { limit: 20, offset: 5 } }]);
+  });
+});
+
+test('get_citing_provisions returns act counts when article is omitted', async () => {
+  let calledWith;
+  const deps = makeDeps({
+    citationGraphStore: {
+      isReady: () => true,
+      getActCitations: (celex) => {
+        calledWith = celex;
+        return { celex, totals: { provisions: 2, judgments: 1, total: 3 } };
+      },
+    },
+  });
+  await withClient(deps, async (client) => {
+    const body = parseResult(await client.callTool({
+      name: 'get_citing_provisions', arguments: { celex: '32016R0679' },
+    }));
+    assert.equal(body.celex, '32016R0679');
+    assert.equal(body.totals.total, 3);
+    assert.equal(calledWith, '32016R0679');
+  });
+});
+
+test('get_citing_provisions reports an unavailable citation graph', async () => {
+  await withClient(makeDeps({ citationGraphStore: { isReady: () => false } }), async (client) => {
+    const result = await client.callTool({
+      name: 'get_citing_provisions', arguments: { celex: '32016R0679', article: '6' },
+    });
+    assert.equal(result.isError, true);
+    assert.match(result.content[0].text, /citation graph is not loaded/i);
   });
 });
 

@@ -212,6 +212,26 @@
     "external": "Viited muule õigusaktidele:",
     "resolving": "Lahendamine…"
   },
+  "citedBy": {
+    "title": "Viidatud",
+    "subtitle": "Sätted ja kohtuotsused, mis viitavad sellele artiklile",
+    "loading": "Viidete laadimine…",
+    "legislationLabel": "Õigusaktid ({count})",
+    "judgmentsLabel": "Kohtuotsused ({count})",
+    "empty": "Kaasaegses korpuses pole veel teadaolevaid viiteid.",
+    "unavailable": "Viited ei ole praegu saadaval.",
+    "footnote": "Arvud on alampiir kaasaegse õigusaktide korpuse põhjal (pärast 2004. aastat); kohtuotsuste kaetus on osaline.",
+    "andMore": "Ja veel {count}, mida ei kuvata.",
+    "showAll": "Näita kõiki {count} tagastatud viidet",
+    "showLess": "Näita vähem viiteid",
+    "openLaw": "Ava {law}, {unit}",
+    "reference": "→ Art. {article}{paragraph}{point}",
+    "unit": {
+      "article": "Artikkel {n}",
+      "recital": "Põhjendus {n}",
+      "annex": "Lisa {n}"
+    }
+  },
   "lawViewer": {
     "notAvailableTitle": "See seadus pole siin veel saadaval",
     "notAvailableMessage": "Me ei leidnud struktureeritud tekstiversiooni, mida kasutame LegalViz-is selle seaduse kuvamiseks. Seadus ise võib olla endiselt saadaval EUR-Lex-is.",

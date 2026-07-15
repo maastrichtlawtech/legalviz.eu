@@ -212,6 +212,26 @@
     "external": "Riferimenti għal leġislazzjoni oħra:",
     "resolving": "Qed jiġi riżolt…"
   },
+  "citedBy": {
+    "title": "Iċċitat minn",
+    "subtitle": "Dispożizzjonijiet u sentenzi li jiċċitaw dan l-artikolu",
+    "loading": "Qed jitgħabbew iċ-ċitazzjonijiet…",
+    "legislationLabel": "Leġiżlazzjoni ({count})",
+    "judgmentsLabel": "Sentenzi ({count})",
+    "empty": "Għad m'hemm l-ebda ċitazzjoni magħrufa fil-korpus modern.",
+    "unavailable": "Iċ-ċitazzjonijiet mhumiex disponibbli bħalissa.",
+    "footnote": "Il-għadd huwa limitu inferjuri mill-korpus leġiżlattiv modern (wara l-2004); il-kopertura tas-sentenzi hija parzjali.",
+    "andMore": "U {count} oħra mhux murija.",
+    "showAll": "Uri ċ-{count} ċitazzjonijiet kollha rritornati",
+    "showLess": "Uri inqas ċitazzjonijiet",
+    "openLaw": "Iftaħ {law}, {unit}",
+    "reference": "→ Art. {article}{paragraph}{point}",
+    "unit": {
+      "article": "Artikolu {n}",
+      "recital": "Premessa {n}",
+      "annex": "Anness {n}"
+    }
+  },
   "lawViewer": {
     "notAvailableTitle": "Din il-leġislazzjoni mhux disponibbli hawnhekk għad",
     "notAvailableMessage": "Ma setgħinx insibuk il-verżjoni strutturata tat-test li għandna tuża biex tispettja din il-leġislazzjoni f'LegalViz. Il-leġislazzjoni nnifsa jista' jkun aktar disponibbli fuq EUR-Lex.",

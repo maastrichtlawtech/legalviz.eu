@@ -212,6 +212,26 @@
     "external": "Verwijzingen naar andere wetgeving:",
     "resolving": "Bezig met oplossen…"
   },
+  "citedBy": {
+    "title": "Geciteerd door",
+    "subtitle": "Bepalingen en arresten die dit artikel citeren",
+    "loading": "Citaties laden…",
+    "legislationLabel": "Wetgeving ({count})",
+    "judgmentsLabel": "Arresten ({count})",
+    "empty": "Nog geen bekende citaties in het moderne corpus.",
+    "unavailable": "Citaties zijn momenteel niet beschikbaar.",
+    "footnote": "De aantallen zijn een ondergrens op basis van het moderne wetgevingscorpus (na 2004); de dekking van arresten is gedeeltelijk.",
+    "andMore": "En {count} meer die niet worden weergegeven.",
+    "showAll": "Alle {count} teruggegeven citaties weergeven",
+    "showLess": "Minder citaties weergeven",
+    "openLaw": "{law}, {unit} openen",
+    "reference": "→ Art. {article}{paragraph}{point}",
+    "unit": {
+      "article": "Artikel {n}",
+      "recital": "Overweging {n}",
+      "annex": "Bijlage {n}"
+    }
+  },
   "lawViewer": {
     "notAvailableTitle": "Deze wet is hier nog niet beschikbaar",
     "notAvailableMessage": "We konden de gestructureerde tekstversie niet vinden die we gebruiken om deze wet in LegalViz weer te geven. De wet zelf is mogelijk nog beschikbaar op EUR-Lex.",

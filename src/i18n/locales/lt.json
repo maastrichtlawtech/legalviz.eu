@@ -212,6 +212,26 @@
     "external": "Nuorodos į kitą teisės aktą:",
     "resolving": "Nustatoma…"
   },
+  "citedBy": {
+    "title": "Cituojama",
+    "subtitle": "Nuostatos ir sprendimai, kuriuose cituojamas šis straipsnis",
+    "loading": "Įkeliamos citatos…",
+    "legislationLabel": "Teisės aktai ({count})",
+    "judgmentsLabel": "Sprendimai ({count})",
+    "empty": "Šiuolaikiniame tekstyne dar nėra žinomų citatų.",
+    "unavailable": "Citatos šiuo metu nepasiekiamos.",
+    "footnote": "Skaičiai yra apatinė riba, pagrįsta šiuolaikiniu teisės aktų tekstynu (po 2004 m.); sprendimų aprėptis yra dalinė.",
+    "andMore": "Ir dar {count}, kurie nerodomi.",
+    "showAll": "Rodyti visas {count} pateiktas citatas",
+    "showLess": "Rodyti mažiau citatų",
+    "openLaw": "Atidaryti {law}, {unit}",
+    "reference": "→ Art. {article}{paragraph}{point}",
+    "unit": {
+      "article": "Straipsnis {n}",
+      "recital": "Konstatuojamoji dalis {n}",
+      "annex": "Priedas {n}"
+    }
+  },
   "lawViewer": {
     "notAvailableTitle": "Šis teisės aktas čia dar nėra prieinamas",
     "notAvailableMessage": "Neatradome struktūrizuoto teksto versijos, kurią naudojame šiam teisės aktui rodyti LegalViz. Teisės aktas gali būti prieinamas EUR-Lex.",

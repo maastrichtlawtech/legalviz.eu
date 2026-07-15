@@ -51,6 +51,17 @@ class ClientError extends Error {
   }
 }
 
+function requireCitationGraph(store) {
+  if (!store || (typeof store.isReady === 'function' && !store.isReady())) {
+    throw new ClientError(
+      'The citation graph is not loaded on the server yet. Please try again shortly.',
+      503,
+      'citation_graph_unavailable'
+    );
+  }
+  return store;
+}
+
 function safeErrorResponse(res, err, fallbackMessage = 'Internal server error') {
   if (err instanceof ClientError) {
     return res.status(err.statusCode).json({
@@ -68,6 +79,7 @@ module.exports = {
   VALID_LANGS,
   cacheGet,
   cacheSet,
+  requireCitationGraph,
   safeErrorResponse,
   toSearchLang,
   validateLang

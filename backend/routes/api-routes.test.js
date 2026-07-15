@@ -8,7 +8,7 @@ const { registerApiRoutes } = require("./api-routes");
 const { createParsedLawResolver } = require("../shared/parsed-law-service");
 const { createReferenceResolver } = require("../shared/reference-utils");
 const { ClientError, cacheGet, cacheSet, safeErrorResponse, toSearchLang } = require("../shared/api-utils");
-const { CitationGraphStore } = require("../search/citation-graph-store");
+const { CitationGraphStore, GRAPH_VERSION } = require("../search/citation-graph-store");
 const { JsonLegalCacheStore } = require("../search/legal-cache-store");
 
 const fixturePath = path.join(__dirname, "..", "search", "__fixtures__", "search-fixture.json");
@@ -224,7 +224,7 @@ test('GET article cited-by passes validated pagination to the citation graph', a
 test('GET article cited-by returns normalized recital and annex units', async () => {
   const graphPath = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'api-citation-graph-')), 'graph.json');
   fs.writeFileSync(graphPath, JSON.stringify({
-    graphVersion: 1,
+    graphVersion: GRAPH_VERSION,
     edges: [
       { kind: 'legislation', sourceCelex: '32024R1689', sourceUnitType: 'recital', sourceUnit: 'recital_140', targetCelex: '32016R0679', targetArticle: '6' },
       { kind: 'legislation', sourceCelex: '32024R1689', sourceUnitType: 'annex', sourceUnit: 'annex_I', targetCelex: '32016R0679', targetArticle: '6' },

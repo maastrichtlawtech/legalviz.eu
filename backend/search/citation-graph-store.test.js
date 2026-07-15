@@ -109,3 +109,58 @@ test("act query dedups a provision citing both the act and an article across sub
   assert.deepEqual(result.totals, { provisions: 1, judgments: 0, total: 1 });
   assert.ok(result.actOnly.total + result.article.total > result.totals.total);
 });
+
+// The SQLite path must be a pure storage swap: same edges in, byte-identical query
+// results out. Anything else is a behaviour change hiding in a deployment detail.
+test("sqlite-backed store returns results identical to the JSON store", (t) => {
+  const { buildSqliteData } = require("./build-sqlite-data");
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "citation-parity-"));
+  const graphEdges = [
+    { kind: "legislation", sourceCelex: "32020R0001", sourceTitle: "Widgets", sourceUnitType: "article", sourceUnit: "5", targetCelex: "32016R0679", targetArticle: "6", targetParagraph: "1", targetPoint: "a", raw: "Article 6(1)(a)" },
+    { kind: "legislation", sourceCelex: "32020R0001", sourceTitle: "Widgets", sourceUnitType: "article", sourceUnit: "5", targetCelex: "32016R0679", targetArticle: "6", targetParagraph: "2", targetPoint: null, raw: "Article 6(2)" },
+    { kind: "legislation", sourceCelex: "32019R0009", sourceTitle: "Gadgets", sourceUnitType: "recital", sourceUnit: "recital_3", targetCelex: "32016R0679", targetArticle: null, targetParagraph: null, targetPoint: null, raw: "the GDPR" },
+    { kind: "judgment", sourceCelex: "62020CJ0001", sourceTitle: "Some Case", sourceUnitType: "judgment", sourceUnit: "62020CJ0001", targetCelex: "32016R0679", targetArticle: "6", targetParagraph: null, targetPoint: null, raw: "Article 6" },
+  ];
+  const graph = {
+    graphVersion: GRAPH_VERSION, parserVersion: 15, generatedAt: "2026-07-15T19:22:07.710Z",
+    coverage: { legislation: { htmlLaws: 2 } }, stats: { edges: graphEdges.length }, edges: graphEdges,
+  };
+  const graphPath = path.join(dir, "citation-graph.json");
+  const searchPath = path.join(dir, "search.json");
+  const caseLawPath = path.join(dir, "case-law.json");
+  const sqlitePath = path.join(dir, "data.sqlite");
+  fs.writeFileSync(graphPath, JSON.stringify(graph));
+  fs.writeFileSync(searchPath, JSON.stringify({ generatedAt: "x", records: [] }));
+  fs.writeFileSync(caseLawPath, JSON.stringify({}));
+  buildSqliteData({
+    searchCachePath: searchPath, caseLawCachePath: caseLawPath, citationGraphPath: graphPath,
+    outputPath: sqlitePath, manifestPath: path.join(dir, "manifest.json"), log: () => {},
+  });
+
+  const jsonStore = new CitationGraphStore(graphPath, { preferJson: true });
+  assert.equal(jsonStore.load(), true);
+  assert.equal(jsonStore.getStatus().source, "json");
+
+  const sqliteStore = new CitationGraphStore(graphPath, { sqlitePath });
+  assert.equal(sqliteStore.load(), true, sqliteStore.getStatus().error || "");
+  assert.equal(sqliteStore.getStatus().source, "sqlite");
+  t.after(() => sqliteStore.close());
+
+  assert.deepEqual(sqliteStore.getActCitations("32016R0679"), jsonStore.getActCitations("32016R0679"));
+  assert.deepEqual(
+    sqliteStore.getArticleCitations("32016R0679", "6"),
+    jsonStore.getArticleCitations("32016R0679", "6")
+  );
+  // paginate + an act with no citations
+  assert.deepEqual(
+    sqliteStore.getArticleCitations("32016R0679", "6", { limit: 1, offset: 1 }),
+    jsonStore.getArticleCitations("32016R0679", "6", { limit: 1, offset: 1 })
+  );
+  assert.deepEqual(sqliteStore.getActCitations("32099R9999"), jsonStore.getActCitations("32099R9999"));
+
+  const status = sqliteStore.getStatus();
+  assert.equal(status.graphVersion, GRAPH_VERSION);
+  assert.equal(status.parserVersion, 15);
+  assert.equal(status.edges, 4);
+  assert.deepEqual(status.coverage, { legislation: { htmlLaws: 2 } });
+});

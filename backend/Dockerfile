@@ -34,12 +34,16 @@ COPY search/build-sqlite-data.js search/search-ranking.js ./search/
 # and are fetched here, then converted into the runtime SQLite store:
 #   search/data/search-cache.json.gz    -> title/alias index + FTS5 excerpts
 #   search/data/case-law-cache.json.gz  -> folded into data.sqlite
-#   search/data/citation-graph.json.gz  -> fetched for the follow-up that folds it
-#                                          into data.sqlite; not used here yet
+#   search/data/citation-graph.json.gz  -> folded into data.sqlite
 # Placed before `COPY . .` so this (large) layer stays cached across code
 # changes and only re-runs when DATA_RELEASE_TAG is bumped for a new data build.
 ARG DATA_RELEASE_REPO=maastrichtlawtech/legalviz.eu
 ARG DATA_RELEASE_TAG=data-v7
+# Every asset comes from this one tag, so a new release must carry the full set —
+# re-upload the unchanged ones alongside the changed one or this fetch 404s.
+# citation-graph.json.gz is a *build input* like the others: it is folded into
+# data.sqlite here and never ships in the runtime image (as raw JSON it is ~373 MB
+# and would cost >1 GB resident to load).
 RUN mkdir -p search/data \
     && for asset in search-cache.json.gz case-law-cache.json.gz citation-graph.json.gz; do \
          echo "Fetching data asset: $asset ($DATA_RELEASE_TAG)" \

@@ -9,8 +9,27 @@ const Database = require("better-sqlite3");
 const { enrichSearchRecord } = require("./search-ranking");
 const DEFAULT_SEARCH_CACHE_PATH = path.join(__dirname, "data", "search-cache.json");
 const DEFAULT_SQLITE_DATA_PATH = path.join(__dirname, "data", "data.sqlite");
+// Unversioned on purpose: the data-vN release tag already pins which build this
+// came from, so a case-law schema bump no longer has to edit the Dockerfile's asset
+// list. This is the release asset, distinct from law-cache/case-law-cache-v5.json,
+// whose name IS the cache version (CASE_LAW_CACHE_FILE) and must keep its suffix.
 const DEFAULT_CASE_LAW_CACHE_PATH = path.join(__dirname, "data", "case-law-cache.json");
-const SQLITE_SCHEMA_VERSION = 1;
+const DEFAULT_CITATION_GRAPH_PATH = path.join(__dirname, "data", "citation-graph.json");
+// Keep in lock-step with SQLITE_SCHEMA_VERSION in legal-cache-store.js.
+const SQLITE_SCHEMA_VERSION = 2;
+
+// Normalized form of a cited article, matching how the store compares them, so the
+// (target_celex, target_article_key) index can serve the lookup directly rather than
+// forcing a scan through LOWER()/TRIM() at query time.
+function articleKey(article) {
+  return String(article == null ? "" : article).trim().toLowerCase();
+}
+
+function textOrNull(value) {
+  if (value == null) return null;
+  const text = String(value);
+  return text === "" ? null : text;
+}
 
 function sha256File(filePath) {
   const hash = crypto.createHash("sha256");
@@ -57,13 +76,29 @@ function isPartialCaseLawEntry(entry) {
 function buildSqliteData({
   searchCachePath = DEFAULT_SEARCH_CACHE_PATH,
   caseLawCachePath = DEFAULT_CASE_LAW_CACHE_PATH,
+  citationGraphPath = DEFAULT_CITATION_GRAPH_PATH,
   outputPath = DEFAULT_SQLITE_DATA_PATH,
   manifestPath = `${outputPath}.manifest.json`,
+  log = console.warn,
 } = {}) {
   const searchAsset = readJsonAsset(searchCachePath);
   const caseLawAsset = readJsonAsset(caseLawCachePath);
+  // The citation graph is optional: it is a large, separately built artifact, and a
+  // build without it must still produce a usable data.sqlite. The tables are then
+  // empty and the store reports itself unavailable (503) rather than serving a
+  // silently partial graph — the manifest records which case this build was.
+  let citationAsset = null;
+  if (citationGraphPath) {
+    try {
+      citationAsset = readJsonAsset(citationGraphPath);
+    } catch (error) {
+      if (!/not found/.test(String(error?.message))) throw error;
+      log(`[build-sqlite-data] No citation graph at ${citationGraphPath} — citation tables will be empty`);
+    }
+  }
   const searchPayload = searchAsset.payload;
   const caseLawPayload = caseLawAsset.payload;
+  const citationEdges = Array.isArray(citationAsset?.payload?.edges) ? citationAsset.payload.edges : [];
   const records = Array.isArray(searchPayload.records) ? searchPayload.records : [];
   const caseLawEntries = Object.entries(caseLawPayload).filter(([rawCelex, details]) => (
     String(rawCelex || "").trim() && details && typeof details === "object"
@@ -114,6 +149,29 @@ function buildSqliteData({
         details_json TEXT NOT NULL,
         is_partial INTEGER NOT NULL CHECK (is_partial IN (0, 1))
       ) STRICT;
+      -- Citing-act titles live here rather than on every edge: ~84k distinct sources
+      -- carry ~836k edges, so repeating the title per edge is what made the JSON
+      -- artifact enormous.
+      CREATE TABLE citation_sources (
+        celex TEXT PRIMARY KEY,
+        title TEXT
+      ) STRICT;
+      CREATE TABLE citations (
+        id INTEGER PRIMARY KEY,
+        kind TEXT NOT NULL,
+        source_celex TEXT NOT NULL,
+        source_unit_type TEXT,
+        source_unit TEXT,
+        target_celex TEXT NOT NULL,
+        target_article TEXT,
+        target_article_key TEXT NOT NULL,
+        target_paragraph TEXT,
+        target_point TEXT,
+        raw TEXT
+      ) STRICT;
+      -- Serves both cited-by lookups: act-level uses the target_celex prefix,
+      -- article-level uses both columns.
+      CREATE INDEX citations_target ON citations (target_celex, target_article_key);
     `);
 
     const insertMetadata = database.prepare("INSERT INTO metadata (key, value) VALUES (?, ?)");
@@ -125,8 +183,18 @@ function buildSqliteData({
     const insertCaseLaw = database.prepare(
       "INSERT INTO case_law (celex, details_json, is_partial) VALUES (?, ?, ?)"
     );
+    const insertCitationSource = database.prepare(
+      "INSERT INTO citation_sources (celex, title) VALUES (?, ?)"
+    );
+    const insertCitation = database.prepare(`
+      INSERT INTO citations (
+        kind, source_celex, source_unit_type, source_unit,
+        target_celex, target_article, target_article_key, target_paragraph, target_point, raw
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
 
     let expectedExcerptCount = 0;
+    let skippedCitationEdges = 0;
     database.exec("BEGIN IMMEDIATE");
     try {
       insertMetadata.run("generated_at", String(searchPayload.generatedAt || ""));
@@ -164,6 +232,33 @@ function buildSqliteData({
         const celex = String(rawCelex || "").trim().toUpperCase();
         insertCaseLaw.run(celex, JSON.stringify(details), isPartialCaseLawEntry(details) ? 1 : 0);
       }
+
+      if (citationAsset) {
+        const header = citationAsset.payload;
+        insertMetadata.run("citation_graph_version", String(header.graphVersion ?? ""));
+        insertMetadata.run("citation_graph_parser_version", JSON.stringify(header.parserVersion ?? null));
+        insertMetadata.run("citation_graph_generated_at", String(header.generatedAt || ""));
+        insertMetadata.run("citation_graph_coverage", JSON.stringify(header.coverage ?? null));
+        insertMetadata.run("citation_graph_stats", JSON.stringify(header.stats ?? null));
+      }
+      const citationSourceTitles = new Map();
+      for (const edge of citationEdges) {
+        const sourceCelex = String(edge?.sourceCelex || "").trim().toUpperCase();
+        const targetCelex = String(edge?.targetCelex || "").trim().toUpperCase();
+        // An edge without both endpoints cannot be looked up from either side.
+        if (!sourceCelex || !targetCelex) { skippedCitationEdges += 1; continue; }
+        if (!citationSourceTitles.has(sourceCelex)) {
+          citationSourceTitles.set(sourceCelex, textOrNull(edge.sourceTitle));
+        }
+        insertCitation.run(
+          String(edge.kind || ""), sourceCelex,
+          textOrNull(edge.sourceUnitType), textOrNull(edge.sourceUnit),
+          targetCelex, textOrNull(edge.targetArticle), articleKey(edge.targetArticle),
+          textOrNull(edge.targetParagraph), textOrNull(edge.targetPoint), textOrNull(edge.raw),
+        );
+      }
+      for (const [celex, title] of citationSourceTitles) insertCitationSource.run(celex, title);
+      insertMetadata.run("citation_edge_count", String(citationEdges.length - skippedCitationEdges));
       database.exec("COMMIT");
     } catch (error) {
       database.exec("ROLLBACK");
@@ -208,6 +303,22 @@ function buildSqliteData({
       );
     }
 
+    const citationCount = database.prepare("SELECT COUNT(*) AS count FROM citations").get().count;
+    const citationSourceCount = database.prepare("SELECT COUNT(*) AS count FROM citation_sources").get().count;
+    const expectedCitationCount = citationEdges.length - skippedCitationEdges;
+    if (citationCount !== expectedCitationCount) {
+      throw new Error(`SQLite citation count mismatch: wrote ${citationCount}, expected ${expectedCitationCount}`);
+    }
+    const orphanCitationSources = database.prepare(`
+      SELECT COUNT(*) AS count
+      FROM citations
+      LEFT JOIN citation_sources ON citation_sources.celex = citations.source_celex
+      WHERE citation_sources.celex IS NULL
+    `).get().count;
+    if (orphanCitationSources !== 0) {
+      throw new Error(`SQLite citation source integrity failed: ${orphanCitationSources} edges without a source row`);
+    }
+
     database.close();
     const outputBytes = fs.statSync(tempPath).size;
     const outputSha256 = sha256File(tempPath);
@@ -229,6 +340,17 @@ function buildSqliteData({
           sha256: caseLawAsset.sha256,
           records: caseLawEntries.length,
         },
+        // null when this build had no citation graph input, so a deploy serving an
+        // empty graph is attributable from the manifest alone.
+        citationGraph: citationAsset ? {
+          file: path.basename(citationAsset.path),
+          bytes: citationAsset.bytes,
+          sha256: citationAsset.sha256,
+          edges: expectedCitationCount,
+          skippedEdges: skippedCitationEdges,
+          graphVersion: citationAsset.payload?.graphVersion ?? null,
+          generatedAt: citationAsset.payload?.generatedAt || null,
+        } : null,
       },
       artifact: {
         file: path.basename(outputPath),
@@ -240,6 +362,8 @@ function buildSqliteData({
         excerpts: excerptCount,
         excerptMappings: excerptMapCount,
         caseLaw: caseLawCount,
+        citations: citationCount,
+        citationSources: citationSourceCount,
       },
       integrity: {
         sqlite: integrity,
@@ -274,6 +398,7 @@ function parseArgs(argv) {
     const value = argv[index + 1];
     if (token === "--search" && value) options.searchCachePath = path.resolve(value);
     else if (token === "--case-law" && value) options.caseLawCachePath = path.resolve(value);
+    else if (token === "--citation-graph" && value) options.citationGraphPath = path.resolve(value);
     else if (token === "--output" && value) options.outputPath = path.resolve(value);
     else if (token === "--manifest" && value) options.manifestPath = path.resolve(value);
     else continue;
@@ -297,6 +422,9 @@ if (require.main === module) {
 
 module.exports = {
   DEFAULT_CASE_LAW_CACHE_PATH,
+  DEFAULT_CITATION_GRAPH_PATH,
+  SQLITE_SCHEMA_VERSION,
+  articleKey,
   buildSqliteData,
   isPartialCaseLawEntry,
   readJson,

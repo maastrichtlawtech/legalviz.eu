@@ -4,6 +4,26 @@ const zlib = require("zlib");
 const GRAPH_VERSION = 2;
 
 const DEFAULT_CITATION_GRAPH_PATH = path.join(__dirname, "data", "citation-graph.json");
+const DEFAULT_SQLITE_DATA_PATH = path.join(__dirname, "data", "data.sqlite");
+// Keep in lock-step with SQLITE_SCHEMA_VERSION in build-sqlite-data.js / legal-cache-store.js.
+const SQLITE_SCHEMA_VERSION = 2;
+
+// Columns are aliased to the edge field names so rows drop straight into the same
+// distinctSources/publicCitation helpers the JSON path uses.
+const CITATION_SELECT = `
+  SELECT citations.kind AS kind,
+         citations.source_celex AS sourceCelex,
+         citation_sources.title AS sourceTitle,
+         citations.source_unit_type AS sourceUnitType,
+         citations.source_unit AS sourceUnit,
+         citations.target_celex AS targetCelex,
+         citations.target_article AS targetArticle,
+         citations.target_paragraph AS targetParagraph,
+         citations.target_point AS targetPoint,
+         citations.raw AS raw
+  FROM citations
+  LEFT JOIN citation_sources ON citation_sources.celex = citations.source_celex
+`;
 const normalize = (value) => String(value == null ? "" : value).trim().toUpperCase();
 const sourceKey = (edge) => [edge.kind, edge.sourceCelex, edge.sourceUnitType, edge.sourceUnit].join("|");
 
@@ -67,15 +87,93 @@ function countsFor(edges) {
 }
 
 class CitationGraphStore {
-  constructor(graphPath = DEFAULT_CITATION_GRAPH_PATH) {
+  // Mirrors JsonLegalCacheStore: prefer the SQLite store when one is configured and
+  // present, else fall back to the JSON artifact (local rebuilds, tests). The
+  // deployed image ships only data.sqlite, so it always takes the SQLite path.
+  constructor(graphPath = DEFAULT_CITATION_GRAPH_PATH, options = {}) {
     this.graphPath = graphPath;
+    const explicitSqlitePath = options.sqlitePath || null;
+    const environmentSqlitePath = options.preferJson ? null : (process.env.DATA_SQLITE_PATH || null);
+    const configuredSqlitePath = explicitSqlitePath || environmentSqlitePath;
+    const hasJsonOverride = Boolean(process.env.CITATION_GRAPH_PATH);
+    this.sqlitePath = configuredSqlitePath ||
+      (!options.preferJson && !hasJsonOverride && graphPath === DEFAULT_CITATION_GRAPH_PATH
+        ? DEFAULT_SQLITE_DATA_PATH
+        : null);
+    this.requireSqlite = options.requireSqlite ?? Boolean(configuredSqlitePath);
     this.payload = null;
     this.loadedAt = null;
     this.loadError = null;
     this.byTargetCelex = new Map();
+    this.database = null;
+    this.source = null;
   }
 
   load() {
+    this.close();
+    if (this.sqlitePath && fs.existsSync(this.sqlitePath)) return this.loadFromSqlite();
+    if (this.requireSqlite) {
+      this.loadError = `SQLite data store not found at ${this.sqlitePath}`;
+      return false;
+    }
+    return this.loadFromJson();
+  }
+
+  close() {
+    if (this.database) {
+      try { this.database.close(); } catch { /* already closed */ }
+      this.database = null;
+    }
+  }
+
+  loadFromSqlite() {
+    try {
+      const Database = require("better-sqlite3");
+      const database = new Database(this.sqlitePath, { readonly: true, fileMustExist: true });
+      const schemaVersion = database.prepare("PRAGMA user_version").get().user_version;
+      if (schemaVersion !== SQLITE_SCHEMA_VERSION) {
+        database.close();
+        throw new Error(`Unsupported SQLite data schema ${schemaVersion}; expected ${SQLITE_SCHEMA_VERSION}`);
+      }
+      const metadata = new Map(
+        database.prepare("SELECT key, value FROM metadata").all().map((row) => [row.key, row.value])
+      );
+      const graphVersion = Number.parseInt(metadata.get("citation_graph_version"), 10);
+      if (!metadata.has("citation_graph_version")) {
+        database.close();
+        throw new Error("SQLite data store contains no citation graph");
+      }
+      if (graphVersion !== GRAPH_VERSION) {
+        database.close();
+        throw new Error(`Unsupported citation graph version ${graphVersion}; expected ${GRAPH_VERSION}`);
+      }
+      const parseMeta = (key) => { try { return JSON.parse(metadata.get(key)); } catch { return null; } };
+      this.payload = {
+        graphVersion,
+        parserVersion: parseMeta("citation_graph_parser_version"),
+        generatedAt: metadata.get("citation_graph_generated_at") || null,
+        coverage: parseMeta("citation_graph_coverage"),
+        stats: parseMeta("citation_graph_stats"),
+      };
+      this.database = database;
+      this.byActStatement = database.prepare(`${CITATION_SELECT} WHERE citations.target_celex = ?`);
+      this.byArticleStatement = database.prepare(
+        `${CITATION_SELECT} WHERE citations.target_celex = ? AND citations.target_article_key = ?`
+      );
+      this.source = "sqlite";
+      this.loadedAt = new Date().toISOString();
+      this.loadError = null;
+      return true;
+    } catch (error) {
+      this.payload = null;
+      this.database = null;
+      this.loadedAt = null;
+      this.loadError = error.message;
+      return false;
+    }
+  }
+
+  loadFromJson() {
     try {
       // The graph is too large to commit, so a fresh deploy fetches
       // citation-graph.json.gz as a GitHub Release asset at build time (see
@@ -103,6 +201,7 @@ class CitationGraphStore {
         entries.push(edge);
         this.byTargetCelex.set(target, entries);
       }
+      this.source = "json";
       this.loadedAt = new Date().toISOString();
       this.loadError = null;
       return true;
@@ -119,11 +218,24 @@ class CitationGraphStore {
   isReady() { return Boolean(this.payload); }
   getStatus() {
     return {
-      ready: this.isReady(), graphPath: this.graphPath,
+      ready: this.isReady(), graphPath: this.graphPath, source: this.source,
       graphVersion: this.payload?.graphVersion || null, parserVersion: this.payload?.parserVersion ?? null,
       generatedAt: this.payload?.generatedAt || null, coverage: this.payload?.coverage || null,
       edges: this.payload?.stats?.edges ?? 0, loadedAt: this.loadedAt, error: this.loadError,
     };
+  }
+
+  // The only storage-dependent step: fetch the edges citing this act (optionally a
+  // single article). Everything downstream is shared with the JSON path.
+  edgesForAct(targetCelex) {
+    if (this.database) return this.byActStatement.all(targetCelex);
+    return this.byTargetCelex.get(targetCelex) || [];
+  }
+
+  edgesForArticle(targetCelex, articleKey) {
+    if (this.database) return this.byArticleStatement.all(targetCelex, articleKey);
+    return (this.byTargetCelex.get(targetCelex) || [])
+      .filter((edge) => String(edge.targetArticle == null ? "" : edge.targetArticle).trim().toLowerCase() === articleKey);
   }
 
   assertReady() {
@@ -139,8 +251,7 @@ class CitationGraphStore {
     const targetArticle = String(article == null ? "" : article).trim().toLowerCase();
     const limit = Math.max(1, Math.min(Number.parseInt(options.limit, 10) || 50, 200));
     const offset = Math.max(0, Number.parseInt(options.offset, 10) || 0);
-    const matching = (this.byTargetCelex.get(targetCelex) || [])
-      .filter((edge) => String(edge.targetArticle == null ? "" : edge.targetArticle).trim().toLowerCase() === targetArticle);
+    const matching = this.edgesForArticle(targetCelex, targetArticle);
     const provisions = distinctSources(matching.filter((edge) => edge.kind === "legislation"));
     const judgments = distinctSources(matching.filter((edge) => edge.kind === "judgment"));
     const combined = [...provisions.map((edge) => ({ edge, kind: "legislation" })),
@@ -158,7 +269,7 @@ class CitationGraphStore {
   getActCitations(celex) {
     this.assertReady();
     const targetCelex = normalize(celex);
-    const edges = this.byTargetCelex.get(targetCelex) || [];
+    const edges = this.edgesForAct(targetCelex);
     const actOnly = edges.filter((edge) => edge.targetArticle == null || String(edge.targetArticle).trim() === "");
     const article = edges.filter((edge) => edge.targetArticle != null && String(edge.targetArticle).trim() !== "");
     const byArticle = new Map();
@@ -181,4 +292,4 @@ class CitationGraphStore {
   }
 }
 
-module.exports = { CitationGraphStore, DEFAULT_CITATION_GRAPH_PATH, GRAPH_VERSION, distinctSources };
+module.exports = { CitationGraphStore, DEFAULT_CITATION_GRAPH_PATH, DEFAULT_SQLITE_DATA_PATH, GRAPH_VERSION, SQLITE_SCHEMA_VERSION, distinctSources };

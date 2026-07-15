@@ -13,7 +13,7 @@ const {
 const BUILTIN_SEARCH_CACHE_PATH = path.join(__dirname, "data", "search-cache.json");
 const DEFAULT_SEARCH_CACHE_PATH = process.env.SEARCH_CACHE_PATH || BUILTIN_SEARCH_CACHE_PATH;
 const DEFAULT_SQLITE_DATA_PATH = path.join(__dirname, "data", "data.sqlite");
-const SQLITE_SCHEMA_VERSION = 1;
+const SQLITE_SCHEMA_VERSION = 2;
 
 const SUPPLEMENTAL_RECORDS = [
   {

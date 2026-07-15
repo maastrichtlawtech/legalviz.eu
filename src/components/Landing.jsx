@@ -1,5 +1,5 @@
-import { useNavigate } from "react-router-dom";
-import { useCallback, useEffect } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { useCallback, useEffect, useMemo } from "react";
 import { motion as Motion, AnimatePresence } from "framer-motion";
 import { Github } from "lucide-react";
 import { TopBar, SearchBox } from "./TopBar.jsx";
@@ -12,7 +12,7 @@ import { resetWholeApp } from "../utils/resetApp.js";
 import { useAddLawImport } from "../hooks/useAddLawImport.js";
 import { useLandingLibrary } from "../hooks/useLandingLibrary.js";
 import { useLandingSearchIndex } from "../hooks/useLandingSearchIndex.js";
-import { buildImportedLawCandidate, getCanonicalLawRoute } from "../utils/lawRouting.js";
+import { buildImportedLawCandidate, getCanonicalLawRoute, getBundledLaws } from "../utils/lawRouting.js";
 import { saveLawMeta } from "../utils/library.js";
 
 function inferOfficialReferenceFromCelex(celex) {
@@ -83,6 +83,24 @@ export function Landing({ forcedLocale = null }) {
   } = useAddLawImport({ locale, navigate, t });
   const activeLocale = forcedLocale || locale;
 
+  const tryChips = useMemo(() => {
+    const bundled = getBundledLaws();
+    const bySlug = (slug) => bundled.find((law) => law.slug === slug) || null;
+    return [
+      { key: "gdpr", law: bySlug("gdpr"), mono: false },
+      { key: "aia", law: bySlug("aia"), mono: false },
+      { key: "dsa", law: bySlug("dsa"), mono: false },
+      { key: "data-act", law: bySlug("data-act"), mono: true },
+    ]
+      .filter((chip) => chip.law)
+      .map((chip) => ({
+        key: chip.key,
+        label: chip.mono ? chip.law.celex : chip.law.label,
+        mono: chip.mono,
+        to: getCanonicalLawRoute(chip.law, null, null, activeLocale),
+      }));
+  }, [activeLocale]);
+
   const handleOpenLaw = useCallback(async (law) => {
     // Best-effort bookkeeping: never let a stuck IndexedDB block navigation.
     markLawOpened(law.celex).catch(() => {});
@@ -120,7 +138,7 @@ export function Landing({ forcedLocale = null }) {
   }, [locale, localizePath, navigate]);
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white dark:from-gray-950 dark:to-gray-900 transition-colors duration-500">
+    <div className="min-h-screen bg-paper dark:bg-paper-dark transition-colors duration-500">
       <SEO description={t("seo.landingDescription")} />
       <TopBar
         lawKey=""
@@ -145,16 +163,18 @@ export function Landing({ forcedLocale = null }) {
           animate={{ opacity: 1, y: 0 }}
           className="flex w-full max-w-4xl flex-col items-center text-center"
         >
-          <span className="inline-flex items-center rounded-full bg-gray-100 px-3 py-1 text-xs font-medium tracking-tight text-gray-700 ring-1 ring-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:ring-gray-700">
-            <span>{t("app.name")}</span>
-            <span className="mx-2 text-gray-400 dark:text-gray-500">|</span>
-            <span className="font-normal text-gray-500 dark:text-gray-400">{t("app.tagline")}</span>
+          <span className="text-xs font-semibold uppercase tracking-[0.16em] text-eu-gold-deep dark:text-eu-gold-bright">
+            {t("landing.heroEyebrow")}
           </span>
 
-          <h1 className="mt-6 max-w-3xl text-3xl font-semibold tracking-tight text-gray-900 sm:text-4xl lg:text-5xl dark:text-white">
-            {t("landing.heroTitle")}
-            <span className="block text-gray-600 dark:text-gray-400">{t("landing.heroSubtitle")}</span>
+          <h1 className="mt-4 max-w-3xl text-balance font-display text-4xl font-bold leading-[1.08] tracking-tight text-eu-navy sm:text-5xl lg:text-[3.25rem] dark:text-paper">
+            {t("landing.heroTitle")}{" "}
+            <span className="italic text-eu-blue dark:text-eu-blue-bright">{t("landing.heroSubtitle")}</span>
           </h1>
+
+          <p className="mt-4 max-w-xl text-pretty text-base text-gray-600 dark:text-gray-300">
+            {t("landing.heroDescription")}
+          </p>
 
           <div className="mt-8 w-full max-w-3xl">
             <SearchBox
@@ -168,9 +188,27 @@ export function Landing({ forcedLocale = null }) {
               triggerVariant="hero"
             />
           </div>
+
+          {tryChips.length > 0 ? (
+            <div className="mt-4 flex flex-wrap items-center justify-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+              <span>{t("landing.tryLabel")}</span>
+              {tryChips.map((chip) => (
+                <Link
+                  key={chip.key}
+                  to={chip.to}
+                  className={
+                    "rounded-full border border-eu-blue-soft-dark/40 bg-paper px-3 py-1 text-gray-600 transition hover:border-eu-blue/50 hover:text-eu-blue dark:border-panel-dark dark:bg-panel-dark dark:text-gray-300 dark:hover:text-eu-blue-bright " +
+                    (chip.mono ? "font-mono text-[11px]" : "")
+                  }
+                >
+                  {chip.label}
+                </Link>
+              ))}
+            </div>
+          ) : null}
         </Motion.div>
 
-        <div className="mt-12 w-full max-w-3xl">
+        <div className="mt-14 w-full max-w-5xl">
           <LandingLibrary
             laws={allLaws}
             onManualAddLaw={openAddLawDialog}

@@ -88,6 +88,33 @@ describe("markLawOpened", () => {
       })
     );
   });
+
+  it("persists a lastPosition when a position is provided", async () => {
+    upsertLawMeta.mockResolvedValue({});
+    await markLawOpened("32016R0679", { kind: "article", id: "6", total: 99 });
+    expect(upsertLawMeta).toHaveBeenCalledWith(
+      "32016R0679",
+      expect.objectContaining({
+        lastPosition: { kind: "article", id: "6", total: 99 },
+      })
+    );
+  });
+
+  it("ignores an invalid position kind", async () => {
+    upsertLawMeta.mockResolvedValue({});
+    await markLawOpened("32016R0679", { kind: "chapter", id: "1" });
+    const updates = upsertLawMeta.mock.calls[0][1];
+    expect(updates).not.toHaveProperty("lastPosition");
+  });
+
+  it("does not clobber an existing lastPosition when called without one", async () => {
+    upsertLawMeta.mockResolvedValue({});
+    await markLawOpened("32016R0679");
+    const updates = upsertLawMeta.mock.calls[0][1];
+    // Omitting lastPosition from the update lets upsertLawMeta preserve the
+    // previously stored value (it merges existing ⊕ updates).
+    expect(updates).not.toHaveProperty("lastPosition");
+  });
 });
 
 describe("getLibraryLaws", () => {
@@ -178,6 +205,32 @@ describe("getLibraryLaws", () => {
     const laws = await getLibraryLaws();
     const gdpr = laws.find((l) => l.celex === "32016R0679");
     expect(gdpr.topics).toBeNull();
+  });
+
+  it("surfaces a stored lastPosition on library laws", async () => {
+    getAllLawMeta.mockResolvedValue([
+      {
+        celex: "32016R0679",
+        lastOpened: 1000,
+        lastPosition: { kind: "article", id: "6", total: 99 },
+      },
+    ]);
+    listCachedCelexes.mockResolvedValue([]);
+
+    const laws = await getLibraryLaws();
+    const gdpr = laws.find((l) => l.celex === "32016R0679");
+    expect(gdpr.lastPosition).toEqual({ kind: "article", id: "6", total: 99 });
+  });
+
+  it("defaults lastPosition to null when none is stored", async () => {
+    getAllLawMeta.mockResolvedValue([
+      { celex: "32016R0679", lastOpened: 1000 },
+    ]);
+    listCachedCelexes.mockResolvedValue([]);
+
+    const laws = await getLibraryLaws();
+    const gdpr = laws.find((l) => l.celex === "32016R0679");
+    expect(gdpr.lastPosition).toBeNull();
   });
 
   it("sorts by lastOpened timestamp descending", async () => {

@@ -2,7 +2,7 @@ const { JSDOM } = require("jsdom");
 const { createRequire } = require("module");
 
 const { ClientError } = require("./api-utils");
-const { referenceDedupeKey, enforceInternalReferenceIntegrity } = require("./legal-reference-core.cjs");
+const { referenceDedupeKey, enforceInternalReferenceIntegrity } = require("./legal-reference-core.mjs");
 
 const LANG_3_TO_2 = {
   BUL: "BG",

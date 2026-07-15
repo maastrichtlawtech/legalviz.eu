@@ -20,10 +20,12 @@ export function LawViewerSidebar({
   isExternalReferencePending,
   effectiveCelex,
   formexLang,
+  isOverview,
+  onGoOverview,
   t,
 }) {
   return (
-    <aside className={`order-1 w-full md:order-2 md:sticky md:top-20 md:max-h-[calc(100vh-6rem)] md:w-80 md:shrink-0 md:overflow-y-auto transition-all duration-300 ${!isSidebarOpen ? "md:hidden" : ""}`}>
+    <aside className={`order-1 w-full md:sticky md:top-20 md:max-h-[calc(100vh-6rem)] md:w-72 md:shrink-0 md:overflow-y-auto transition-all duration-300 ${!isSidebarOpen ? "md:hidden" : ""}`}>
       <div className="mb-4 flex gap-2 md:hidden">
         <button
           type="button"
@@ -57,10 +59,8 @@ export function LawViewerSidebar({
           t={t}
         />
 
-        <CaseLawButton celex={effectiveCelex} currentLang={formexLang} />
-
-        <div className="pt-2">
-          <div className="px-1 mb-2 text-sm font-semibold text-gray-900 dark:text-gray-100">
+        <div>
+          <div className="mb-2 px-1 text-[10.5px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">
             {t("lawViewer.tableOfContents")}
           </div>
           <LawViewerToc
@@ -80,46 +80,48 @@ export function LawViewerSidebar({
               if (index !== -1) selection.selectAnnexIdx(index);
             }}
             closeMobileMenu={selection.closeMobileMenu}
+            isOverview={isOverview}
+            onGoOverview={onGoOverview}
             t={t}
           />
         </div>
 
-        {externalLawOverview.length > 0 ? (
-          <div className="pt-4">
+        <div className="space-y-4 border-t border-gray-100 pt-4 dark:border-gray-800">
+          <CaseLawButton celex={effectiveCelex} currentLang={formexLang} />
+
+          {externalLawOverview.length > 0 ? (
             <Accordion title={`Linked Legislation (${externalLawOverview.length})`} defaultOpen={false}>
               <div className="flex flex-wrap gap-2">
-                {externalLawOverview.map((item) => (
-                  (() => {
-                    const pending = typeof isExternalReferencePending === "function"
-                      ? isExternalReferencePending(item.ref)
-                      : false;
-                    return (
-                  <button
-                    key={item.key}
-                    type="button"
-                    disabled={pending}
-                    onClick={() => handleOpenExternalLaw(item.ref)}
-                    className={`inline-flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-medium text-blue-900 transition dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-100 ${
-                      pending
-                        ? "cursor-progress border-blue-400 bg-blue-100 dark:border-blue-700 dark:bg-blue-950/70"
-                        : "hover:border-blue-400 hover:bg-blue-100 dark:hover:border-blue-700 dark:hover:bg-blue-950/70"
-                    }`}
-                  >
-                    {pending ? <Loader2 size={12} className="animate-spin" /> : null}
-                    <span className="max-w-[220px] truncate">{item.label}</span>
-                    <span className="rounded-full bg-white/80 px-2 py-0.5 text-[10px] text-blue-700 dark:bg-blue-900/70 dark:text-blue-200">
-                      {item.count}
-                    </span>
-                  </button>
-                    );
-                  })()
-                ))}
+                {externalLawOverview.map((item) => {
+                  const pending = typeof isExternalReferencePending === "function"
+                    ? isExternalReferencePending(item.ref)
+                    : false;
+                  return (
+                    <button
+                      key={item.key}
+                      type="button"
+                      disabled={pending}
+                      onClick={() => handleOpenExternalLaw(item.ref)}
+                      className={`inline-flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-medium text-blue-900 transition dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-100 ${
+                        pending
+                          ? "cursor-progress border-blue-400 bg-blue-100 dark:border-blue-700 dark:bg-blue-950/70"
+                          : "hover:border-blue-400 hover:bg-blue-100 dark:hover:border-blue-700 dark:hover:bg-blue-950/70"
+                      }`}
+                    >
+                      {pending ? <Loader2 size={12} className="animate-spin" /> : null}
+                      <span className="max-w-[220px] truncate">{item.label}</span>
+                      <span className="rounded-full bg-white/80 px-2 py-0.5 text-[10px] text-blue-700 dark:bg-blue-900/70 dark:text-blue-200">
+                        {item.count}
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
             </Accordion>
-          </div>
-        ) : null}
+          ) : null}
 
-        <MetadataPanel celex={effectiveCelex} currentLang={formexLang} />
+          <MetadataPanel celex={effectiveCelex} currentLang={formexLang} />
+        </div>
       </div>
     </aside>
   );

@@ -553,7 +553,22 @@ function normalizeFlattenedFootnoteIdentifier(identifier = "", followingText = "
   // than a separate numbered provision.
   const splitYear = String(identifier).match(/^(\d{1,4})\/(\d)$/);
   const continuation = String(followingText).match(/^\s*(?:\/\/\s*)?(\d)(?=\s*(?:[,.;)]|\(\d+\)))/);
-  return splitYear && continuation ? `${splitYear[1]}/${splitYear[2]}${continuation[1]}` : identifier;
+  if (splitYear && continuation) return `${splitYear[1]}/${splitYear[2]}${continuation[1]}`;
+
+  // A few early directives have a footnote digit flattened into their
+  // year-first two-digit identifier ("667/654/EEC" for "67/654/EEC"). The
+  // immediately following Official Journal publication year supplies strict
+  // corroboration: only remove a digit when exactly one possible two-digit
+  // year agrees with that date.
+  const yearFirstFootnote = String(identifier).match(/^(\d{3})\/(\d{3,4})(\/[^/\s]+)?$/);
+  const ojYear = String(followingText).slice(0, 180).match(/\b(?:19|20)(\d{2})\b/);
+  if (yearFirstFootnote && ojYear) {
+    const candidates = [...new Set([...yearFirstFootnote[1]].map((_, index) => (
+      `${yearFirstFootnote[1].slice(0, index)}${yearFirstFootnote[1].slice(index + 1)}`
+    )))].filter((year) => year === ojYear[1]);
+    if (candidates.length === 1) return `${candidates[0]}/${yearFirstFootnote[2]}${yearFirstFootnote[3] || ""}`;
+  }
+  return identifier;
 }
 
 function isClearlyNationalInstrumentContext(text, index) {

@@ -564,6 +564,17 @@ describe("extractCrossRefsFromText — multilingual instruments", () => {
     }));
   });
 
+  it("repairs a year-first directive when its adjacent OJ date corroborates the year", () => {
+    const refs = extractCrossRefsFromText(
+      "Directive No 667/654/EEC OJ No 263, 30 October 1967, p. 6",
+      getLangConfig("EN"),
+    );
+    expect(refs).toContainEqual(expect.objectContaining({
+      target: "67/654/EEC",
+      actCelex: "31967L0654",
+    }));
+  });
+
   it("resolves historical regulations with a trailing EEC suffix", () => {
     const refs = extractCrossRefsFromText("Regulation 3286/80/EEC", getLangConfig("EN"));
     expect(refs).toContainEqual(expect.objectContaining({

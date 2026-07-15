@@ -34,6 +34,7 @@ backend/search/data/search-cache.json.gz
 backend/search/data/case-law-cache.json
 backend/search/data/case-law-cache.json.gz
 backend/search/data/data.sqlite
+backend/search/data/data.sqlite.manifest.json
 backend/search/data/laws/
 backend/search/data/laws-html/
 backend/search/data/case-law/

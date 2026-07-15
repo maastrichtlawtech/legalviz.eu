@@ -30,7 +30,7 @@ The workflow performs these steps in order:
 
 1. Read the current `DATA_RELEASE_TAG` from `backend/Dockerfile`.
 2. Download that release's `search-cache.json.gz` and
-   `case-law-cache-v5.json.gz` assets.
+   `case-law-cache.json.gz` assets.
 3. Restore the raw compressed judgment HTML corpus from the GitHub Actions
    cache, when available.
 4. Query CELLAR's SPARQL endpoint for the complete set of CJEU and General Court
@@ -101,7 +101,7 @@ Open **Actions > Refresh case-law data**, select the run, and download the
 
 | File | Review purpose |
 | --- | --- |
-| `case-law-cache-v5.json.gz` | Updated structured judgment cache |
+| `case-law-cache.json.gz` | Updated structured judgment cache |
 | `search-cache.json.gz` | Legislation search input carried from the current release |
 | `data.sqlite` | Candidate runtime database |
 | `data.sqlite.manifest.json` | Input and artifact hashes, schema version, row counts, and integrity results |

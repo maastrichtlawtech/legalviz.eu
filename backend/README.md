@@ -525,7 +525,7 @@ Important: restart the API server after rebuilding the cache, because the cache 
 ### Precomputed runtime store
 
 `npm run build:sqlite-data` converts `search-cache.json(.gz)` and
-`case-law-cache-v5.json(.gz)` into `search/data/data.sqlite`. It writes a
+`case-law-cache.json(.gz)` into `search/data/data.sqlite`. It writes a
 temporary database, validates its schema, row counts, and integrity, then
 renames it atomically. The build also emits `data.sqlite.manifest.json` with
 source and artifact SHA-256 checksums, schema version, table counts, and mapping

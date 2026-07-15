@@ -240,7 +240,7 @@ async function writeArtifactAtomic(outputPath, artifact, fsApi = fs) {
 function parseCliArgs(argv) {
   const options = {};
   const valueFlags = ["--corpusDir", "--htmlDir", "--out", "--limit", "--fromYear", "--toYear",
-    "--maxXmlBytes", "--maxHtmlBytes", "--batchSize"];
+    "--maxXmlBytes", "--maxHtmlBytes", "--batchSize", "--workerHeapMb"];
   for (let index = 0; index < argv.length; index += 1) {
     const flag = argv[index];
     // --noHtml is the one boolean: it restores the FMX-only graph (and reports the
@@ -257,7 +257,7 @@ function parseCliArgs(argv) {
     else {
       const number = Number.parseInt(value, 10);
       if (!Number.isInteger(number) || number < 0
-        || (["--limit", "--maxXmlBytes", "--maxHtmlBytes", "--batchSize"].includes(flag) && number === 0)) {
+        || (["--limit", "--maxXmlBytes", "--maxHtmlBytes", "--batchSize", "--workerHeapMb"].includes(flag) && number === 0)) {
         throw new Error(`Invalid value for ${flag}: ${value}`);
       }
       if (flag === "--limit") options.limit = number;
@@ -266,6 +266,11 @@ function parseCliArgs(argv) {
       if (flag === "--maxXmlBytes") options.maxXmlBytes = number;
       if (flag === "--maxHtmlBytes") options.maxHtmlBytes = number;
       if (flag === "--batchSize") options.batchSize = number;
+      // The 768 MB default is not enough for the heaviest acts (some 2010s
+      // regulations need ~4 GB to parse). Too low and they OOM their worker, get
+      // split down to a single law, and land as worker_failure contributing no
+      // edges — a silently incomplete graph. Raise it for a full-corpus build.
+      if (flag === "--workerHeapMb") options.workerHeapMb = number;
     }
   }
   return options;

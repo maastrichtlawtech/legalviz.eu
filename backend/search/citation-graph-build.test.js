@@ -12,13 +12,14 @@ test("CLI options and source unit types are normalized", () => {
   assert.deepEqual(parseCliArgs(["--corpusDir", "/corpus", "--out", "/graph.json", "--limit", "20", "--fromYear", "2010", "--toYear", "2020", "--maxXmlBytes", "1024", "--batchSize", "25"]), {
     corpusDir: "/corpus", outputPath: "/graph.json", limit: 20, fromYear: 2010, toYear: 2020, maxXmlBytes: 1024, batchSize: 25,
   });
-  assert.deepEqual(parseCliArgs(["--noHtml", "--htmlDir", "/html", "--maxHtmlBytes", "2048"]), {
-    includeHtml: false, htmlDir: "/html", maxHtmlBytes: 2048,
+  assert.deepEqual(parseCliArgs(["--noHtml", "--htmlDir", "/html", "--maxHtmlBytes", "2048", "--workerHeapMb", "4096"]), {
+    includeHtml: false, htmlDir: "/html", maxHtmlBytes: 2048, workerHeapMb: 4096,
   });
   assert.throws(() => parseCliArgs(["--limit", "0"]), /Invalid value/);
   assert.throws(() => parseCliArgs(["--maxXmlBytes", "0"]), /Invalid value/);
   assert.throws(() => parseCliArgs(["--maxHtmlBytes", "0"]), /Invalid value/);
   assert.throws(() => parseCliArgs(["--batchSize", "0"]), /Invalid value/);
+  assert.throws(() => parseCliArgs(["--workerHeapMb", "0"]), /Invalid value/);
   assert.throws(() => parseCliArgs(["--bogus", "1"]), /Unknown argument/);
   assert.equal(sourceUnitTypeFor("recital_12"), "recital");
   assert.equal(sourceUnitTypeFor("annex_1"), "annex");

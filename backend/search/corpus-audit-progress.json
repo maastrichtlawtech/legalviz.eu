@@ -1,0 +1,89 @@
+{
+  "schemaVersion": 1,
+  "corpora": {
+    "fmx": {
+      "verifiedRanges": [],
+      "runs": [
+        {
+          "offset": 0,
+          "selected": 5,
+          "scanned": 5,
+          "errors": 0,
+          "oversized": 0,
+          "explicitUnresolved": 0,
+          "clean": true
+        },
+        {
+          "offset": 0,
+          "selected": 2,
+          "scanned": 2,
+          "errors": 0,
+          "oversized": 0,
+          "explicitUnresolved": 0,
+          "clean": true
+        }
+      ],
+      "available": 27916,
+      "years": {
+        "1974": {
+          "runs": 2,
+          "cleanRuns": 2,
+          "scanned": 7
+        }
+      }
+    },
+    "html": {
+      "verifiedRanges": [],
+      "runs": [
+        {
+          "offset": 0,
+          "selected": 5,
+          "scanned": 5,
+          "errors": 0,
+          "oversized": 0,
+          "explicitUnresolved": 0,
+          "clean": true
+        }
+      ],
+      "available": 1901,
+      "years": {
+        "1988": {
+          "runs": 1,
+          "cleanRuns": 1,
+          "scanned": 5
+        }
+      }
+    },
+    "caseLaw": {
+      "verifiedRanges": [],
+      "runs": [
+        {
+          "offset": 0,
+          "selected": 5,
+          "scanned": 5,
+          "errors": 0,
+          "oversized": 0,
+          "explicitUnresolved": 0,
+          "clean": true
+        },
+        {
+          "offset": 0,
+          "selected": 2,
+          "scanned": 2,
+          "errors": 0,
+          "oversized": 0,
+          "explicitUnresolved": 0,
+          "clean": true
+        }
+      ],
+      "available": 8752,
+      "years": {
+        "2016": {
+          "runs": 2,
+          "cleanRuns": 2,
+          "scanned": 7
+        }
+      }
+    }
+  }
+}

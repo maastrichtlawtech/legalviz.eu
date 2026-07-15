@@ -15,6 +15,7 @@ const zlib = require("zlib");
 const { execFileSync } = require("child_process");
 
 const { parseCaseDetailsFromHtml } = require("../shared/law-queries");
+const { DEFAULT_PROGRESS_FILE, recordAudit } = require("./corpus-audit-progress.js");
 
 const CORPUS_DIR = path.join(__dirname, "data", "case-law");
 
@@ -23,6 +24,12 @@ function listCorpusJudgments(corpusDir = CORPUS_DIR) {
   return fs.readdirSync(corpusDir).filter((year) => /^\d{4}$/.test(year)).sort()
     .flatMap((year) => fs.readdirSync(path.join(corpusDir, year)).filter((file) => file.endsWith(".html.gz"))
       .sort().map((file) => path.join(corpusDir, year, file)));
+}
+
+function filterByYears(files, value) {
+  if (!value) return files;
+  const years = new Set(String(value).split(",").map((year) => year.trim()).filter((year) => /^\d{4}$/.test(year)));
+  return files.filter((file) => years.has(path.basename(path.dirname(file))));
 }
 
 function emptyStats() {
@@ -89,7 +96,9 @@ function audit(options = {}) {
   const limit = Math.max(0, Number.parseInt(options.limit, 10) || 0);
   const batchSize = Math.max(1, Number.parseInt(options.batchSize, 10) || 50);
   const heapMb = Math.max(256, Number.parseInt(options.heapMb, 10) || 2048);
-  const files = all.slice(offset, limit ? offset + limit : undefined);
+  const eligible = filterByYears(all, options.year);
+  const files = eligible.slice(offset, limit ? offset + limit : undefined);
+  const years = [...new Set(files.map((file) => path.basename(path.dirname(file))))];
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "case-law-reference-audit-"));
   const stats = emptyStats();
   try {
@@ -99,12 +108,22 @@ function audit(options = {}) {
       fs.writeFileSync(listFile, files.slice(start, start + batchSize).join("\n"));
       execFileSync(process.execPath, [`--max-old-space-size=${heapMb}`, __filename, "--worker", "--listFile", listFile, "--outFile", outFile], { stdio: "ignore" });
       mergeStats(stats, JSON.parse(fs.readFileSync(outFile, "utf8")));
-      console.log(`[case-law-reference-audit] ${offset + Math.min(start + batchSize, files.length)}/${all.length}`);
+      console.log(`[case-law-reference-audit] ${offset + Math.min(start + batchSize, files.length)}/${eligible.length}`);
     }
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
-  const result = { ...stats, available: all.length, selected: files.length, offset };
+  const result = { ...stats, available: all.length, eligible: eligible.length, selected: files.length, offset };
+  recordAudit({
+    file: options.progressFile || DEFAULT_PROGRESS_FILE,
+    kind: "caseLaw",
+    available: all.length,
+    offset,
+    selected: files.length,
+    stats,
+    years,
+    rangeStable: !options.year,
+  });
   if (options.output) fs.writeFileSync(options.output, JSON.stringify(result, null, 2));
   console.log(JSON.stringify(result, null, 2));
   return result;

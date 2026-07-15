@@ -24,7 +24,10 @@ const CASES = [
   ["digital mark", "32022R1925"],
   ["csrd", "32022L2464"],
   ["mica", "32023R1114"],
-  ["emfa", "32024R1083"]
+  ["emfa", "32024R1083"],
+  ["general data protection regulation law", "32016R0679"],
+  ["digital services act obligations", "32022R2065"],
+  ["european media freedom act pluralism", "32024R1083"]
 ];
 
 function assertRegressionCases(index, label) {

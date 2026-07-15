@@ -196,6 +196,21 @@ function buildFtsExpression(terms, operator) {
     .join(` ${operator} `);
 }
 
+function searchRelaxedTitles(miniSearch, parsed, boostDocument) {
+  const terms = [...new Set(parsed.terms || [])];
+  // Keep this fallback bounded and high-precision. Dropping one term recovers
+  // natural modifier queries such as "digital services act obligations"
+  // without materializing the very broad result sets produced by a full OR.
+  if (terms.length < 3 || terms.length > 6) return [];
+
+  for (let omitted = terms.length - 1; omitted >= 0; omitted -= 1) {
+    const relaxedQuery = terms.filter((_term, index) => index !== omitted).join(" ");
+    const hits = miniSearch.search(relaxedQuery, { combineWith: "AND", boostDocument });
+    if (hits.length > 0) return hits;
+  }
+  return [];
+}
+
 // Re-encodes the act-type priors that the retired scoreLaw ranking applied,
 // as multiplicative boosts on MiniSearch relevance. This only reshuffles the
 // free-text stage: the deterministic celex/reference/alias matches run first
@@ -222,13 +237,17 @@ function buildDocumentBoost(parsed) {
 class JsonLegalCacheStore {
   constructor(cachePath = DEFAULT_SEARCH_CACHE_PATH, options = {}) {
     this.cachePath = cachePath;
-    const explicitSqlitePath = options.sqlitePath || process.env.DATA_SQLITE_PATH || null;
+    const explicitSqlitePath = options.sqlitePath || null;
+    const environmentSqlitePath = options.preferJson
+      ? null
+      : (process.env.DATA_SQLITE_PATH || null);
+    const configuredSqlitePath = explicitSqlitePath || environmentSqlitePath;
     const hasJsonOverride = Boolean(process.env.SEARCH_CACHE_PATH);
-    this.sqlitePath = explicitSqlitePath ||
+    this.sqlitePath = configuredSqlitePath ||
       (!options.preferJson && !hasJsonOverride && cachePath === BUILTIN_SEARCH_CACHE_PATH
         ? DEFAULT_SQLITE_DATA_PATH
         : null);
-    this.requireSqlite = options.requireSqlite ?? Boolean(explicitSqlitePath);
+    this.requireSqlite = options.requireSqlite ?? Boolean(configuredSqlitePath);
     this.payload = null;
     this.records = [];
     this.loadedAt = null;
@@ -457,8 +476,12 @@ class JsonLegalCacheStore {
       // recall stage gets a chance to answer the conceptual query. SQLite has
       // the bounded FTS fallback for that case; retain the legacy OR behavior
       // for JSON and short queries.
-      if (hits.length === 0 && (!this.database || parsed.terms.length < 3)) {
-        hits = this.miniSearch.search(parsed.rewrittenQuery, { combineWith: "OR", boostDocument });
+      if (hits.length === 0) {
+        if (!this.database || parsed.terms.length < 3) {
+          hits = this.miniSearch.search(parsed.rewrittenQuery, { combineWith: "OR", boostDocument });
+        } else {
+          hits = searchRelaxedTitles(this.miniSearch, parsed, boostDocument);
+        }
       }
       for (const hit of hits) {
         addMatch(getDeterministicMatch(this.byCelex, normalizeCelexLookupKey(hit.id)));

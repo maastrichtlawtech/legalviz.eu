@@ -41,6 +41,26 @@ test("an explicit missing SQLite path fails instead of silently loading JSON", (
   assert.match(store.loadError, /SQLite data store not found/);
 });
 
+test("preferJson ignores DATA_SQLITE_PATH for JSON authoring tools", () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "legal-cache-store-prefer-json-"));
+  const caseLawPath = path.join(tempDir, "case-law.json");
+  const sqlitePath = path.join(tempDir, "data.sqlite");
+  fs.writeFileSync(caseLawPath, "{}", "utf8");
+  buildSqliteData({ searchCachePath: fixturePath, caseLawCachePath: caseLawPath, outputPath: sqlitePath });
+
+  const previousSqlitePath = process.env.DATA_SQLITE_PATH;
+  process.env.DATA_SQLITE_PATH = sqlitePath;
+  try {
+    const store = new JsonLegalCacheStore(fixturePath, { preferJson: true });
+    assert.equal(store.load(), true);
+    assert.equal(store.source, "json");
+    assert.equal(Array.isArray(store.payload?.records), true);
+  } finally {
+    if (previousSqlitePath === undefined) delete process.env.DATA_SQLITE_PATH;
+    else process.env.DATA_SQLITE_PATH = previousSqlitePath;
+  }
+});
+
 test("legal cache store reports missing file", () => {
   const missingPath = path.join(os.tmpdir(), `missing-${Date.now()}.json`);
   const store = new JsonLegalCacheStore(missingPath);

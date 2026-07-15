@@ -1635,6 +1635,66 @@
           "years": [
             "1979"
           ]
+        },
+        {
+          "offset": 0,
+          "selected": 3,
+          "scanned": 3,
+          "errors": 0,
+          "oversized": 0,
+          "explicitUnresolved": 0,
+          "clean": true,
+          "years": [
+            "1980"
+          ]
+        },
+        {
+          "offset": 0,
+          "selected": 3,
+          "scanned": 3,
+          "errors": 0,
+          "oversized": 0,
+          "explicitUnresolved": 0,
+          "clean": true,
+          "years": [
+            "1981"
+          ]
+        },
+        {
+          "offset": 0,
+          "selected": 3,
+          "scanned": 3,
+          "errors": 0,
+          "oversized": 0,
+          "explicitUnresolved": 0,
+          "clean": true,
+          "years": [
+            "1982"
+          ]
+        },
+        {
+          "offset": 0,
+          "selected": 3,
+          "scanned": 3,
+          "errors": 0,
+          "oversized": 0,
+          "explicitUnresolved": 0,
+          "clean": true,
+          "years": [
+            "1983"
+          ]
+        },
+        {
+          "offset": 0,
+          "selected": 3,
+          "scanned": 3,
+          "errors": 0,
+          "oversized": 0,
+          "explicitUnresolved": 0,
+          "clean": true,
+          "years": [
+            "1984"
+          ]
         }
       ],
       "available": 8752,
@@ -1735,6 +1795,31 @@
           "scanned": 3
         },
         "1979": {
+          "runs": 1,
+          "cleanRuns": 1,
+          "scanned": 3
+        },
+        "1980": {
+          "runs": 1,
+          "cleanRuns": 1,
+          "scanned": 3
+        },
+        "1981": {
+          "runs": 1,
+          "cleanRuns": 1,
+          "scanned": 3
+        },
+        "1982": {
+          "runs": 1,
+          "cleanRuns": 1,
+          "scanned": 3
+        },
+        "1983": {
+          "runs": 1,
+          "cleanRuns": 1,
+          "scanned": 3
+        },
+        "1984": {
           "runs": 1,
           "cleanRuns": 1,
           "scanned": 3

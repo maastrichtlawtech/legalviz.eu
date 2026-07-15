@@ -320,6 +320,11 @@ export function LawViewer() {
                     else if (primaryDocument.data.recitals?.[0]) selection.selectRecitalIdx(0);
                     else if (primaryDocument.data.annexes?.[0]) selection.selectAnnexIdx(0);
                   }}
+                  onPrint={() => printState.setPrintModalOpen(true)}
+                  externalLawOverview={derived.externalLawOverview}
+                  onOpenExternalLaw={interactions.handleOpenExternalLaw}
+                  isExternalReferencePending={interactions.isExternalReferencePending}
+                  locale={locale}
                   t={t}
                 />
               ) : (
@@ -460,11 +465,6 @@ export function LawViewer() {
             loading={derived.activeLoading}
             loadError={activeLoadError}
             hasLoadedContent={derived.hasLoadedContent}
-            externalLawOverview={derived.externalLawOverview}
-            handleOpenExternalLaw={interactions.handleOpenExternalLaw}
-            isExternalReferencePending={interactions.isExternalReferencePending}
-            effectiveCelex={source.effectiveCelex}
-            formexLang={displayedFormexLang}
             isOverview={isOverview}
             onGoOverview={goToOverview}
             t={t}

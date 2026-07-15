@@ -329,5 +329,34 @@
     "caseLaw": "CJEU Case Law",
     "caseLawSearchPlaceholder": "Search by party, case number, or article…",
     "caseLawNoResults": "No cases match your search."
+  },
+  "lawOverview": {
+    "actTypeRegulation": "Regulation",
+    "actTypeDirective": "Directive",
+    "actTypeDecision": "Decision",
+    "celexLabel": "CELEX {celex}",
+    "print": "Print / PDF",
+    "linkedLegislation": "Linked legislation",
+    "corrShort": "Corr.",
+    "amendShort": "Amend.",
+    "citedTimes": "cited {count}×",
+    "amendmentsEmpty": "No amendments or corrigenda yet.",
+    "implementingEmpty": "None adopted yet.",
+    "linkedEmpty": "No linked legislation yet.",
+    "showAll": "Show all ({count})",
+    "showLess": "Show less"
+  },
+  "lawSummary": {
+    "title": "AI overview",
+    "verifyNote": "Generated — verify against the official text",
+    "englishOnly": "English only",
+    "generating": "Generating overview",
+    "unavailable": "Overview is not available for this law yet.",
+    "purpose": "Purpose",
+    "scope": "Scope",
+    "keyPoints": "Key points",
+    "structure": "Structure",
+    "relatedInstruments": "Related instruments",
+    "generatedOn": "Static summary generated {date}"
   }
 }

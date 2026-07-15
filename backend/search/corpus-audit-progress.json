@@ -1199,6 +1199,126 @@
           "years": [
             "1987"
           ]
+        },
+        {
+          "offset": 0,
+          "selected": 3,
+          "scanned": 3,
+          "errors": 0,
+          "oversized": 0,
+          "explicitUnresolved": 0,
+          "clean": true,
+          "years": [
+            "1989"
+          ]
+        },
+        {
+          "offset": 0,
+          "selected": 3,
+          "scanned": 3,
+          "errors": 0,
+          "oversized": 0,
+          "explicitUnresolved": 0,
+          "clean": true,
+          "years": [
+            "1990"
+          ]
+        },
+        {
+          "offset": 0,
+          "selected": 3,
+          "scanned": 3,
+          "errors": 0,
+          "oversized": 0,
+          "explicitUnresolved": 0,
+          "clean": true,
+          "years": [
+            "1991"
+          ]
+        },
+        {
+          "offset": 0,
+          "selected": 3,
+          "scanned": 3,
+          "errors": 0,
+          "oversized": 0,
+          "explicitUnresolved": 0,
+          "clean": true,
+          "years": [
+            "1992"
+          ]
+        },
+        {
+          "offset": 0,
+          "selected": 3,
+          "scanned": 3,
+          "errors": 0,
+          "oversized": 0,
+          "explicitUnresolved": 0,
+          "clean": true,
+          "years": [
+            "1993"
+          ]
+        },
+        {
+          "offset": 0,
+          "selected": 3,
+          "scanned": 3,
+          "errors": 0,
+          "oversized": 0,
+          "explicitUnresolved": 0,
+          "clean": true,
+          "years": [
+            "1994"
+          ]
+        },
+        {
+          "offset": 0,
+          "selected": 3,
+          "scanned": 3,
+          "errors": 0,
+          "oversized": 0,
+          "explicitUnresolved": 0,
+          "clean": true,
+          "years": [
+            "1995"
+          ]
+        },
+        {
+          "offset": 0,
+          "selected": 3,
+          "scanned": 3,
+          "errors": 0,
+          "oversized": 0,
+          "explicitUnresolved": 0,
+          "clean": true,
+          "years": [
+            "1996"
+          ]
+        },
+        {
+          "offset": 0,
+          "selected": 3,
+          "scanned": 3,
+          "errors": 0,
+          "oversized": 0,
+          "explicitUnresolved": 0,
+          "clean": true,
+          "years": [
+            "1997"
+          ]
+        },
+        {
+          "offset": 0,
+          "selected": 3,
+          "scanned": 3,
+          "errors": 0,
+          "oversized": 0,
+          "explicitUnresolved": 0,
+          "clean": true,
+          "years": [
+            "1998"
+          ]
         }
       ],
       "available": 52523,
@@ -1372,6 +1492,56 @@
           "runs": 1,
           "cleanRuns": 1,
           "scanned": 5
+        },
+        "1989": {
+          "runs": 1,
+          "cleanRuns": 1,
+          "scanned": 3
+        },
+        "1990": {
+          "runs": 1,
+          "cleanRuns": 1,
+          "scanned": 3
+        },
+        "1991": {
+          "runs": 1,
+          "cleanRuns": 1,
+          "scanned": 3
+        },
+        "1992": {
+          "runs": 1,
+          "cleanRuns": 1,
+          "scanned": 3
+        },
+        "1993": {
+          "runs": 1,
+          "cleanRuns": 1,
+          "scanned": 3
+        },
+        "1994": {
+          "runs": 1,
+          "cleanRuns": 1,
+          "scanned": 3
+        },
+        "1995": {
+          "runs": 1,
+          "cleanRuns": 1,
+          "scanned": 3
+        },
+        "1996": {
+          "runs": 1,
+          "cleanRuns": 1,
+          "scanned": 3
+        },
+        "1997": {
+          "runs": 1,
+          "cleanRuns": 1,
+          "scanned": 3
+        },
+        "1998": {
+          "runs": 1,
+          "cleanRuns": 1,
+          "scanned": 3
         }
       }
     },

@@ -681,6 +681,90 @@
           "years": [
             "2019"
           ]
+        },
+        {
+          "offset": 0,
+          "selected": 3,
+          "scanned": 3,
+          "errors": 0,
+          "oversized": 0,
+          "explicitUnresolved": 0,
+          "clean": true,
+          "years": [
+            "2020"
+          ]
+        },
+        {
+          "offset": 0,
+          "selected": 3,
+          "scanned": 3,
+          "errors": 0,
+          "oversized": 0,
+          "explicitUnresolved": 0,
+          "clean": true,
+          "years": [
+            "2021"
+          ]
+        },
+        {
+          "offset": 0,
+          "selected": 3,
+          "scanned": 3,
+          "errors": 0,
+          "oversized": 0,
+          "explicitUnresolved": 0,
+          "clean": true,
+          "years": [
+            "2022"
+          ]
+        },
+        {
+          "offset": 0,
+          "selected": 3,
+          "scanned": 3,
+          "errors": 0,
+          "oversized": 0,
+          "explicitUnresolved": 0,
+          "clean": true,
+          "years": [
+            "2023"
+          ]
+        },
+        {
+          "offset": 0,
+          "selected": 3,
+          "scanned": 3,
+          "errors": 0,
+          "oversized": 0,
+          "explicitUnresolved": 0,
+          "clean": true,
+          "years": [
+            "2024"
+          ]
+        },
+        {
+          "offset": 0,
+          "selected": 3,
+          "scanned": 3,
+          "errors": 0,
+          "oversized": 0,
+          "explicitUnresolved": 0,
+          "clean": true,
+          "years": [
+            "2025"
+          ]
+        },
+        {
+          "offset": 0,
+          "selected": 3,
+          "scanned": 3,
+          "errors": 0,
+          "oversized": 0,
+          "explicitUnresolved": 0,
+          "clean": true,
+          "years": [
+            "2026"
+          ]
         }
       ],
       "available": 27916,
@@ -956,6 +1040,41 @@
           "scanned": 3
         },
         "2019": {
+          "runs": 1,
+          "cleanRuns": 1,
+          "scanned": 3
+        },
+        "2020": {
+          "runs": 1,
+          "cleanRuns": 1,
+          "scanned": 3
+        },
+        "2021": {
+          "runs": 1,
+          "cleanRuns": 1,
+          "scanned": 3
+        },
+        "2022": {
+          "runs": 1,
+          "cleanRuns": 1,
+          "scanned": 3
+        },
+        "2023": {
+          "runs": 1,
+          "cleanRuns": 1,
+          "scanned": 3
+        },
+        "2024": {
+          "runs": 1,
+          "cleanRuns": 1,
+          "scanned": 3
+        },
+        "2025": {
+          "runs": 1,
+          "cleanRuns": 1,
+          "scanned": 3
+        },
+        "2026": {
           "runs": 1,
           "cleanRuns": 1,
           "scanned": 3

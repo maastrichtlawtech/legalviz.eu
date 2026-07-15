@@ -266,6 +266,8 @@
     "structuredVersionUnavailable": "The structured LegalViz version of this law is not available right now.",
     "lawContentUnavailable": "The law content is unavailable right now.",
     "toggleContents": "Toggle contents",
+    "expandContents": "Show chapter titles",
+    "collapseContents": "Collapse to chapter markers",
     "startReading": "Start reading",
     "quickNavigation": "Quick Navigation",
     "quickNavigationHelp": "Jump directly to a specific article, recital, or annex number.",

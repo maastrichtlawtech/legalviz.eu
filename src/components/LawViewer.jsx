@@ -50,6 +50,9 @@ export function LawViewer() {
   const location = useLocation();
   const { locale, setLocale, localizePath, t } = useI18n();
   const [searchParams, setSearchParams] = useSearchParams();
+  // Parallel-language reading collapses the chapter rail to buy column width;
+  // this lets the reader pull the titled rail back without leaving the mode.
+  const [isRailExpanded, setIsRailExpanded] = React.useState(false);
   const importCelex = searchParams.get("celex");
   const sourceUrl = searchParams.get("sourceUrl");
   const { allLaws, libraryVersion } = useLandingLibrary();
@@ -470,7 +473,9 @@ export function LawViewer() {
             hasLoadedContent={derived.hasLoadedContent}
             isOverview={isOverview}
             onGoOverview={goToOverview}
-            collapsed={derived.isSideBySide}
+            collapsed={derived.isSideBySide && !isRailExpanded}
+            onExpand={() => setIsRailExpanded(true)}
+            onCollapse={derived.isSideBySide ? () => setIsRailExpanded(false) : undefined}
             t={t}
           />
 

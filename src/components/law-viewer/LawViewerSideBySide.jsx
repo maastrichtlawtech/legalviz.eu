@@ -73,6 +73,20 @@ export function LawViewerSideBySide({
     />
   );
 
+  // The aligned bar lays its controls out on one line, so the selector is used
+  // without its stacked label (which would make it taller than everything else
+  // and drag the row off centre); the caption beside it carries the meaning.
+  const inlineSecondaryLanguageSelector = (
+    <LanguageSelector
+      currentLang={secondaryLang}
+      onChangeLang={setSecondaryLanguage}
+      hasCelex={hasCelex}
+      excludeLanguages={[formexLang]}
+      align="left"
+      showCode={false}
+    />
+  );
+
   const closeButton = (
     <button
       type="button"
@@ -107,16 +121,11 @@ export function LawViewerSideBySide({
 
       {isAligned ? (
         <div className="hidden rounded-2xl border border-gray-200 bg-white p-6 shadow-sm xl:block dark:border-gray-800 dark:bg-gray-900">
-          <div className="mb-5 flex flex-wrap items-center gap-3">
-            <div className="flex items-center overflow-hidden rounded-lg border border-gray-200 text-[12.5px] dark:border-gray-700">
-              <span className="bg-eu-blue-soft px-3 py-1.5 font-semibold text-eu-blue dark:bg-eu-blue-soft-dark dark:text-eu-blue-bright">
-                {primaryName}
-              </span>
-              <span className="border-l border-gray-200 bg-eu-blue-soft px-3 py-1.5 font-semibold text-eu-blue dark:border-gray-700 dark:bg-eu-blue-soft-dark dark:text-eu-blue-bright">
-                {secondaryName}
-              </span>
-            </div>
-            {secondaryLanguageSelector}
+          <div className="mb-5 flex flex-wrap items-center gap-x-3 gap-y-2">
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+              {t("lawViewer.secondaryLanguage")}
+            </span>
+            {inlineSecondaryLanguageSelector}
             <span className="text-[11.5px] text-gray-400 dark:text-gray-500">
               {t("lawViewer.alignedByParagraph")}
             </span>

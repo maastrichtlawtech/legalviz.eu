@@ -1,4 +1,4 @@
-import { Home, Menu, X } from "lucide-react";
+import { Home, Menu, PanelLeftClose, PanelLeftOpen, X } from "lucide-react";
 import { NavigationControls } from "../NavigationControls.jsx";
 import { LawViewerQuickNavigation } from "./LawViewerQuickNavigation.jsx";
 import { LawViewerToc } from "./LawViewerToc.jsx";
@@ -18,10 +18,29 @@ function chapterContainsSelection(chapter, selected) {
 // Slim chapter strip shown instead of the full rail while parallel-language
 // reading is active on xl screens: home + one marker per chapter, the active
 // chapter in gold. Clicking a marker jumps to the chapter's first article.
-function CollapsedRail({ selection, selected, isOverview, onGoOverview, t }) {
+// A marker alone ("III") does not say which chapter it is, so the strip leads
+// with an expand control back to the titled rail — without it the collapse
+// reads as breakage rather than a mode.
+function CollapsedRail({
+  selection,
+  selected,
+  isOverview,
+  onGoOverview,
+  onExpand,
+  t,
+}) {
   return (
     <aside className="order-1 hidden w-14 shrink-0 xl:sticky xl:top-20 xl:block xl:max-h-[calc(100vh-6rem)] xl:overflow-y-auto">
       <div className="flex flex-col items-center gap-1 rounded-2xl border border-gray-200 bg-white py-3 dark:border-gray-800 dark:bg-gray-900">
+        <button
+          type="button"
+          onClick={() => onExpand?.()}
+          title={t("lawViewer.expandContents")}
+          aria-label={t("lawViewer.expandContents")}
+          className="mb-1 flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-gray-50 hover:text-gray-700 dark:text-gray-500 dark:hover:bg-gray-800/60 dark:hover:text-gray-200"
+        >
+          <PanelLeftOpen size={15} />
+        </button>
         <button
           type="button"
           onClick={() => onGoOverview?.()}
@@ -51,10 +70,10 @@ function CollapsedRail({ selection, selected, isOverview, onGoOverview, t }) {
               }}
               title={title}
               aria-label={title}
-              className={`flex h-8 w-8 items-center justify-center rounded-lg font-serif text-xs italic transition-colors ${
+              className={`flex h-8 w-8 items-center justify-center rounded-lg font-serif text-sm italic transition-colors ${
                 isActive
                   ? "bg-eu-gold-soft font-semibold text-eu-gold-deep dark:bg-eu-gold-soft-dark dark:text-eu-gold-bright"
-                  : "text-gray-400 hover:bg-gray-50 hover:text-gray-700 dark:text-gray-500 dark:hover:bg-gray-800/60 dark:hover:text-gray-200"
+                  : "text-gray-500 hover:bg-gray-50 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-gray-800/60 dark:hover:text-gray-200"
               }`}
             >
               {marker}
@@ -79,6 +98,8 @@ export function LawViewerSidebar({
   isOverview,
   onGoOverview,
   collapsed = false,
+  onExpand,
+  onCollapse,
   t,
 }) {
   if (collapsed) {
@@ -89,6 +110,7 @@ export function LawViewerSidebar({
           selected={selected}
           isOverview={isOverview}
           onGoOverview={onGoOverview}
+          onExpand={onExpand}
           t={t}
         />
         <FullRail
@@ -123,6 +145,7 @@ export function LawViewerSidebar({
       hasLoadedContent={hasLoadedContent}
       isOverview={isOverview}
       onGoOverview={onGoOverview}
+      onCollapse={onCollapse}
       t={t}
     />
   );
@@ -140,6 +163,7 @@ function FullRail({
   hasLoadedContent,
   isOverview,
   onGoOverview,
+  onCollapse,
   hiddenOnXl = false,
   t,
 }) {
@@ -179,8 +203,21 @@ function FullRail({
         />
 
         <div>
-          <div className="mb-2 px-1 text-[10.5px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">
-            {t("lawViewer.tableOfContents")}
+          <div className="mb-2 flex items-center justify-between gap-2 px-1">
+            <span className="text-[10.5px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">
+              {t("lawViewer.tableOfContents")}
+            </span>
+            {onCollapse ? (
+              <button
+                type="button"
+                onClick={() => onCollapse()}
+                title={t("lawViewer.collapseContents")}
+                aria-label={t("lawViewer.collapseContents")}
+                className="hidden rounded-md p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 xl:block dark:text-gray-500 dark:hover:bg-gray-800 dark:hover:text-gray-200"
+              >
+                <PanelLeftClose size={14} />
+              </button>
+            ) : null}
           </div>
           <LawViewerToc
             loading={loading}

@@ -1,0 +1,120 @@
+{
+  "schemaVersion": 1,
+  "description": "Seed evaluation set for EU-law search. The first 15 cases preserve the regression queries introduced with the MiniSearch integration in commit 63a3ef0.",
+  "cases": [
+    {
+      "id": "gdpr-celex",
+      "category": "exact",
+      "query": "32016R0679",
+      "expectedCelexes": ["32016R0679"]
+    },
+    {
+      "id": "gdpr-reference",
+      "category": "reference",
+      "query": "regulation 2016/679",
+      "expectedCelexes": ["32016R0679"]
+    },
+    {
+      "id": "digital-markets-title",
+      "category": "title",
+      "query": "digital markets act",
+      "expectedCelexes": ["32022R1925"]
+    },
+    {
+      "id": "digital-services-title",
+      "category": "title",
+      "query": "digital services act",
+      "expectedCelexes": ["32022R2065"]
+    },
+    {
+      "id": "data-act-title",
+      "category": "title",
+      "query": "data act",
+      "expectedCelexes": ["32023R2854"]
+    },
+    {
+      "id": "data-governance-title",
+      "category": "title",
+      "query": "data governance act",
+      "expectedCelexes": ["32022R0868"]
+    },
+    {
+      "id": "ecommerce-alias",
+      "category": "alias",
+      "query": "ecommerce",
+      "expectedCelexes": ["32000L0031"]
+    },
+    {
+      "id": "eprivacy-alias",
+      "category": "alias",
+      "query": "eprivacy",
+      "expectedCelexes": ["32002L0058"]
+    },
+    {
+      "id": "payment-services-title",
+      "category": "title",
+      "query": "payment services directive",
+      "expectedCelexes": ["32015L2366", "32007L0064"]
+    },
+    {
+      "id": "gdpr-typo",
+      "category": "typo",
+      "query": "genral data protection",
+      "expectedCelexes": ["32016R0679"]
+    },
+    {
+      "id": "ai-act-typo",
+      "category": "typo",
+      "query": "artifical intelligence act",
+      "expectedCelexes": ["32024R1689"]
+    },
+    {
+      "id": "digital-markets-prefix",
+      "category": "prefix",
+      "query": "digital mark",
+      "expectedCelexes": ["32022R1925"]
+    },
+    {
+      "id": "csrd-acronym",
+      "category": "alias",
+      "query": "csrd",
+      "expectedCelexes": ["32022L2464"]
+    },
+    {
+      "id": "mica-acronym",
+      "category": "alias",
+      "query": "mica",
+      "expectedCelexes": ["32023R1114"]
+    },
+    {
+      "id": "emfa-acronym",
+      "category": "alias",
+      "query": "emfa",
+      "expectedCelexes": ["32024R1083"]
+    },
+    {
+      "id": "broadcast-copyright-title",
+      "category": "title",
+      "query": "broadcasting copyright",
+      "expectedCelexes": ["32019L0789", "31993L0083"]
+    },
+    {
+      "id": "digital-single-market-copyright",
+      "category": "title",
+      "query": "copyright digital single market",
+      "expectedCelexes": ["32019L0790"]
+    },
+    {
+      "id": "gdpr-phrase",
+      "category": "title",
+      "query": "protection of natural persons personal data",
+      "expectedCelexes": ["32016R0679"]
+    },
+    {
+      "id": "media-freedom-prefix",
+      "category": "prefix",
+      "query": "european media free",
+      "expectedCelexes": ["32024R1083"]
+    }
+  ]
+}

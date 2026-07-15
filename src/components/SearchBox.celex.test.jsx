@@ -135,6 +135,27 @@ describe("SearchBox — CELEX / EUR-Lex direct open", () => {
     expect(document.body.textContent).toContain("Open directly");
   });
 
+  it("queries the backend by canonical CELEX for a pasted EUR-Lex URL", async () => {
+    // The backend anchors its CELEX regex at the start of the query, so a raw
+    // URL never resolves to an exact match. Sending the derived CELEX makes the
+    // indexed act surface as the top result instead of being buried in fuzzy
+    // token hits.
+    searchLaws.mockResolvedValue({
+      results: [{ celex: "32023R2854", title: "Data Act", date: "2023-12-13" }],
+    });
+    renderSearchBox(vi.fn());
+
+    typeQuery("https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32023R2854");
+    await flush();
+
+    expect(searchLaws).toHaveBeenCalled();
+    expect(searchLaws.mock.calls.at(-1)[0]).toBe("32023R2854");
+    // The indexed exact match wins — no synthetic "Open directly" is injected,
+    // and it isn't duplicated.
+    const lawHits = resultButtons().filter((b) => b.textContent.includes("2023/2854"));
+    expect(lawHits.length).toBe(1);
+  });
+
   it("opens a pasted EUR-Lex URL by deriving its CELEX", async () => {
     searchLaws.mockResolvedValue({ results: [] });
     const onNavigate = vi.fn();

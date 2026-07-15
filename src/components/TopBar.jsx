@@ -261,7 +261,15 @@ export function SearchBox({
       directCelex: true,
     });
 
-    searchLawsApi(trimmedQuery, { limit: 12, signal: controller.signal })
+    // A pasted EUR-Lex URL (or "CELEX:"-prefixed id) identifies exactly one act,
+    // but the backend anchors its CELEX regex at the start of the query, so it
+    // never extracts the id from the surrounding URL text and falls back to a
+    // fuzzy token search — leaving the target buried among unrelated hits. When
+    // we've already resolved the CELEX client-side, query the backend by that
+    // canonical id so it returns the act as the deterministic top result.
+    const backendQuery = celexQuery || trimmedQuery;
+
+    searchLawsApi(backendQuery, { limit: 12, signal: controller.signal })
       .then((payload) => {
         const nextResults = Array.isArray(payload?.results)
           ? payload.results.map((item) => ({

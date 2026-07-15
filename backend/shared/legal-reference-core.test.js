@@ -104,6 +104,10 @@ test('shared resolver handles modern and legacy EU numbering conventions', () =>
     '31964S0001',
   );
   assert.equal(
+    resolveInstrumentCelex({ actType: 'recommendation', identifier: '328/77/ECSC', hasNo: true }),
+    '31977S0328',
+  );
+  assert.equal(
     resolveInstrumentCelex({ actType: 'regulation', identifier: '2040/2000', institutionalIssuer: true }),
     '32000R2040',
   );

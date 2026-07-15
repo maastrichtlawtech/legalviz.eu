@@ -656,6 +656,16 @@ describe("extractCrossRefsFromText — multilingual instruments", () => {
       expect.objectContaining({ actCelex: "31971R1408" }),
     ]);
   });
+
+  it("repairs a missing identifier digit only when the complete form is locally corroborated", () => {
+    const refs = extractCrossRefsFromText(
+      "Regulation (EC) No 1493/199; Regulation (EC) No 1493/1999.",
+      getLangConfig("EN"),
+    );
+    expect(refs.filter((ref) => ref.target === "1493/1999")).toEqual([
+      expect.objectContaining({ actCelex: "31999R1493" }),
+    ]);
+  });
 });
 
 describe("parseFmxToCombined — preamble citation context", () => {

@@ -34,7 +34,7 @@ const {
  * Bump this whenever the parser output changes (new fields, bug fixes, etc.)
  * so that cached parsed results are automatically re-parsed from raw XML.
  */
-export const PARSER_VERSION = 15;
+export const PARSER_VERSION = 16;
 
 // ---------------------------------------------------------------------------
 // FMX → HTML conversion helpers
@@ -660,6 +660,38 @@ export function repairCorroboratedTruncatedInstrumentIdentifiers(refs) {
     if (candidates.length !== 1) continue;
     const candidate = candidates[0];
     Object.assign(ref, {
+      actCelex: candidate.actCelex,
+      identifier: candidate.identifier,
+      year: candidate.year,
+      number: candidate.number,
+      suffix: candidate.suffix,
+    });
+  }
+
+  // A dropped digit can leave an otherwise valid identifier ("1493/199" for
+  // "1493/1999"). As with every other repair here, require one uniquely
+  // corroborated same-type citation in the same document; never infer it from
+  // the damaged token in isolation.
+  const isOmissionVariant = (shortValue, longValue) => {
+    if (shortValue.length > longValue.length || longValue.length - shortValue.length > 2) return false;
+    let shortIndex = 0;
+    for (const char of longValue) if (char === shortValue[shortIndex]) shortIndex += 1;
+    return shortIndex === shortValue.length;
+  };
+  for (const ref of refs) {
+    if (ref.type !== "external" || ref.actCelex || !ref.actType || !/^\d{1,4}\/\d{1,4}(?:\/[A-Z]+)?$/i.test(ref.target || "")) continue;
+    const candidates = [...new Map(refs.filter((candidate) => {
+      if (candidate.type !== "external" || candidate.actType !== ref.actType || !candidate.actCelex) return false;
+      const shortParts = String(ref.target).split("/");
+      const longParts = String(candidate.target || "").split("/");
+      return shortParts.length === longParts.length
+        && shortParts.every((part, index) => isOmissionVariant(part, longParts[index]))
+        && shortParts.some((part, index) => part !== longParts[index]);
+    }).map((candidate) => [candidate.actCelex, candidate])).values()];
+    if (candidates.length !== 1) continue;
+    const candidate = candidates[0];
+    Object.assign(ref, {
+      target: candidate.target,
       actCelex: candidate.actCelex,
       identifier: candidate.identifier,
       year: candidate.year,

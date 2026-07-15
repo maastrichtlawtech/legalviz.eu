@@ -101,7 +101,7 @@ function parseInstrumentIdentifier({ actType, identifier, hasNo = false, allowHi
   } else if ((type === 'directive'
     || (type === 'regulation' && (allowHistoricalNoLabel || first.length <= 3 || institutionalIssuer || suffix === 'EEC' || suffix === 'EC'))
     || (type === 'decision' && suffix === 'ECSC')
-    || (type === 'recommendation' && ecscAuthority))
+    || (type === 'recommendation' && (ecscAuthority || suffix === 'ECSC')))
     && first.length >= 1 && second.length === 2 && Number(second) >= 50) {
     yearPart = second;
     numberPart = first;
@@ -135,7 +135,8 @@ function resolveInstrumentCelex({ actType, identifier, hasNo = false, allowHisto
   const { year, number, suffix } = parseInstrumentIdentifier({ actType, identifier, hasNo, allowHistoricalNoLabel, ecscAuthority, institutionalIssuer });
   if (!year || !number) return null;
   const type = String(actType || '').toLowerCase();
-  const descriptor = (suffix === 'ECSC' && type === 'decision') || (ecscAuthority && type === 'recommendation') ? 'S' : code;
+  const descriptor = (suffix === 'ECSC' && (type === 'decision' || type === 'recommendation'))
+    || (ecscAuthority && type === 'recommendation') ? 'S' : code;
   return `3${year}${descriptor}${number.padStart(4, '0')}`;
 }
 

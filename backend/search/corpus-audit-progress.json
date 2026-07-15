@@ -11,7 +11,8 @@
           "errors": 0,
           "oversized": 0,
           "explicitUnresolved": 0,
-          "clean": true
+          "clean": true,
+          "empty": false
         },
         {
           "offset": 0,
@@ -20,7 +21,8 @@
           "errors": 0,
           "oversized": 0,
           "explicitUnresolved": 0,
-          "clean": true
+          "clean": true,
+          "empty": false
         },
         {
           "offset": 0,
@@ -32,7 +34,8 @@
           "clean": true,
           "years": [
             "1963"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -44,7 +47,8 @@
           "clean": true,
           "years": [
             "1964"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -56,7 +60,8 @@
           "clean": true,
           "years": [
             "1967"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -68,7 +73,8 @@
           "clean": true,
           "years": [
             "1968"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -80,7 +86,8 @@
           "clean": true,
           "years": [
             "1969"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -92,7 +99,8 @@
           "clean": true,
           "years": [
             "1970"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -104,7 +112,8 @@
           "clean": true,
           "years": [
             "1971"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -116,7 +125,8 @@
           "clean": true,
           "years": [
             "1972"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -128,7 +138,8 @@
           "clean": true,
           "years": [
             "1973"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -140,7 +151,8 @@
           "clean": true,
           "years": [
             "1974"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -152,7 +164,8 @@
           "clean": true,
           "years": [
             "1975"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -164,7 +177,8 @@
           "clean": true,
           "years": [
             "1976"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -176,7 +190,8 @@
           "clean": true,
           "years": [
             "1977"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -188,7 +203,8 @@
           "clean": true,
           "years": [
             "1978"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -200,7 +216,8 @@
           "clean": true,
           "years": [
             "1979"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -212,7 +229,8 @@
           "clean": true,
           "years": [
             "1980"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -224,7 +242,8 @@
           "clean": true,
           "years": [
             "1981"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -236,7 +255,8 @@
           "clean": true,
           "years": [
             "1982"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -248,7 +268,8 @@
           "clean": true,
           "years": [
             "1983"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -260,7 +281,8 @@
           "clean": true,
           "years": [
             "1984"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -272,7 +294,8 @@
           "clean": true,
           "years": [
             "1985"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -284,7 +307,8 @@
           "clean": true,
           "years": [
             "1986"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -296,7 +320,8 @@
           "clean": true,
           "years": [
             "1987"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -308,7 +333,8 @@
           "clean": true,
           "years": [
             "1988"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -320,7 +346,8 @@
           "clean": true,
           "years": [
             "1989"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -332,7 +359,8 @@
           "clean": true,
           "years": [
             "1990"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -344,7 +372,8 @@
           "clean": true,
           "years": [
             "1991"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -356,7 +385,8 @@
           "clean": true,
           "years": [
             "1992"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -368,7 +398,8 @@
           "clean": true,
           "years": [
             "1993"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -380,7 +411,8 @@
           "clean": true,
           "years": [
             "1994"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -392,7 +424,8 @@
           "clean": true,
           "years": [
             "1995"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -404,7 +437,8 @@
           "clean": true,
           "years": [
             "1996"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -416,7 +450,8 @@
           "clean": true,
           "years": [
             "1997"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -428,7 +463,8 @@
           "clean": true,
           "years": [
             "1998"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -440,7 +476,8 @@
           "clean": true,
           "years": [
             "1999"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -452,7 +489,8 @@
           "clean": true,
           "years": [
             "2000"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -464,7 +502,8 @@
           "clean": true,
           "years": [
             "2001"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -476,7 +515,8 @@
           "clean": true,
           "years": [
             "2002"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -488,7 +528,8 @@
           "clean": true,
           "years": [
             "2003"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -500,7 +541,8 @@
           "clean": true,
           "years": [
             "2004"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -512,7 +554,8 @@
           "clean": true,
           "years": [
             "2005"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -524,7 +567,8 @@
           "clean": true,
           "years": [
             "2006"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -536,7 +580,8 @@
           "clean": true,
           "years": [
             "2007"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -548,7 +593,8 @@
           "clean": true,
           "years": [
             "2008"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -560,7 +606,8 @@
           "clean": true,
           "years": [
             "2009"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -572,7 +619,8 @@
           "clean": true,
           "years": [
             "2010"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -584,7 +632,8 @@
           "clean": true,
           "years": [
             "2011"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -596,7 +645,8 @@
           "clean": true,
           "years": [
             "2012"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -608,7 +658,8 @@
           "clean": true,
           "years": [
             "2013"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -620,7 +671,8 @@
           "clean": true,
           "years": [
             "2014"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -632,7 +684,8 @@
           "clean": true,
           "years": [
             "2015"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -644,7 +697,8 @@
           "clean": true,
           "years": [
             "2016"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -656,7 +710,8 @@
           "clean": true,
           "years": [
             "2017"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -668,7 +723,8 @@
           "clean": true,
           "years": [
             "2018"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -680,7 +736,8 @@
           "clean": true,
           "years": [
             "2019"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -692,7 +749,8 @@
           "clean": true,
           "years": [
             "2020"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -704,7 +762,8 @@
           "clean": true,
           "years": [
             "2021"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -716,7 +775,8 @@
           "clean": true,
           "years": [
             "2022"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -728,7 +788,8 @@
           "clean": true,
           "years": [
             "2023"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -740,7 +801,8 @@
           "clean": true,
           "years": [
             "2024"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -752,7 +814,8 @@
           "clean": true,
           "years": [
             "2025"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -764,7 +827,8 @@
           "clean": true,
           "years": [
             "2026"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -2501,318 +2565,394 @@
             "2026"
           ],
           "emptyYears": []
+        },
+        {
+          "offset": 0,
+          "selected": 1,
+          "scanned": 1,
+          "errors": 0,
+          "oversized": 0,
+          "explicitUnresolved": 0,
+          "clean": true,
+          "empty": false,
+          "years": [
+            "1963"
+          ],
+          "emptyYears": []
         }
       ],
       "available": 27916,
       "years": {
         "1963": {
-          "runs": 3,
-          "cleanRuns": 3,
-          "scanned": 3
+          "runs": 4,
+          "cleanRuns": 4,
+          "emptyRuns": 0,
+          "scanned": 4
         },
         "1964": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 3
         },
         "1967": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 3
         },
         "1968": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 8
         },
         "1969": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 8
         },
         "1970": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 5
         },
         "1971": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 8
         },
         "1972": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "1973": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "1974": {
-          "runs": 5,
-          "cleanRuns": 5,
-          "scanned": 16
+          "runs": 3,
+          "cleanRuns": 3,
+          "emptyRuns": 0,
+          "scanned": 9
         },
         "1975": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "1976": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "1977": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "1978": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "1979": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "1980": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "1981": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "1982": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "1983": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "1984": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "1985": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "1986": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "1987": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "1988": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "1989": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "1990": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "1991": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "1992": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "1993": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "1994": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "1995": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "1996": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "1997": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "1998": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "1999": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "2000": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "2001": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "2002": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "2003": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "2004": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "2005": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "2006": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "2007": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "2008": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "2009": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "2010": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "2011": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "2012": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "2013": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "2014": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "2015": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "2016": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "2017": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "2018": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "2019": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "2020": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "2021": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "2022": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "2023": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "2024": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "2025": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "2026": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         }
       }
@@ -2827,7 +2967,8 @@
           "errors": 0,
           "oversized": 0,
           "explicitUnresolved": 0,
-          "clean": true
+          "clean": true,
+          "empty": false
         },
         {
           "offset": 0,
@@ -2839,7 +2980,8 @@
           "clean": true,
           "years": [
             "1953"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -2851,7 +2993,8 @@
           "clean": true,
           "years": [
             "1954"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -2863,7 +3006,8 @@
           "clean": true,
           "years": [
             "1956"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -2875,7 +3019,8 @@
           "clean": true,
           "years": [
             "1958"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -2887,7 +3032,8 @@
           "clean": true,
           "years": [
             "1959"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -2899,7 +3045,8 @@
           "clean": true,
           "years": [
             "1960"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -2911,7 +3058,8 @@
           "clean": true,
           "years": [
             "1961"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -2923,7 +3071,8 @@
           "clean": true,
           "years": [
             "1962"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -2935,7 +3084,8 @@
           "clean": true,
           "years": [
             "1963"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -2947,7 +3097,8 @@
           "clean": true,
           "years": [
             "1964"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -2959,7 +3110,8 @@
           "clean": true,
           "years": [
             "1965"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -2971,7 +3123,8 @@
           "clean": true,
           "years": [
             "1966"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -2983,7 +3136,8 @@
           "clean": true,
           "years": [
             "1967"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -2992,10 +3146,11 @@
           "errors": 0,
           "oversized": 0,
           "explicitUnresolved": 1,
-          "clean": true,
+          "clean": false,
           "years": [
             "1968"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -3007,7 +3162,8 @@
           "clean": true,
           "years": [
             "1969"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -3019,7 +3175,8 @@
           "clean": true,
           "years": [
             "1970"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -3031,7 +3188,8 @@
           "clean": true,
           "years": [
             "1971"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -3043,7 +3201,8 @@
           "clean": true,
           "years": [
             "1972"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -3055,7 +3214,8 @@
           "clean": true,
           "years": [
             "1973"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -3067,7 +3227,8 @@
           "clean": true,
           "years": [
             "1974"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -3079,7 +3240,8 @@
           "clean": true,
           "years": [
             "1975"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -3091,7 +3253,8 @@
           "clean": true,
           "years": [
             "1976"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -3103,7 +3266,8 @@
           "clean": true,
           "years": [
             "1977"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -3115,7 +3279,8 @@
           "clean": true,
           "years": [
             "1978"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -3127,7 +3292,8 @@
           "clean": true,
           "years": [
             "1979"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -3139,7 +3305,8 @@
           "clean": true,
           "years": [
             "1980"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -3151,7 +3318,8 @@
           "clean": true,
           "years": [
             "1981"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -3163,7 +3331,8 @@
           "clean": true,
           "years": [
             "1982"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -3175,7 +3344,8 @@
           "clean": true,
           "years": [
             "1983"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -3187,7 +3357,8 @@
           "clean": true,
           "years": [
             "1984"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -3199,7 +3370,8 @@
           "clean": true,
           "years": [
             "1985"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -3211,7 +3383,8 @@
           "clean": true,
           "years": [
             "1986"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -3223,7 +3396,8 @@
           "clean": true,
           "years": [
             "1987"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -3235,7 +3409,8 @@
           "clean": true,
           "years": [
             "1989"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -3247,7 +3422,8 @@
           "clean": true,
           "years": [
             "1990"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -3259,7 +3435,8 @@
           "clean": true,
           "years": [
             "1991"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -3271,7 +3448,8 @@
           "clean": true,
           "years": [
             "1992"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -3283,7 +3461,8 @@
           "clean": true,
           "years": [
             "1993"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -3295,7 +3474,8 @@
           "clean": true,
           "years": [
             "1994"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -3307,7 +3487,8 @@
           "clean": true,
           "years": [
             "1995"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -3319,7 +3500,8 @@
           "clean": true,
           "years": [
             "1996"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -3331,7 +3513,8 @@
           "clean": true,
           "years": [
             "1997"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -3343,7 +3526,8 @@
           "clean": true,
           "years": [
             "1998"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -3355,7 +3539,8 @@
           "clean": true,
           "years": [
             "1999"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -3367,7 +3552,8 @@
           "clean": true,
           "years": [
             "2000"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -3379,7 +3565,8 @@
           "clean": true,
           "years": [
             "2001"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -3391,7 +3578,8 @@
           "clean": true,
           "years": [
             "2002"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -3403,7 +3591,8 @@
           "clean": true,
           "years": [
             "2003"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -3415,7 +3604,8 @@
           "clean": true,
           "years": [
             "2004"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -3427,7 +3617,8 @@
           "clean": true,
           "years": [
             "2005"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -3439,7 +3630,8 @@
           "clean": true,
           "years": [
             "2006"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -3451,7 +3643,8 @@
           "clean": true,
           "years": [
             "2007"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -3463,7 +3656,8 @@
           "clean": true,
           "years": [
             "2008"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -3475,7 +3669,8 @@
           "clean": true,
           "years": [
             "2009"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -3487,7 +3682,8 @@
           "clean": true,
           "years": [
             "2010"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -3499,7 +3695,8 @@
           "clean": true,
           "years": [
             "2011"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -3511,7 +3708,8 @@
           "clean": true,
           "years": [
             "2012"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -3523,7 +3721,8 @@
           "clean": true,
           "years": [
             "2014"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -3533,7 +3732,8 @@
           "oversized": 0,
           "explicitUnresolved": 0,
           "clean": false,
-          "years": []
+          "years": [],
+          "empty": true
         },
         {
           "offset": 0,
@@ -3805,7 +4005,7 @@
           "errors": 0,
           "oversized": 0,
           "explicitUnresolved": 2,
-          "clean": true,
+          "clean": false,
           "empty": false,
           "years": [
             "1972"
@@ -5211,6 +5411,104 @@
             "2014"
           ],
           "emptyYears": []
+        },
+        {
+          "offset": 0,
+          "selected": 3,
+          "scanned": 3,
+          "errors": 0,
+          "oversized": 0,
+          "explicitUnresolved": 1,
+          "clean": false,
+          "empty": false,
+          "years": [
+            "1968"
+          ],
+          "emptyYears": []
+        },
+        {
+          "offset": 85,
+          "selected": 3,
+          "scanned": 3,
+          "errors": 0,
+          "oversized": 0,
+          "explicitUnresolved": 2,
+          "clean": false,
+          "empty": false,
+          "years": [
+            "1972"
+          ],
+          "emptyYears": []
+        },
+        {
+          "offset": 0,
+          "selected": 3,
+          "scanned": 3,
+          "errors": 0,
+          "oversized": 0,
+          "explicitUnresolved": 0,
+          "clean": true,
+          "empty": false,
+          "years": [
+            "1968"
+          ],
+          "emptyYears": []
+        },
+        {
+          "offset": 85,
+          "selected": 3,
+          "scanned": 3,
+          "errors": 0,
+          "oversized": 0,
+          "explicitUnresolved": 0,
+          "clean": true,
+          "empty": false,
+          "years": [
+            "1972"
+          ],
+          "emptyYears": []
+        },
+        {
+          "offset": 0,
+          "selected": 3,
+          "scanned": 3,
+          "errors": 0,
+          "oversized": 0,
+          "explicitUnresolved": 0,
+          "clean": true,
+          "empty": false,
+          "years": [
+            "1968"
+          ],
+          "emptyYears": []
+        },
+        {
+          "offset": 85,
+          "selected": 3,
+          "scanned": 3,
+          "errors": 0,
+          "oversized": 0,
+          "explicitUnresolved": 0,
+          "clean": true,
+          "empty": false,
+          "years": [
+            "1972"
+          ],
+          "emptyYears": []
+        },
+        {
+          "offset": 0,
+          "selected": 3,
+          "scanned": 3,
+          "errors": 0,
+          "oversized": 0,
+          "explicitUnresolved": 0,
+          "clean": true,
+          "empty": false,
+          "years": [
+            "1988"
+          ],
+          "emptyYears": []
         }
       ],
       "available": 52523,
@@ -5218,16 +5516,19 @@
         "1953": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 8
         },
         "1954": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 8
         },
         "1956": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 3
         },
         "1957": {
@@ -5239,281 +5540,337 @@
         "1958": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 3
         },
         "1959": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 5
         },
         "1960": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 8
         },
         "1961": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 3
         },
         "1962": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "1963": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "1964": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "1965": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "1966": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "1967": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "1968": {
-          "runs": 3,
-          "cleanRuns": 3,
-          "scanned": 9
+          "runs": 6,
+          "cleanRuns": 4,
+          "emptyRuns": 0,
+          "scanned": 18
         },
         "1969": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "1970": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "1971": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "1972": {
-          "runs": 3,
-          "cleanRuns": 3,
-          "scanned": 9
+          "runs": 6,
+          "cleanRuns": 4,
+          "emptyRuns": 0,
+          "scanned": 18
         },
         "1973": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "1974": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "1975": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "1976": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "1977": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "1978": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "1979": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "1980": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "1981": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "1982": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "1983": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "1984": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "1985": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "1986": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "1987": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "1988": {
           "runs": 3,
           "cleanRuns": 3,
-          "scanned": 11
+          "emptyRuns": 0,
+          "scanned": 9
         },
         "1989": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "1990": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "1991": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "1992": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "1993": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "1994": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "1995": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "1996": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "1997": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "1998": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "1999": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "2000": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "2001": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "2002": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "2003": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "2004": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "2005": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "2006": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "2007": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "2008": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "2009": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "2010": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "2011": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "2012": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 5
         },
         "2014": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         }
       }
@@ -5523,21 +5880,13 @@
       "runs": [
         {
           "offset": 0,
-          "selected": 5,
-          "scanned": 5,
-          "errors": 0,
-          "oversized": 0,
-          "explicitUnresolved": 0,
-          "clean": true
-        },
-        {
-          "offset": 0,
           "selected": 2,
           "scanned": 2,
           "errors": 0,
           "oversized": 0,
           "explicitUnresolved": 0,
-          "clean": true
+          "clean": true,
+          "empty": false
         },
         {
           "offset": 0,
@@ -5549,7 +5898,8 @@
           "clean": true,
           "years": [
             "1955"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -5561,7 +5911,8 @@
           "clean": true,
           "years": [
             "1961"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -5573,7 +5924,8 @@
           "clean": true,
           "years": [
             "1962"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -5585,7 +5937,8 @@
           "clean": true,
           "years": [
             "1963"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -5597,7 +5950,8 @@
           "clean": true,
           "years": [
             "1964"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -5609,7 +5963,8 @@
           "clean": true,
           "years": [
             "1965"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -5621,7 +5976,8 @@
           "clean": true,
           "years": [
             "1966"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -5633,7 +5989,8 @@
           "clean": true,
           "years": [
             "1967"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -5645,7 +6002,8 @@
           "clean": true,
           "years": [
             "1968"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -5657,7 +6015,8 @@
           "clean": true,
           "years": [
             "1969"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -5669,7 +6028,8 @@
           "clean": true,
           "years": [
             "1970"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -5681,7 +6041,8 @@
           "clean": true,
           "years": [
             "1971"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -5693,7 +6054,8 @@
           "clean": true,
           "years": [
             "1972"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -5705,7 +6067,8 @@
           "clean": true,
           "years": [
             "1973"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -5717,7 +6080,8 @@
           "clean": true,
           "years": [
             "1974"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -5729,7 +6093,8 @@
           "clean": true,
           "years": [
             "1975"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -5741,7 +6106,8 @@
           "clean": true,
           "years": [
             "1976"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -5753,7 +6119,8 @@
           "clean": true,
           "years": [
             "1977"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -5765,7 +6132,8 @@
           "clean": true,
           "years": [
             "1978"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -5777,7 +6145,8 @@
           "clean": true,
           "years": [
             "1979"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -5789,7 +6158,8 @@
           "clean": true,
           "years": [
             "1980"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -5801,7 +6171,8 @@
           "clean": true,
           "years": [
             "1981"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -5813,7 +6184,8 @@
           "clean": true,
           "years": [
             "1982"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -5825,7 +6197,8 @@
           "clean": true,
           "years": [
             "1983"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -5837,7 +6210,8 @@
           "clean": true,
           "years": [
             "1984"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -5849,7 +6223,8 @@
           "clean": true,
           "years": [
             "1985"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -5861,7 +6236,8 @@
           "clean": true,
           "years": [
             "1986"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -5873,7 +6249,8 @@
           "clean": true,
           "years": [
             "1987"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -5885,7 +6262,8 @@
           "clean": true,
           "years": [
             "1988"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -5897,7 +6275,8 @@
           "clean": true,
           "years": [
             "1989"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -5909,7 +6288,8 @@
           "clean": true,
           "years": [
             "1990"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -5921,7 +6301,8 @@
           "clean": true,
           "years": [
             "1991"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -5933,7 +6314,8 @@
           "clean": true,
           "years": [
             "1992"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -5945,7 +6327,8 @@
           "clean": true,
           "years": [
             "1993"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -5957,7 +6340,8 @@
           "clean": true,
           "years": [
             "1994"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -5969,7 +6353,8 @@
           "clean": true,
           "years": [
             "1995"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -5981,7 +6366,8 @@
           "clean": true,
           "years": [
             "1996"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -5993,7 +6379,8 @@
           "clean": true,
           "years": [
             "1997"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -6005,7 +6392,8 @@
           "clean": true,
           "years": [
             "1998"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -6017,7 +6405,8 @@
           "clean": true,
           "years": [
             "1999"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -6029,7 +6418,8 @@
           "clean": true,
           "years": [
             "2000"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -6041,7 +6431,8 @@
           "clean": true,
           "years": [
             "2001"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -6053,7 +6444,8 @@
           "clean": true,
           "years": [
             "2002"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -6065,7 +6457,8 @@
           "clean": true,
           "years": [
             "2003"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -6077,7 +6470,8 @@
           "clean": true,
           "years": [
             "2004"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -6089,7 +6483,8 @@
           "clean": true,
           "years": [
             "2005"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -6101,7 +6496,8 @@
           "clean": true,
           "years": [
             "2006"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -6113,7 +6509,8 @@
           "clean": true,
           "years": [
             "2007"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -6125,7 +6522,8 @@
           "clean": true,
           "years": [
             "2008"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -6137,7 +6535,8 @@
           "clean": true,
           "years": [
             "2009"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -6149,7 +6548,8 @@
           "clean": true,
           "years": [
             "2010"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -6161,7 +6561,8 @@
           "clean": true,
           "years": [
             "2011"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -6173,7 +6574,8 @@
           "clean": true,
           "years": [
             "2012"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -6185,7 +6587,8 @@
           "clean": true,
           "years": [
             "2013"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -6197,7 +6600,8 @@
           "clean": true,
           "years": [
             "2014"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -6209,7 +6613,8 @@
           "clean": true,
           "years": [
             "2015"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -6221,7 +6626,8 @@
           "clean": true,
           "years": [
             "2017"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -6233,7 +6639,8 @@
           "clean": true,
           "years": [
             "2018"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -6245,7 +6652,8 @@
           "clean": true,
           "years": [
             "2019"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -6257,7 +6665,8 @@
           "clean": true,
           "years": [
             "2020"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -6269,7 +6678,8 @@
           "clean": true,
           "years": [
             "2021"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -6281,7 +6691,8 @@
           "clean": true,
           "years": [
             "2022"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -6293,7 +6704,8 @@
           "clean": true,
           "years": [
             "2023"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -6305,7 +6717,8 @@
           "clean": true,
           "years": [
             "2024"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -6317,7 +6730,8 @@
           "clean": true,
           "years": [
             "2025"
-          ]
+          ],
+          "empty": false
         },
         {
           "offset": 0,
@@ -8166,338 +8580,432 @@
             "2025"
           ],
           "emptyYears": []
+        },
+        {
+          "offset": 0,
+          "selected": 1,
+          "scanned": 1,
+          "errors": 0,
+          "oversized": 0,
+          "explicitUnresolved": 0,
+          "clean": true,
+          "empty": false,
+          "years": [
+            "1955"
+          ],
+          "emptyYears": []
+        },
+        {
+          "offset": 0,
+          "selected": 3,
+          "scanned": 3,
+          "errors": 0,
+          "oversized": 0,
+          "explicitUnresolved": 0,
+          "clean": true,
+          "empty": false,
+          "years": [
+            "2016"
+          ],
+          "emptyYears": []
         }
       ],
       "available": 8752,
       "years": {
         "1955": {
-          "runs": 3,
-          "cleanRuns": 3,
-          "scanned": 3
+          "runs": 4,
+          "cleanRuns": 4,
+          "emptyRuns": 0,
+          "scanned": 4
         },
         "1961": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 3
         },
         "1962": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 5
         },
         "1963": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 8
         },
         "1964": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "1965": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "1966": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 3
         },
         "1967": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "1968": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "1969": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "1970": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "1971": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "1972": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "1973": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "1974": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "1975": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "1976": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "1977": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "1978": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "1979": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "1980": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "1981": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "1982": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "1983": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "1984": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "1985": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "1986": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "1987": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "1988": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "1989": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "1990": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "1991": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "1992": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "1993": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "1994": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "1995": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "1996": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "1997": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "1998": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "1999": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "2000": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "2001": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "2002": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "2003": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "2004": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "2005": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "2006": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "2007": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "2008": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "2009": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "2010": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "2011": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "2012": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "2013": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "2014": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "2015": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "2016": {
-          "runs": 4,
-          "cleanRuns": 4,
-          "scanned": 13
+          "runs": 3,
+          "cleanRuns": 3,
+          "emptyRuns": 0,
+          "scanned": 9
         },
         "2017": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "2018": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "2019": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "2020": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "2021": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "2022": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "2023": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "2024": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 9
         },
         "2025": {
           "runs": 3,
           "cleanRuns": 3,
+          "emptyRuns": 0,
           "scanned": 8
         }
       }

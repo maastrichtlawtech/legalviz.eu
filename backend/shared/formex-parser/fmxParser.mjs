@@ -539,7 +539,7 @@ function inferExternalActType(raw = "") {
   return null;
 }
 
-function normalizeFlattenedFootnoteIdentifier(identifier = "", followingText = "") {
+function normalizeFlattenedFootnoteIdentifier(identifier = "", followingText = "", citation = "") {
   // Formex prose can flatten a footnote marker directly onto a four-digit year:
   // "Regulation (EC) No 1864/2004" + note 2 becomes "1864/20042". A five-
   // digit tail beginning with a plausible 19xx/20xx year has no valid EU
@@ -554,6 +554,20 @@ function normalizeFlattenedFootnoteIdentifier(identifier = "", followingText = "
   const splitYear = String(identifier).match(/^(\d{1,4})\/(\d)$/);
   const continuation = String(followingText).match(/^\s*(?:\/\/\s*)?(\d)(?=\s*(?:[,.;)]|\(\d+\)))/);
   if (splitYear && continuation) return `${splitYear[1]}/${splitYear[2]}${continuation[1]}`;
+
+  // Old Regulation/Decision text can flatten a footnote marker onto a
+  // two-digit year: "No 729/702 ... 21 April 1970".  The date immediately
+  // following the citation makes the repair bounded: delete one digit only
+  // when exactly one result matches that year.  Keep directives out of this
+  // branch because their normal order is year/number and is handled below.
+  const numberFirstFootnote = String(identifier).match(/^(\d{3,4})\/(\d{3})(\/[^/\s]+)?$/);
+  const citedYear = String(followingText).slice(0, 180).match(/\b(?:19|20)(\d{2})\b/);
+  if (numberFirstFootnote && citedYear && inferExternalActType(citation) !== "directive") {
+    const candidates = [...new Set([...numberFirstFootnote[2]].map((_, index) => (
+      `${numberFirstFootnote[2].slice(0, index)}${numberFirstFootnote[2].slice(index + 1)}`
+    )))].filter((year) => year === citedYear[1]);
+    if (candidates.length === 1) return `${numberFirstFootnote[1]}/${candidates[0]}${numberFirstFootnote[3] || ""}`;
+  }
 
   // A few early directives have a footnote digit flattened into their
   // year-first two-digit identifier ("667/654/EEC" for "67/654/EEC"). The
@@ -993,7 +1007,7 @@ export function extractCrossRefsFromText(text, lang) {
     const institutionalContext = text.slice(Math.max(0, m.index - 120), m.index + 220);
     const ecscAuthority = /\bHigh Authority\b/i.test(text.slice(Math.max(0, m.index - 80), m.index + 80));
     const institutionalIssuer = hasInstitutionalIssuerContext(text, m.index);
-    const target = normalizeFlattenedFootnoteIdentifier(m[1], text.slice(m.index + m[0].length));
+    const target = normalizeFlattenedFootnoteIdentifier(m[1], text.slice(m.index + m[0].length), m[0]);
     externalRefs.push({
       type: "external",
       target,
@@ -1177,7 +1191,7 @@ export function injectCrossRefLinks(html, lang) {
     EXTERNAL_LAW_RE.lastIndex = 0;
     let match;
     while ((match = EXTERNAL_LAW_RE.exec(text)) !== null) {
-      const target = normalizeFlattenedFootnoteIdentifier(match[1], text.slice(match.index + match[0].length));
+      const target = normalizeFlattenedFootnoteIdentifier(match[1], text.slice(match.index + match[0].length), match[0]);
       const ecscAuthority = /\bHigh Authority\b/i.test(text.slice(Math.max(0, match.index - 80), match.index + 80));
       const institutionalIssuer = hasInstitutionalIssuerContext(text, match.index);
       const meta = parseExternalLawMeta(match[0], target, { ecscAuthority, institutionalIssuer });

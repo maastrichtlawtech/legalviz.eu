@@ -547,6 +547,20 @@ describe("extractCrossRefsFromText — multilingual instruments", () => {
     }));
   });
 
+  it("repairs a historical year footnote when the adjacent citation date corroborates it", () => {
+    const refs = extractCrossRefsFromText(
+      "Council Regulation No 136/661 EEC of 22 September 1966; " +
+      "Council Regulation (EEC) No 729/702 of 21 April 1970; " +
+      "Council Regulation (EEC) No 827/681 of 28 June 1968.",
+      getLangConfig("EN"),
+    );
+    expect(refs).toEqual(expect.arrayContaining([
+      expect.objectContaining({ target: "136/66", actCelex: "31966R0136" }),
+      expect.objectContaining({ target: "729/70", actCelex: "31970R0729" }),
+      expect.objectContaining({ target: "827/68", actCelex: "31968R0827" }),
+    ]));
+  });
+
   it("repairs a two-digit year split across adjacent old HTML fragments", () => {
     const refs = extractCrossRefsFromText("Council Regulation (EEC) No 2894/7 // 9 ,", getLangConfig("EN"));
     expect(refs).toContainEqual(expect.objectContaining({

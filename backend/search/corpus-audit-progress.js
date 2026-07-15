@@ -35,7 +35,8 @@ function recordAudit({
 }) {
   const progress = readProgress(file);
   const entry = progress.corpora[kind] || { verifiedRanges: [], runs: [] };
-  const clean = selected > 0 && !stats.errors && !stats.oversized;
+  const explicitUnresolved = stats.explicitUnresolved || stats.unresolved || 0;
+  const clean = selected > 0 && !stats.errors && !stats.oversized && !explicitUnresolved;
   const empty = selected === 0;
   if (clean && rangeStable) entry.verifiedRanges = mergeRanges([...entry.verifiedRanges, [offset, offset + selected]]);
   entry.available = available;
@@ -45,27 +46,32 @@ function recordAudit({
     scanned: stats.scanned,
     errors: stats.errors || 0,
     oversized: stats.oversized || 0,
-    explicitUnresolved: stats.explicitUnresolved || stats.unresolved || 0,
+    explicitUnresolved,
     clean,
     empty,
     years: [...new Set(years)],
     emptyYears: [...new Set(emptyYears)],
   });
-  entry.runs = entry.runs.slice(-200);
-  entry.years = entry.years || {};
-  for (const year of new Set(years)) {
-    const yearEntry = entry.years[year] || { runs: 0, cleanRuns: 0, emptyRuns: 0, scanned: 0 };
-    yearEntry.runs += 1;
-    yearEntry.scanned += stats.scanned || 0;
-    if (clean) yearEntry.cleanRuns += 1;
-    if (empty) yearEntry.emptyRuns = (yearEntry.emptyRuns || 0) + 1;
-    entry.years[year] = yearEntry;
-  }
-  for (const year of new Set(emptyYears)) {
-    const yearEntry = entry.years[year] || { runs: 0, cleanRuns: 0, emptyRuns: 0, scanned: 0 };
-    yearEntry.runs += 1;
-    yearEntry.emptyRuns = (yearEntry.emptyRuns || 0) + 1;
-    entry.years[year] = yearEntry;
+  entry.runs = entry.runs.slice(-200).map((run) => ({
+    ...run,
+    clean: run.selected > 0 && !run.errors && !run.oversized && !(run.explicitUnresolved || run.unresolved),
+    empty: run.selected === 0,
+  }));
+  entry.years = {};
+  for (const run of entry.runs) {
+    for (const year of new Set(run.years || [])) {
+      const yearEntry = entry.years[year] || { runs: 0, cleanRuns: 0, emptyRuns: 0, scanned: 0 };
+      yearEntry.runs += 1;
+      yearEntry.scanned += run.scanned || 0;
+      if (run.clean) yearEntry.cleanRuns += 1;
+      entry.years[year] = yearEntry;
+    }
+    for (const year of new Set(run.emptyYears || [])) {
+      const yearEntry = entry.years[year] || { runs: 0, cleanRuns: 0, emptyRuns: 0, scanned: 0 };
+      yearEntry.runs += 1;
+      yearEntry.emptyRuns += 1;
+      entry.years[year] = yearEntry;
+    }
   }
   progress.corpora[kind] = entry;
   fs.writeFileSync(file, `${JSON.stringify(progress, null, 2)}\n`);

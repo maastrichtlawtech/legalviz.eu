@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "preserveOldTopWithin": 5,
+  "cases": [
+    { "query": "32016R0679", "expectedCelex": "32016R0679", "maxRank": 1 },
+    { "query": "regulation 2016/679", "expectedCelex": "32016R0679", "maxRank": 1 },
+    { "query": "general data protection regulation law", "expectedCelex": "32016R0679", "maxRank": 1 },
+    { "query": "digital markets act", "expectedCelex": "32022R1925", "maxRank": 1 },
+    { "query": "digital services act", "expectedCelex": "32022R2065", "maxRank": 1 },
+    { "query": "digital services act obligations", "expectedCelex": "32022R2065", "maxRank": 1 },
+    { "query": "data act", "expectedCelex": "32023R2854", "maxRank": 1 },
+    { "query": "data governance act", "expectedCelex": "32022R0868", "maxRank": 1 },
+    { "query": "ecommerce", "expectedCelex": "32000L0031", "maxRank": 1 },
+    { "query": "eprivacy", "expectedCelex": "32002L0058", "maxRank": 1 },
+    { "query": "payment services directive", "expectedCelex": "32015L2366", "maxRank": 1 },
+    { "query": "genral data protection", "expectedCelex": "32016R0679", "maxRank": 1 },
+    { "query": "artifical intelligence act", "expectedCelex": "32024R1689", "maxRank": 1 },
+    { "query": "digital mark", "expectedCelex": "32022R1925", "maxRank": 1 },
+    { "query": "csrd", "expectedCelex": "32022L2464", "maxRank": 1 },
+    { "query": "mica", "expectedCelex": "32023R1114", "maxRank": 1 },
+    { "query": "emfa", "expectedCelex": "32024R1083", "maxRank": 1 },
+    { "query": "european media freedom act pluralism", "expectedCelex": "32024R1083", "maxRank": 1 },
+    { "query": "right to repair directive consumers", "expectedCelex": "32024L1799", "maxRank": 1 },
+    { "query": "cyber resilience act products", "expectedCelex": "32024R2847", "maxRank": 1 },
+    { "query": "platform work directive workers", "expectedCelex": "32024L2831", "maxRank": 1 },
+    { "query": "automated decision-making" },
+    {
+      "query": "non personal data free flow",
+      "expectedCelex": "32018R1807",
+      "maxRank": 1,
+      "allowTopChange": true
+    },
+    {
+      "query": "payment services directive banking",
+      "expectedCelex": "32015L2366",
+      "maxRank": 1,
+      "allowTopChange": true
+    }
+  ]
+}

@@ -39,12 +39,13 @@ RUN mkdir -p search/data \
               "https://github.com/${DATA_RELEASE_REPO}/releases/download/${DATA_RELEASE_TAG}/$asset"; \
        done \
     && node search/build-sqlite-data.js \
-    && ls -lh search/data/data.sqlite
+    && ls -lh search/data/data.sqlite search/data/data.sqlite.manifest.json
 
 FROM dependencies AS final
 
 COPY . .
 COPY --from=data-builder /app/search/data/data.sqlite ./search/data/data.sqlite
+COPY --from=data-builder /app/search/data/data.sqlite.manifest.json ./search/data/data.sqlite.manifest.json
 
 RUN mkdir -p law-cache
 

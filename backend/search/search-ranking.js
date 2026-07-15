@@ -23,6 +23,7 @@ const KNOWN_ALIASES = {
     "privacy and electronic communications directive",
     "directive 2002/58",
   ],
+  "32015L2366": ["payment services directive", "psd2"],
   "32018L1972": ["european electronic communications code", "eecc"],
   "32022R0868": ["data governance act"],
   "32022R1925": ["digital markets act"],

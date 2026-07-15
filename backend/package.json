@@ -16,7 +16,8 @@
     "eval:search": "node --expose-gc search/eval/run.js",
     "build:sqlite-data": "node search/build-sqlite-data.js",
     "test": "node --test search/*.test.js shared/*.test.js routes/*.test.js bin/*.test.js mcp/*.test.js",
-    "test:search": "node --test search/*.test.js"
+    "test:search": "node --test search/*.test.js",
+    "test:search-parity": "node --expose-gc --max-old-space-size=6144 search/compare-search-backends.js"
   },
   "keywords": [
     "eur-lex",

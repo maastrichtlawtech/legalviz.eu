@@ -1,0 +1,65 @@
+name: Backend Docker
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "backend/**"
+      - ".github/workflows/backend-docker.yml"
+  push:
+    branches: [main]
+    paths:
+      - "backend/**"
+      - ".github/workflows/backend-docker.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: backend
+          load: true
+          tags: legalviz-backend:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Start backend
+        run: docker run --detach --name legalviz-backend --publish 3000:3000 legalviz-backend:ci
+      - name: Wait for health
+        run: |
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent http://127.0.0.1:3000/health >/dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker logs legalviz-backend
+          exit 1
+      - name: Smoke-test SQLite-backed interfaces
+        run: |
+          curl --fail --silent "http://127.0.0.1:3000/api/search?q=gdpr&limit=1" \
+            | jq --exit-status '.results[0].celex == "32016R0679"'
+          curl --fail --silent "http://127.0.0.1:3000/api/topics?celex=32016R0679" \
+            | jq --exit-status '.topics["32016R0679"] | length > 0'
+          curl --fail --silent "http://127.0.0.1:3000/api/resolve-reference?actType=regulation&year=2016&number=679" \
+            | jq --exit-status '.resolved.celex == "32016R0679"'
+          docker exec legalviz-backend node -e '
+            const fs = require("node:fs");
+            if (!fs.existsSync("search/data/data.sqlite")) throw new Error("SQLite artifact missing");
+            if (!fs.existsSync("search/data/data.sqlite.manifest.json")) throw new Error("manifest missing");
+            if (fs.readdirSync("search/data").some((name) => name.endsWith(".json.gz"))) {
+              throw new Error("source JSON assets leaked into final image");
+            }
+          '
+      - name: Container logs
+        if: always()
+        run: docker logs legalviz-backend || true
+      - name: Stop backend
+        if: always()
+        run: docker rm --force legalviz-backend || true

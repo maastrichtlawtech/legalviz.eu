@@ -1,0 +1,146 @@
+name: Refresh case-law data
+
+on:
+  schedule:
+    - cron: "17 2 3 * *"
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish the validated candidate as a GitHub release
+        type: boolean
+        default: false
+      release_tag:
+        description: New immutable release tag, required when publishing (for example data-v7)
+        type: string
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci --prefix backend
+      - name: Resolve current data release
+        id: current-release
+        shell: bash
+        run: |
+          tag=$(sed -n 's/^ARG DATA_RELEASE_TAG=//p' backend/Dockerfile)
+          test -n "$tag"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+      - name: Download current release inputs
+        run: |
+          mkdir -p refresh-inputs refresh-output backend/law-cache
+          gh release download "${{ steps.current-release.outputs.tag }}" \
+            --repo "${{ github.repository }}" \
+            --pattern search-cache.json.gz \
+            --pattern case-law-cache-v5.json.gz \
+            --dir refresh-inputs
+          gzip --decompress --stdout refresh-inputs/case-law-cache-v5.json.gz \
+            > backend/law-cache/case-law-cache-v5.json
+      - name: Restore judgment corpus
+        id: corpus-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            backend/search/data/case-law
+            backend/search/data/case-law-targets.txt
+          key: case-law-corpus-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: |
+            case-law-corpus-${{ runner.os }}-
+      - name: Install Chromium for EUR-Lex cookie warming
+        working-directory: backend
+        run: node node_modules/playwright-core/cli.js install --with-deps chromium
+      - name: Discover and harvest judgments
+        working-directory: backend
+        run: |
+          node search/case-law-discover.js
+          node search/case-law-harvest.js --skipDiscover
+      - name: Parse changed judgments
+        working-directory: backend
+        run: node search/case-law-parse.js
+      - name: Build and validate release candidate
+        working-directory: backend
+        run: |
+          gzip --keep --stdout --best law-cache/case-law-cache-v5.json \
+            > ../refresh-output/case-law-cache-v5.json.gz
+          cp ../refresh-inputs/search-cache.json.gz ../refresh-output/search-cache.json.gz
+          node search/build-sqlite-data.js \
+            --search ../refresh-output/search-cache.json.gz \
+            --case-law ../refresh-output/case-law-cache-v5.json.gz \
+            --output ../refresh-output/data.sqlite \
+            --manifest ../refresh-output/data.sqlite.manifest.json
+          node --expose-gc --max-old-space-size=6144 search/compare-search-backends.js \
+            --search ../refresh-output/search-cache.json.gz \
+            --sqlite ../refresh-output/data.sqlite \
+            --report ../refresh-output/search-parity-report.json
+      - name: Save judgment corpus
+        if: success()
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            backend/search/data/case-law
+            backend/search/data/case-law-targets.txt
+          key: case-law-corpus-${{ runner.os }}-${{ github.run_id }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: case-law-data-${{ github.run_id }}
+          path: refresh-output/
+          if-no-files-found: error
+          retention-days: 14
+
+  publish:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.publish }}
+    needs: refresh
+    runs-on: ubuntu-latest
+    environment: data-release
+    permissions:
+      contents: write
+      pull-requests: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_TAG: ${{ inputs.release_tag }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@v4
+        with:
+          name: case-law-data-${{ github.run_id }}
+          path: release-assets
+      - name: Validate release tag
+        run: |
+          [[ "$RELEASE_TAG" =~ ^data-v[0-9]+$ ]]
+          ! gh release view "$RELEASE_TAG" --repo "${{ github.repository }}" >/dev/null 2>&1
+      - name: Publish immutable data release
+        run: |
+          gh release create "$RELEASE_TAG" release-assets/* \
+            --repo "${{ github.repository }}" \
+            --title "$RELEASE_TAG" \
+            --notes "Automated offline case-law refresh from workflow run ${{ github.run_id }}."
+      - name: Open Docker tag-bump pull request
+        run: |
+          branch="automation/$RELEASE_TAG"
+          git switch --create "$branch"
+          sed -i "s/^ARG DATA_RELEASE_TAG=.*/ARG DATA_RELEASE_TAG=$RELEASE_TAG/" backend/Dockerfile
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/Dockerfile
+          git commit -m "Deploy $RELEASE_TAG"
+          git push --set-upstream origin "$branch"
+          gh pr create \
+            --repo "${{ github.repository }}" \
+            --base main \
+            --head "$branch" \
+            --title "Deploy $RELEASE_TAG" \
+            --body "Updates the backend Docker build to the validated offline data release produced by workflow run ${{ github.run_id }}."

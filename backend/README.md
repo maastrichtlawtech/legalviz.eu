@@ -503,7 +503,9 @@ Important: restart the API server after rebuilding the cache, because the cache 
 `npm run build:sqlite-data` converts `search-cache.json(.gz)` and
 `case-law-cache-v5.json(.gz)` into `search/data/data.sqlite`. It writes a
 temporary database, validates its schema, row counts, and integrity, then
-renames it atomically. Runtime opens the result read-only through
+renames it atomically. The build also emits `data.sqlite.manifest.json` with
+source and artifact SHA-256 checksums, schema version, table counts, and mapping
+integrity results. Runtime opens the result read-only through
 `better-sqlite3`; the serving path does not depend on Node's experimental
 `node:sqlite` API.
 
@@ -511,6 +513,36 @@ The in-memory MiniSearch index contains titles and aliases only. Excerpts live
 in a contentless FTS5 index and are consulted after deterministic and title
 matches, so excerpt-only recall cannot outrank a title/alias hit. The JSON path
 keeps the original combined MiniSearch index for fixture and local compatibility.
+
+Before publishing a data artifact, compare JSON and SQLite ranking against the
+full release corpus:
+
+```bash
+npm run test:search-parity -- \
+  --search search/data/search-cache.json.gz \
+  --sqlite search/data/data.sqlite \
+  --report search/data/search-parity-report.json
+```
+
+The committed query contract checks exact identifiers and aliases, common
+misspellings, modifier-heavy natural queries, and documented intentional rank
+changes. The gate fails when expected laws move outside their allowed rank,
+SQLite loses a previous result entirely, or an unapproved previous top result
+moves outside the configured top-N window.
+
+### Automated release gates
+
+`.github/workflows/backend-docker.yml` builds the real multi-stage image when
+backend files change, starts it, exercises SQLite-backed search, topics, and
+reference resolution, and verifies that the final image contains the database
+manifest but not the source JSON artifacts.
+
+`.github/workflows/refresh-case-law-data.yml` runs the offline judgment refresh
+monthly and on demand. Scheduled runs produce a validated candidate artifact and
+retain it for review; they never publish automatically. A manual run may opt into
+publication with a new immutable `data-vN` tag. Publication is attached to the
+`data-release` GitHub environment and opens a separate pull request that bumps
+the Docker release tag, keeping deployment reviewable and reversible.
 
 ### Metadata that isn't in the corpus (dates + EuroVoc topics)
 

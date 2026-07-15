@@ -182,7 +182,7 @@ function compactSqliteRecord(record) {
     fmxAvailable: enriched.fmxAvailable,
     fmxUnavailable: enriched.fmxUnavailable,
     enrichError: enriched.enrichError,
-    eurovoc: Array.isArray(enriched.eurovoc) ? enriched.eurovoc : [],
+    eurovoc: enriched.eurovoc,
     celexYear: enriched.celexYear,
     celexNumber: enriched.celexNumber,
     aliases: enriched.aliases,
@@ -196,19 +196,17 @@ function buildFtsExpression(terms, operator) {
     .join(` ${operator} `);
 }
 
-function searchRelaxedTitles(miniSearch, parsed, boostDocument) {
-  const terms = [...new Set(parsed.terms || [])];
-  // Keep this fallback bounded and high-precision. Dropping one term recovers
-  // natural modifier queries such as "digital services act obligations"
-  // without materializing the very broad result sets produced by a full OR.
-  if (terms.length < 3 || terms.length > 6) return [];
-
-  for (let omitted = terms.length - 1; omitted >= 0; omitted -= 1) {
-    const relaxedQuery = terms.filter((_term, index) => index !== omitted).join(" ");
-    const hits = miniSearch.search(relaxedQuery, { combineWith: "AND", boostDocument });
-    if (hits.length > 0) return hits;
+function containedAliasKeys(normalizedQuery) {
+  const words = String(normalizedQuery || "").split(" ").filter(Boolean);
+  const keys = [];
+  const maxWords = Math.min(8, words.length - 1);
+  for (let length = maxWords; length >= 2; length -= 1) {
+    for (let start = 0; start + length <= words.length; start += 1) {
+      const phrase = words.slice(start, start + length).join(" ");
+      keys.push(phrase, phrase.replace(/\s+/g, ""));
+    }
   }
-  return [];
+  return [...new Set(keys)];
 }
 
 // Re-encodes the act-type priors that the retired scoreLaw ranking applied,
@@ -468,6 +466,14 @@ class JsonLegalCacheStore {
       }
     }
 
+    // Preserve exact known-law intent when the alias is embedded in a longer
+    // natural query (for example "digital services act obligations"). Only
+    // multi-word contiguous aliases qualify, avoiding the huge candidate sets
+    // produced by broad title OR searches.
+    for (const key of containedAliasKeys(parsed.normalized)) {
+      for (const record of this.byAlias.get(key) || []) addMatch(record);
+    }
+
     if (this.miniSearch) {
       const boostDocument = buildDocumentBoost(parsed);
       let hits = this.miniSearch.search(parsed.rewrittenQuery, { combineWith: "AND", boostDocument });
@@ -479,8 +485,6 @@ class JsonLegalCacheStore {
       if (hits.length === 0) {
         if (!this.database || parsed.terms.length < 3) {
           hits = this.miniSearch.search(parsed.rewrittenQuery, { combineWith: "OR", boostDocument });
-        } else {
-          hits = searchRelaxedTitles(this.miniSearch, parsed, boostDocument);
         }
       }
       for (const hit of hits) {

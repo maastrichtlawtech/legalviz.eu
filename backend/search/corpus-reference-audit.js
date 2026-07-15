@@ -69,6 +69,11 @@ function filterByYears(files, value) {
   return files.filter((file) => years.has(path.basename(path.dirname(file))));
 }
 
+function requestedYears(value) {
+  if (!value) return [];
+  return [...new Set(String(value).split(",").map((year) => year.trim()).filter((year) => /^\d{4}$/.test(year)))];
+}
+
 function emptyStats() {
   return {
     scanned: 0,
@@ -261,6 +266,8 @@ async function auditCorpus(options = {}) {
       const availableFiles = evenSample(filterByYears(allFiles, options.year), maxPerCorpus);
       const files = availableFiles.slice(offset, limit ? offset + limit : undefined);
       const years = [...new Set(files.map((file) => path.basename(path.dirname(file))))];
+      const presentYears = new Set(availableFiles.map((file) => path.basename(path.dirname(file))));
+      const emptyYears = requestedYears(options.year).filter((year) => !presentYears.has(year));
       const stats = emptyStats();
       for (let start = 0; start < files.length; start += batchSize) {
         mergeStats(stats, runBatchWithFallback(kind, files.slice(start, start + batchSize), {
@@ -280,6 +287,7 @@ async function auditCorpus(options = {}) {
         selected: files.length,
         stats,
         years,
+        emptyYears,
         rangeStable: !options.year && !maxPerCorpus,
       });
     }
@@ -302,4 +310,4 @@ if (require.main === module) {
   main().catch((error) => { console.error(error.stack || error.message); process.exitCode = 1; });
 }
 
-module.exports = { auditCorpus, evenSample, filterByYears, listCorpusFiles };
+module.exports = { auditCorpus, evenSample, filterByYears, listCorpusFiles, requestedYears };

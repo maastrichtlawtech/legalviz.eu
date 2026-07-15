@@ -1798,6 +1798,31 @@
           "explicitUnresolved": 0,
           "clean": false,
           "years": []
+        },
+        {
+          "offset": 0,
+          "selected": 0,
+          "scanned": 0,
+          "errors": 0,
+          "oversized": 0,
+          "explicitUnresolved": 0,
+          "clean": false,
+          "empty": true,
+          "years": []
+        },
+        {
+          "offset": 0,
+          "selected": 0,
+          "scanned": 0,
+          "errors": 0,
+          "oversized": 0,
+          "explicitUnresolved": 0,
+          "clean": false,
+          "empty": true,
+          "years": [],
+          "emptyYears": [
+            "1957"
+          ]
         }
       ],
       "available": 52523,
@@ -1816,6 +1841,12 @@
           "runs": 1,
           "cleanRuns": 1,
           "scanned": 1
+        },
+        "1957": {
+          "runs": 1,
+          "cleanRuns": 0,
+          "emptyRuns": 1,
+          "scanned": 0
         },
         "1958": {
           "runs": 1,

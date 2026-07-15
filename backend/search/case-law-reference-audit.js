@@ -32,6 +32,11 @@ function filterByYears(files, value) {
   return files.filter((file) => years.has(path.basename(path.dirname(file))));
 }
 
+function requestedYears(value) {
+  if (!value) return [];
+  return [...new Set(String(value).split(",").map((year) => year.trim()).filter((year) => /^\d{4}$/.test(year)))];
+}
+
 function emptyStats() {
   return { scanned: 0, empty: 0, errors: 0, refs: 0, unresolved: 0, contextual: 0, externalConvention: 0, samples: [] };
 }
@@ -99,6 +104,8 @@ function audit(options = {}) {
   const eligible = filterByYears(all, options.year);
   const files = eligible.slice(offset, limit ? offset + limit : undefined);
   const years = [...new Set(files.map((file) => path.basename(path.dirname(file))))];
+  const presentYears = new Set(eligible.map((file) => path.basename(path.dirname(file))));
+  const emptyYears = requestedYears(options.year).filter((year) => !presentYears.has(year));
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "case-law-reference-audit-"));
   const stats = emptyStats();
   try {
@@ -122,6 +129,7 @@ function audit(options = {}) {
     selected: files.length,
     stats,
     years,
+    emptyYears,
     rangeStable: !options.year,
   });
   if (options.output) fs.writeFileSync(options.output, JSON.stringify(result, null, 2));

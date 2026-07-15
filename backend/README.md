@@ -544,6 +544,10 @@ publication with a new immutable `data-vN` tag. Publication is attached to the
 `data-release` GitHub environment and opens a separate pull request that bumps
 the Docker release tag, keeping deployment reviewable and reversible.
 
+See the [case-law data refresh runbook](docs/case-law-data-refresh.md) for the
+schedule, incremental-update model, Chromium/WAF behavior, candidate review and
+approval procedure, recovery steps, and current operational limitations.
+
 ### Metadata that isn't in the corpus (dates + EuroVoc topics)
 
 `date` and `eurovoc` are SPARQL metadata that the gzipped source on disk doesn't

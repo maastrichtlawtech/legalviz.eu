@@ -1788,6 +1788,16 @@
           "years": [
             "2014"
           ]
+        },
+        {
+          "offset": 0,
+          "selected": 0,
+          "scanned": 0,
+          "errors": 0,
+          "oversized": 0,
+          "explicitUnresolved": 0,
+          "clean": false,
+          "years": []
         }
       ],
       "available": 52523,

@@ -1,0 +1,760 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LegalViz.EU — Redesign mock-ups</title>
+<style>
+/* ============ tokens ============ */
+:root{
+  --bg:#f2f3f7;
+  --panel:#ffffff;
+  --ink:#171d33;
+  --muted:#5b6478;
+  --faint:#8b93a7;
+  --line:#dee2ec;
+  --line-soft:#e8ebf2;
+  --blue:#1f3b8f;
+  --blue-deep:#16295f;
+  --blue-soft:#e9edf9;
+  --link:#1f3b8f;
+  --btn-bg:#1c2f6e;
+  --btn-fg:#ffffff;
+  --gold:#b9861c;
+  --gold-deep:#94690f;
+  --gold-soft:#f5ecd6;
+  --green:#1e7a46;
+  --green-soft:#e2f2e8;
+  --shadow:0 1px 2px rgba(23,29,51,.05),0 8px 24px -12px rgba(23,29,51,.12);
+  --serif:"Charter","Iowan Old Style","Palatino Linotype","Book Antiqua",Georgia,serif;
+  --sans:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  --mono:ui-monospace,"SF Mono","Cascadia Code",Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#0d1017;
+    --panel:#151a25;
+    --ink:#e7eaf3;
+    --muted:#a0a8bc;
+    --faint:#767e93;
+    --line:#272e40;
+    --line-soft:#202636;
+    --blue:#93aaf0;
+    --blue-deep:#c0cdf5;
+    --blue-soft:#1d2540;
+    --link:#93aaf0;
+    --btn-bg:#4763c4;
+    --btn-fg:#ffffff;
+    --gold:#d2a53e;
+    --gold-deep:#e2bc60;
+    --gold-soft:#2e2712;
+    --green:#5cc389;
+    --green-soft:#15301f;
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px -12px rgba(0,0,0,.5);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0d1017; --panel:#151a25; --ink:#e7eaf3; --muted:#a0a8bc; --faint:#767e93;
+  --line:#272e40; --line-soft:#202636; --blue:#93aaf0; --blue-deep:#c0cdf5;
+  --blue-soft:#1d2540; --link:#93aaf0; --btn-bg:#4763c4; --btn-fg:#ffffff;
+  --gold:#d2a53e; --gold-deep:#e2bc60; --gold-soft:#2e2712;
+  --green:#5cc389; --green-soft:#15301f;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px -12px rgba(0,0,0,.5);
+}
+:root[data-theme="light"]{
+  --bg:#f2f3f7; --panel:#ffffff; --ink:#171d33; --muted:#5b6478; --faint:#8b93a7;
+  --line:#dee2ec; --line-soft:#e8ebf2; --blue:#1f3b8f; --blue-deep:#16295f;
+  --blue-soft:#e9edf9; --link:#1f3b8f; --btn-bg:#1c2f6e; --btn-fg:#ffffff;
+  --gold:#b9861c; --gold-deep:#94690f; --gold-soft:#f5ecd6;
+  --green:#1e7a46; --green-soft:#e2f2e8;
+  --shadow:0 1px 2px rgba(23,29,51,.05),0 8px 24px -12px rgba(23,29,51,.12);
+}
+
+/* ============ pitch page ============ */
+*{box-sizing:border-box}
+body{
+  margin:0;background:var(--bg);color:var(--ink);
+  font-family:var(--sans);font-size:16px;line-height:1.6;
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:1160px;margin:0 auto;padding:56px 28px 96px}
+.pitch-head{max-width:68ch;margin-bottom:40px}
+.kicker{
+  font-size:12px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--gold-deep);margin:0 0 14px;
+}
+h1.title{
+  font-family:var(--serif);font-size:clamp(30px,4.4vw,44px);line-height:1.12;
+  font-weight:700;margin:0 0 16px;text-wrap:balance;letter-spacing:-.01em;
+}
+.lede{font-size:17px;color:var(--muted);margin:0;max-width:62ch}
+.lede strong{color:var(--ink);font-weight:600}
+
+/* token strip */
+.tokens{
+  display:flex;flex-wrap:wrap;gap:24px;align-items:stretch;
+  margin:36px 0 8px;padding:20px 22px;background:var(--panel);
+  border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);
+}
+.tok-group{min-width:180px;flex:1}
+.tok-label{font-size:11px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--faint);margin-bottom:10px}
+.swatches{display:flex;gap:8px}
+.sw{width:44px}
+.sw i{display:block;height:34px;border-radius:7px;border:1px solid var(--line)}
+.sw span{display:block;font-size:10px;color:var(--faint);margin-top:5px;font-family:var(--mono)}
+.type-demo{font-family:var(--serif);font-size:22px;line-height:1.25;margin:0}
+.type-demo small{display:block;font-family:var(--sans);font-size:12.5px;color:var(--muted);margin-top:6px}
+
+/* sections */
+section.shot{margin-top:72px}
+.shot-head{display:flex;align-items:baseline;gap:14px;margin-bottom:6px}
+.shot-num{
+  font-family:var(--mono);font-size:13px;color:var(--gold-deep);
+  border:1px solid var(--gold);border-radius:999px;padding:2px 10px;white-space:nowrap;
+}
+.shot-head h2{font-family:var(--serif);font-size:26px;margin:0;letter-spacing:-.01em}
+.shot-sub{color:var(--muted);max-width:70ch;margin:6px 0 22px}
+
+/* browser frame */
+.frame{
+  border:1px solid var(--line);border-radius:14px;background:var(--panel);
+  box-shadow:var(--shadow);overflow:hidden;
+}
+.frame-bar{
+  display:flex;align-items:center;gap:10px;padding:10px 14px;
+  border-bottom:1px solid var(--line);background:var(--bg);
+}
+.dots{display:flex;gap:6px}
+.dots i{width:10px;height:10px;border-radius:50%;background:var(--line);display:block}
+.urlbar{
+  flex:1;max-width:420px;margin:0 auto;background:var(--panel);
+  border:1px solid var(--line);border-radius:7px;
+  font-family:var(--mono);font-size:11.5px;color:var(--muted);
+  padding:4px 12px;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.frame-scroll{overflow-x:auto}
+.mk{min-width:1080px;background:var(--bg);position:relative}
+
+/* annotation badges + legend */
+.note{
+  position:absolute;z-index:5;width:22px;height:22px;border-radius:50%;
+  background:var(--gold);color:#fff;font:600 12px/22px var(--sans);text-align:center;
+  box-shadow:0 0 0 3px var(--gold-soft);
+}
+:root[data-theme="dark"] .note{color:#171d33}
+@media (prefers-color-scheme: dark){ .note{color:#171d33} }
+:root[data-theme="light"] .note{color:#fff}
+.legend{list-style:none;margin:18px 0 0;padding:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:10px 26px}
+.legend li{display:flex;gap:10px;font-size:14px;color:var(--muted)}
+.legend b{color:var(--ink);font-weight:600}
+.legend .n{
+  flex:none;width:20px;height:20px;border-radius:50%;background:var(--gold);
+  color:#fff;font:600 11px/20px var(--sans);text-align:center;margin-top:2px;
+}
+@media (prefers-color-scheme: dark){ .legend .n{color:#171d33} }
+:root[data-theme="dark"] .legend .n{color:#171d33}
+:root[data-theme="light"] .legend .n{color:#fff}
+
+/* ============ shared mock-up chrome ============ */
+.mk-top{
+  display:flex;align-items:center;gap:18px;padding:12px 26px;
+  background:var(--panel);border-bottom:1px solid var(--line);
+}
+.mk-brand{display:flex;align-items:center;gap:10px;min-width:0}
+.mk-brand .name{font-family:var(--serif);font-weight:700;font-size:16.5px;white-space:nowrap}
+.mk-brand .by{font-size:11px;color:var(--faint);white-space:nowrap}
+.mk-top .grow{flex:1}
+.mk-pill-btn{
+  display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--muted);
+  border:1px solid var(--line);border-radius:8px;padding:5px 11px;background:var(--panel);white-space:nowrap;
+}
+.mk-search-sm{
+  display:flex;align-items:center;gap:8px;width:250px;
+  border:1px solid var(--line);border-radius:8px;padding:5px 12px;
+  font-size:12.5px;color:var(--faint);background:var(--bg);
+}
+.mk-search-sm .k{margin-left:auto;font-family:var(--mono);font-size:10px;border:1px solid var(--line);border-radius:4px;padding:0 4px;color:var(--faint)}
+.starmark{flex:none}
+.crumb{font-size:13px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.crumb b{color:var(--ink);font-weight:600}
+.crumb .sep{margin:0 7px;color:var(--faint)}
+
+.chip{
+  display:inline-block;font-family:var(--mono);font-size:11px;letter-spacing:.02em;
+  color:var(--blue);background:var(--blue-soft);border-radius:5px;padding:1px 7px;white-space:nowrap;
+}
+.pill{
+  display:inline-flex;align-items:center;gap:5px;font-size:10.5px;font-weight:600;
+  letter-spacing:.08em;text-transform:uppercase;border-radius:999px;padding:3px 9px;
+}
+.pill.reg{background:var(--blue-soft);color:var(--blue)}
+.pill.ok{background:var(--green-soft);color:var(--green)}
+.pill.ok i{width:6px;height:6px;border-radius:50%;background:var(--green);display:block}
+.pill.beta{background:var(--gold-soft);color:var(--gold-deep)}
+.mono{font-family:var(--mono);font-size:11.5px;color:var(--faint);letter-spacing:.01em}
+
+.btn{
+  display:inline-flex;align-items:center;gap:8px;border-radius:9px;padding:9px 18px;
+  font-size:13.5px;font-weight:600;border:1px solid transparent;white-space:nowrap;
+}
+.btn.solid{background:var(--btn-bg);color:var(--btn-fg)}
+.btn.outline{border-color:var(--line);color:var(--ink);background:var(--panel)}
+.btn.ghost{color:var(--muted);border-color:transparent}
+
+/* ============ mock-up 1 : home ============ */
+.mk-hero{padding:64px 26px 40px;text-align:center;position:relative}
+.mk-hero .eyebrow{
+  font-size:11px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;
+  color:var(--gold-deep);margin-bottom:16px;
+}
+.mk-hero h1{
+  font-family:var(--serif);font-size:46px;line-height:1.08;font-weight:700;
+  margin:0 0 14px;letter-spacing:-.015em;text-wrap:balance;
+}
+.mk-hero h1 em{font-style:italic;color:var(--blue)}
+.mk-hero .sub{font-size:15.5px;color:var(--muted);max-width:56ch;margin:0 auto}
+.mk-searchbox{
+  display:flex;align-items:center;gap:12px;max-width:640px;margin:30px auto 0;
+  background:var(--panel);border:1px solid var(--line);border-radius:12px;
+  padding:15px 20px;box-shadow:var(--shadow);text-align:left;
+}
+.mk-searchbox svg{flex:none}
+.mk-searchbox .ph{flex:1;font-size:14.5px;color:var(--faint)}
+.mk-searchbox .k{font-family:var(--mono);font-size:11px;color:var(--faint);border:1px solid var(--line);border-radius:5px;padding:2px 7px}
+.mk-try{margin-top:14px;font-size:12.5px;color:var(--faint)}
+.mk-try a{
+  display:inline-block;margin:0 3px;color:var(--muted);text-decoration:none;
+  border:1px solid var(--line);border-radius:999px;padding:3px 12px;background:var(--panel);
+}
+.mk-try a.hot{color:var(--blue);border-color:var(--blue-soft);background:var(--blue-soft)}
+
+.mk-section{max-width:960px;margin:0 auto;padding:26px 26px 0;position:relative}
+.mk-sec-head{display:flex;align-items:flex-end;gap:14px;margin-bottom:14px}
+.mk-sec-head h3{font-family:var(--serif);font-size:19px;margin:0}
+.mk-sec-head p{margin:0;font-size:12.5px;color:var(--faint)}
+.mk-sec-head .right{margin-left:auto}
+
+.law-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.law-card{
+  background:var(--panel);border:1px solid var(--line);border-radius:12px;
+  padding:16px 18px 14px;box-shadow:var(--shadow);position:relative;
+}
+.law-card .top{display:flex;align-items:baseline;gap:8px}
+.law-card h4{font-family:var(--serif);font-size:16.5px;margin:0;flex:1}
+.law-card .ago{font-size:11px;color:var(--faint);white-space:nowrap}
+.law-card .ref{font-size:12px;color:var(--muted);margin:3px 0 12px}
+.law-card .bar{height:4px;border-radius:2px;background:var(--line-soft);overflow:hidden;margin-bottom:9px}
+.law-card .bar i{display:block;height:100%;background:var(--blue);border-radius:2px}
+.law-card .resume{font-size:12.5px;color:var(--link);font-weight:500}
+.law-card .resume span{color:var(--faint);font-weight:400}
+
+.feat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+.feat{
+  background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:15px 16px;
+}
+.feat h4{font-family:var(--serif);font-size:15.5px;margin:0 0 2px}
+.feat .ref{font-size:11.5px;color:var(--faint);margin:0 0 8px}
+.feat p{font-size:12.5px;color:var(--muted);margin:0;line-height:1.5}
+.mk-foot{
+  margin-top:36px;padding:16px 26px;border-top:1px solid var(--line);
+  display:flex;gap:20px;font-size:12px;color:var(--faint);background:var(--panel);
+}
+.mk-foot .r{margin-left:auto}
+
+/* ============ mock-up 2 : law overview ============ */
+.mk-body{display:flex;gap:0;align-items:flex-start}
+.mk-rail{
+  width:284px;flex:none;padding:22px 18px;border-right:1px solid var(--line);
+  background:var(--panel);min-height:640px;position:relative;
+}
+.rail-label{font-size:10.5px;font-weight:600;letter-spacing:.13em;text-transform:uppercase;color:var(--faint);margin:0 0 10px 6px}
+.jump{
+  display:flex;align-items:center;gap:8px;border:1px solid var(--line);border-radius:8px;
+  padding:7px 11px;font-size:12.5px;color:var(--faint);background:var(--bg);margin-bottom:18px;
+}
+.jump .k{margin-left:auto;font-family:var(--mono);font-size:10px;border:1px solid var(--line);border-radius:4px;padding:0 5px}
+.toc{list-style:none;margin:0;padding:0;font-size:13px}
+.toc>li{margin-bottom:2px}
+.toc .ch{
+  display:flex;gap:9px;align-items:baseline;padding:7px 8px;border-radius:7px;color:var(--ink);
+}
+.toc .ch:hover{background:var(--bg)}
+.toc .rn{font-family:var(--serif);font-style:italic;color:var(--gold-deep);width:20px;flex:none;text-align:right}
+.toc .ch .t{flex:1;line-height:1.35}
+.toc .ch .range{font-size:11px;color:var(--faint);white-space:nowrap}
+.toc .open{background:var(--bg);border-radius:7px;padding-bottom:4px}
+.toc .arts{list-style:none;margin:0;padding:1px 0 3px 37px}
+.toc .arts li{padding:4px 8px;border-radius:6px;font-size:12.5px;color:var(--muted);position:relative}
+.toc .arts b{color:var(--ink);font-weight:600}
+.toc .arts li.on{color:var(--blue)}
+.toc .arts li.on b{color:var(--blue)}
+.toc .arts li.on::before{
+  content:"";position:absolute;left:-14px;top:7px;bottom:7px;width:3px;border-radius:2px;background:var(--gold);
+}
+
+.mk-main{flex:1;padding:34px 44px;position:relative;min-width:0}
+.law-eyebrow{display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap}
+.mk-main h1.law{
+  font-family:var(--serif);font-size:40px;line-height:1.1;margin:0 0 8px;letter-spacing:-.01em;
+}
+.law-longtitle{font-size:14.5px;color:var(--muted);max-width:66ch;margin:0 0 14px;line-height:1.55}
+.law-meta{display:flex;gap:8px 22px;flex-wrap:wrap;font-size:12.5px;color:var(--muted);margin-bottom:22px}
+.law-meta b{color:var(--ink);font-weight:600}
+.law-actions{display:flex;gap:10px;margin-bottom:30px}
+
+.ai-card{
+  background:var(--panel);border:1px solid var(--line);border-radius:12px;
+  box-shadow:var(--shadow);position:relative;
+}
+.ai-head{
+  display:flex;align-items:center;gap:9px;padding:13px 20px;border-bottom:1px solid var(--line-soft);
+}
+.ai-head b{font-size:13.5px}
+.ai-head .warn{margin-left:auto;font-size:11.5px;color:var(--faint)}
+.ai-body{padding:18px 22px 20px}
+.ai-label{font-size:10.5px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--gold-deep);margin:0 0 6px}
+.ai-body p.tx{font-size:14px;line-height:1.65;color:var(--ink);margin:0 0 16px;max-width:72ch}
+.ai-points{list-style:none;margin:0;padding:0;display:grid;gap:9px}
+.ai-points li{
+  display:flex;gap:10px;align-items:baseline;font-size:13.5px;line-height:1.55;color:var(--ink);
+}
+.ai-points li::before{content:"";width:5px;height:5px;border-radius:50%;background:var(--gold);flex:none;transform:translateY(-2px)}
+.ai-points .chips{margin-left:auto;flex:none;padding-left:12px}
+
+/* ============ mock-up 3 : reader ============ */
+.read-rail{width:252px}
+.read-main{
+  flex:1;min-width:0;padding:38px 0 0;display:flex;justify-content:center;
+}
+.article-col{width:660px;max-width:calc(100% - 60px);position:relative;padding-bottom:30px}
+.art-eyebrow{
+  font-size:11px;font-weight:600;letter-spacing:.15em;text-transform:uppercase;
+  color:var(--gold-deep);margin:0 0 10px;
+}
+.article-col h1{
+  font-family:var(--serif);font-size:36px;margin:0 0 2px;letter-spacing:-.01em;
+}
+.art-sub{font-family:var(--serif);font-style:italic;font-size:19px;color:var(--muted);margin:0 0 26px}
+.law-text{font-family:var(--serif);font-size:16.5px;line-height:1.75;color:var(--ink)}
+.law-text .para{display:flex;gap:0;margin:0 0 14px}
+.law-text .pn{
+  flex:none;width:44px;margin-left:-44px;text-align:left;color:var(--faint);
+  font-size:14px;padding-top:3px;font-family:var(--sans);font-weight:600;
+}
+.law-text .pt{flex:1;min-width:0}
+.law-text ol.pts{list-style:none;margin:10px 0 4px;padding:0}
+.law-text ol.pts li{display:flex;gap:12px;margin:7px 0}
+.law-text ol.pts .m{flex:none;width:26px;color:var(--faint);font-size:14.5px;text-align:right}
+.dt{border-bottom:1px dotted var(--faint);cursor:help}
+.dt.open{border-bottom-color:var(--blue);color:var(--blue);background:var(--blue-soft);border-radius:2px}
+.xref{color:var(--gold-deep);text-decoration:none;border-bottom:1px solid var(--gold-soft)}
+
+.defpop{
+  position:absolute;z-index:6;width:330px;background:var(--panel);border:1px solid var(--line);
+  border-radius:10px;box-shadow:var(--shadow);padding:13px 15px;font-family:var(--sans);
+}
+.defpop .term{font-size:12px;font-weight:700;color:var(--blue);margin-bottom:4px}
+.defpop .term .src{float:right;font-weight:500;color:var(--faint);font-family:var(--mono);font-size:10.5px}
+.defpop p{margin:0;font-size:12.5px;line-height:1.55;color:var(--muted)}
+
+.read-foot{
+  margin-top:34px;border-top:1px solid var(--line);padding:16px 0 26px;
+  display:flex;align-items:center;gap:18px;font-family:var(--sans);
+}
+.read-foot .prev,.read-foot .next{font-size:13px;color:var(--muted);white-space:nowrap}
+.read-foot .next{margin-left:auto;color:var(--link);font-weight:600;text-align:right}
+.read-foot .next span,.read-foot .prev span{display:block;font-size:10.5px;font-weight:500;letter-spacing:.1em;text-transform:uppercase;color:var(--faint)}
+.read-foot .mid{flex:1;max-width:220px;margin:0 auto}
+.read-foot .mid .lab{font-size:11px;color:var(--faint);text-align:center;margin-bottom:6px}
+.read-foot .bar{height:3px;background:var(--line-soft);border-radius:2px}
+.read-foot .bar i{display:block;height:100%;width:2%;background:var(--gold);border-radius:2px}
+
+.ctx-rail{
+  width:312px;flex:none;padding:38px 22px 30px 6px;position:relative;
+}
+.ctx-card{background:var(--panel);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);overflow:hidden}
+.ctx-tabs{display:flex;border-bottom:1px solid var(--line);font-size:12.5px}
+.ctx-tabs span{padding:10px 0;flex:1;text-align:center;color:var(--faint)}
+.ctx-tabs .on{color:var(--blue);font-weight:600;box-shadow:inset 0 -2px 0 var(--blue)}
+.ctx-body{padding:14px}
+.rec{
+  border:1px solid var(--line-soft);border-radius:9px;padding:11px 13px;margin-bottom:10px;background:var(--bg);
+}
+.rec .rh{display:flex;align-items:baseline;gap:8px;margin-bottom:5px}
+.rec .rh b{font-size:12.5px}
+.rec .rh .why{margin-left:auto;font-size:10.5px;color:var(--gold-deep)}
+.rec p{margin:0;font-size:12px;line-height:1.55;color:var(--muted);font-family:var(--serif)}
+.ctx-note{font-size:10.5px;color:var(--faint);text-align:center;padding:2px 0 4px}
+
+/* quick wins */
+.wins{margin-top:72px}
+.wins h2{font-family:var(--serif);font-size:26px;margin:0 0 6px}
+.wins>p{color:var(--muted);max-width:70ch;margin:0 0 20px}
+.win-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media(max-width:760px){.win-grid{grid-template-columns:1fr}}
+.win{
+  background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 18px;box-shadow:var(--shadow);
+}
+.win .tag{font-size:10.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;border-radius:999px;padding:2px 9px}
+.win .tag.now{background:var(--green-soft);color:var(--green)}
+.win .tag.later{background:var(--blue-soft);color:var(--blue)}
+.win h3{font-size:15px;margin:9px 0 5px;font-weight:600}
+.win p{margin:0;font-size:13.5px;color:var(--muted);line-height:1.55}
+.win code{font-family:var(--mono);font-size:12px;color:var(--gold-deep)}
+
+@media (prefers-reduced-motion: reduce){ *{transition:none!important;animation:none!important} }
+</style>
+
+<div class="wrap">
+  <header class="pitch-head">
+    <p class="kicker">Design concepts · July 2026</p>
+    <h1 class="title">Redesign mock-ups for LegalViz.EU</h1>
+    <p class="lede">Three annotated screens — <strong>home</strong>, <strong>law overview</strong>, and the <strong>article reader</strong> — keeping everything the tool already does, but giving it a visual identity rooted in EU law (Official-Journal navy &amp; gold, a proper serif for the law itself) and fixing the main way-finding friction: ambiguous weekday labels, shouting all-caps chapter boxes, and context that hides in the sidebar. Toggle your theme — every mock-up is designed for light and dark.</p>
+  </header>
+
+  <div class="tokens">
+    <div class="tok-group">
+      <div class="tok-label">Palette</div>
+      <div class="swatches">
+        <div class="sw"><i style="background:#1c2f6e"></i><span>navy</span></div>
+        <div class="sw"><i style="background:#1f3b8f"></i><span>EU blue</span></div>
+        <div class="sw"><i style="background:#b9861c"></i><span>OJ gold</span></div>
+        <div class="sw"><i style="background:#f2f3f7"></i><span>paper</span></div>
+        <div class="sw"><i style="background:#171d33"></i><span>ink</span></div>
+        <div class="sw"><i style="background:#1e7a46"></i><span>in force</span></div>
+      </div>
+    </div>
+    <div class="tok-group">
+      <div class="tok-label">Type</div>
+      <p class="type-demo">Serif for the law, <small style="display:inline;font-size:15px">sans for the chrome, <span style="font-family:var(--mono);font-size:13px">mono for CELEX</span></small>
+      <small>Display &amp; law text: Charter / Georgia stack (Merriweather in production) · UI: system sans · identifiers: monospace</small></p>
+    </div>
+    <div class="tok-group" style="max-width:300px">
+      <div class="tok-label">Idea</div>
+      <p style="margin:0;font-size:13.5px;color:var(--muted)">Blue = interactive, gold = editorial accent (recitals, AI, markers), green = legal status. Never three grays doing one job.</p>
+    </div>
+  </div>
+
+  <!-- ==================== MOCK-UP 1 : HOME ==================== -->
+  <section class="shot">
+    <div class="shot-head"><span class="shot-num">01</span><h2>Home — arrive, resume, or discover</h2></div>
+    <p class="shot-sub">The current home page works, but reads as a generic template and the “Monday / Thursday” timeline is ambiguous (which Monday?). This version gives the page a voice, makes search teach itself, and turns recent laws into <em>resumable</em> reading.</p>
+
+    <div class="frame">
+      <div class="frame-bar"><div class="dots"><i></i><i></i><i></i></div><div class="urlbar">legalviz.eu</div></div>
+      <div class="frame-scroll"><div class="mk">
+
+        <div class="mk-top">
+          <div class="mk-brand">
+            <svg class="starmark" width="26" height="26" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="10" fill="#1c2f6e"/><g fill="#d9ab3c"><circle cx="17" cy="10" r="1.1"/><circle cx="16.06" cy="13.5" r="1.1"/><circle cx="13.5" cy="16.06" r="1.1"/><circle cx="10" cy="17" r="1.1"/><circle cx="6.5" cy="16.06" r="1.1"/><circle cx="3.94" cy="13.5" r="1.1"/><circle cx="3" cy="10" r="1.1"/><circle cx="3.94" cy="6.5" r="1.1"/><circle cx="6.5" cy="3.94" r="1.1"/><circle cx="10" cy="3" r="1.1"/><circle cx="13.5" cy="3.94" r="1.1"/><circle cx="16.06" cy="6.5" r="1.1"/></g></svg>
+            <div><div class="name">LegalViz.EU</div><div class="by">Law &amp; Tech Lab · Maastricht University</div></div>
+          </div>
+          <div class="grow"></div>
+          <span class="mk-pill-btn">EN ▾</span>
+          <span class="mk-pill-btn" title="Theme">◐</span>
+          <span class="mk-pill-btn">About</span>
+        </div>
+
+        <div class="mk-hero">
+          <span class="note" style="top:26px;right:60px">1</span>
+          <div class="eyebrow">Free &amp; open source · 24 official languages</div>
+          <h1>EU law, made <em>readable</em>.</h1>
+          <p class="sub">Regulations and directives parsed into clean articles, linked recitals, definitions and CJEU case law — not PDF scans.</p>
+          <div class="mk-searchbox">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" opacity=".45"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+            <span class="ph">Search 4,600 primary EU acts — try a title, reference, or CELEX…</span>
+            <span class="k">⌘K</span>
+          </div>
+          <div class="mk-try" style="position:relative">
+            <span class="note" style="top:-6px;left:calc(50% + 250px)">2</span>
+            Try&nbsp;&nbsp;<a class="hot">GDPR</a><a>AI Act</a><a>Digital Services Act</a><a style="font-family:var(--mono);font-size:11.5px">32023R2854</a><a>eIDAS</a>
+          </div>
+        </div>
+
+        <div class="mk-section">
+          <div class="mk-sec-head">
+            <h3>Continue reading</h3><p>Pick up exactly where you left off.</p>
+            <span class="right mk-pill-btn" style="position:relative">＋ Add a law<span class="note" style="top:-11px;right:-11px">4</span></span>
+          </div>
+          <div class="law-cards">
+            <div class="law-card">
+              <span class="note" style="top:-11px;left:-11px">3</span>
+              <div class="top"><h4>Data Act</h4><span class="ago">2 days ago</span></div>
+              <div class="ref">Regulation (EU) 2023/2854 · <span class="mono">32023R2854</span></div>
+              <div class="bar"><i style="width:46%"></i></div>
+              <div class="resume">Resume at Art. 23 <span>— Removing obstacles to switching</span></div>
+            </div>
+            <div class="law-card">
+              <div class="top"><h4>GDPR</h4><span class="ago">5 days ago</span></div>
+              <div class="ref">Regulation (EU) 2016/679 · <span class="mono">32016R0679</span></div>
+              <div class="bar"><i style="width:12%"></i></div>
+              <div class="resume">Resume at Art. 6 <span>— Lawfulness of processing</span></div>
+            </div>
+            <div class="law-card">
+              <div class="top"><h4>Artificial Intelligence Act</h4><span class="ago">last week</span></div>
+              <div class="ref">Regulation (EU) 2024/1689 · <span class="mono">32024R1689</span></div>
+              <div class="bar"><i style="width:5%"></i></div>
+              <div class="resume">Resume at Art. 3 <span>— Definitions</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="mk-section" style="padding-bottom:8px">
+          <div class="mk-sec-head" style="position:relative">
+            <h3>Start with the essentials</h3><p>The most-read acts on LegalViz.</p>
+            <span class="note" style="top:-4px;right:-16px">5</span>
+          </div>
+          <div class="feat-grid">
+            <div class="feat"><h4>Digital Services Act</h4><p class="ref">Regulation (EU) 2022/2065</p><p>Duties for platforms &amp; marketplaces, from notice-and-action to systemic risk.</p></div>
+            <div class="feat"><h4>Digital Markets Act</h4><p class="ref">Regulation (EU) 2022/1925</p><p>Do’s and don’ts for gatekeepers in core platform services.</p></div>
+            <div class="feat"><h4>NIS 2 Directive</h4><p class="ref">Directive (EU) 2022/2555</p><p>Cybersecurity duties for essential and important entities.</p></div>
+            <div class="feat"><h4>eIDAS 2.0</h4><p class="ref">Regulation (EU) 2024/1183</p><p>The European Digital Identity Wallet and trust services.</p></div>
+          </div>
+        </div>
+
+        <div class="mk-foot">
+          <span>Built at the Law &amp; Tech Lab, Maastricht University</span>
+          <span class="r">GitHub · Browser extension · API</span>
+        </div>
+      </div></div>
+    </div>
+
+    <ul class="legend">
+      <li><span class="n">1</span><span><b>An identity, not a template.</b> Serif display + navy/gold from the Official Journal; the sub-line states concretely what the tool does (“parsed… not PDF scans”).</span></li>
+      <li><span class="n">2</span><span><b>Search that teaches itself.</b> The placeholder states the scope (4,600 acts) and example chips show the three query types — title, act name, CELEX.</span></li>
+      <li><span class="n">3</span><span><b>Resume, don’t just reopen.</b> Relative time (“2 days ago”) replaces ambiguous weekday headers; a progress bar and “Resume at Art. 23” deep-link into the reader.</span></li>
+      <li><span class="n">4</span><span><b>Secondary actions demoted.</b> “Manually add law” is an edge case — a quiet ghost button, not a boxed call-to-action competing with the cards.</span></li>
+      <li><span class="n">5</span><span><b>No empty first visit.</b> A curated “essentials” shelf fills the cold-start gap before any reading history exists.</span></li>
+    </ul>
+  </section>
+
+  <!-- ==================== MOCK-UP 2 : LAW OVERVIEW ==================== -->
+  <section class="shot">
+    <div class="shot-head"><span class="shot-num">02</span><h2>Law overview — orient before you read</h2></div>
+    <p class="shot-sub">Today the table of contents sits to the right in all-caps boxes, and two separate number inputs handle navigation. Here the TOC moves to the left where reading order expects it, chapters become scannable sentence-case rows with article ranges, and the header answers the lawyer’s first questions: is it in force, and since when?</p>
+
+    <div class="frame">
+      <div class="frame-bar"><div class="dots"><i></i><i></i><i></i></div><div class="urlbar">legalviz.eu/eli/reg/2023/2854</div></div>
+      <div class="frame-scroll"><div class="mk">
+
+        <div class="mk-top">
+          <div class="mk-brand">
+            <svg class="starmark" width="24" height="24" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="10" fill="#1c2f6e"/><g fill="#d9ab3c"><circle cx="17" cy="10" r="1.1"/><circle cx="16.06" cy="13.5" r="1.1"/><circle cx="13.5" cy="16.06" r="1.1"/><circle cx="10" cy="17" r="1.1"/><circle cx="6.5" cy="16.06" r="1.1"/><circle cx="3.94" cy="13.5" r="1.1"/><circle cx="3" cy="10" r="1.1"/><circle cx="3.94" cy="6.5" r="1.1"/><circle cx="6.5" cy="3.94" r="1.1"/><circle cx="10" cy="3" r="1.1"/><circle cx="13.5" cy="3.94" r="1.1"/><circle cx="16.06" cy="6.5" r="1.1"/></g></svg>
+            <div><div class="name">LegalViz.EU</div></div>
+          </div>
+          <span class="crumb"><b>Data Act</b><span class="sep">·</span>Regulation (EU) 2023/2854</span>
+          <div class="grow"></div>
+          <div class="mk-search-sm">Search this law…<span class="k">/</span></div>
+          <span class="mk-pill-btn">EN ▾</span>
+        </div>
+
+        <div class="mk-body">
+          <aside class="mk-rail">
+            <span class="note" style="top:74px;right:-11px">3</span>
+            <div class="jump">Go to article or recital…<span class="k">g</span></div>
+            <p class="rail-label" style="position:relative">Contents<span class="note" style="top:-8px;left:88px">1</span></p>
+            <ul class="toc">
+              <li class="open">
+                <div class="ch"><span class="rn">I</span><span class="t"><b>General provisions</b></span><span class="range">1–2</span></div>
+                <ul class="arts">
+                  <li class="on"><b>Art. 1</b> · Subject matter and scope</li>
+                  <li><b>Art. 2</b> · Definitions</li>
+                </ul>
+              </li>
+              <li><div class="ch"><span class="rn">II</span><span class="t">Business-to-consumer and business-to-business data sharing</span><span class="range">3–7</span></div></li>
+              <li><div class="ch"><span class="rn">III</span><span class="t">Obligations for data holders under Union law</span><span class="range">8–12</span></div></li>
+              <li><div class="ch"><span class="rn">IV</span><span class="t">Unfair contractual terms</span><span class="range">13</span></div></li>
+              <li><div class="ch"><span class="rn">V</span><span class="t">Data for public sector bodies on exceptional need</span><span class="range">14–22</span></div></li>
+              <li><div class="ch"><span class="rn">VI</span><span class="t">Switching between data processing services</span><span class="range">23–31</span></div></li>
+              <li><div class="ch"><span class="rn">VII</span><span class="t">Unlawful international governmental access</span><span class="range">32</span></div></li>
+              <li><div class="ch"><span class="rn">VIII</span><span class="t">Interoperability</span><span class="range">33–36</span></div></li>
+              <li><div class="ch"><span class="rn">IX</span><span class="t">Application and enforcement</span><span class="range">37–42</span></div></li>
+            </ul>
+          </aside>
+
+          <main class="mk-main">
+            <div class="law-eyebrow" style="position:relative">
+              <span class="pill reg">Regulation</span>
+              <span class="pill ok"><i></i>In force</span>
+              <span class="chip">CELEX 32023R2854</span>
+              <span class="note" style="top:-8px;left:315px">2</span>
+            </div>
+            <h1 class="law">Data Act</h1>
+            <p class="law-longtitle">Regulation (EU) 2023/2854 of the European Parliament and of the Council on harmonised rules on fair access to and use of data.</p>
+            <div class="law-meta">
+              <span>Applies from <b>12 September 2025</b></span>
+              <span><b>50</b> articles</span>
+              <span><b>120</b> recitals</span>
+              <span><b>3</b> annexes</span>
+              <span>OJ L, 2023/2854</span>
+            </div>
+            <div class="law-actions">
+              <span class="btn solid">Start reading&nbsp;→</span>
+              <span class="btn outline">⚖&nbsp; CJEU case law &nbsp;<span class="pill beta">beta</span></span>
+              <span class="btn ghost">Print / PDF</span>
+            </div>
+
+            <div class="ai-card">
+              <span class="note" style="top:-11px;right:-11px">4</span>
+              <div class="ai-head">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="var(--gold)" aria-hidden="true"><path d="M12 2l1.8 6.2L20 10l-6.2 1.8L12 18l-1.8-6.2L4 10l6.2-1.8z"/></svg>
+                <b>AI overview</b>
+                <span class="warn">Generated — verify against the official text</span>
+              </div>
+              <div class="ai-body">
+                <p class="ai-label">Purpose</p>
+                <p class="tx">Harmonised rules on making data from connected products and related services available to users, data holders, recipients and public bodies; on switching between data processing services; and on safeguards against unlawful third-party access. <span class="chip">Art. 1</span></p>
+                <p class="ai-label">Key points</p>
+                <ul class="ai-points">
+                  <li><span>Connected products must make the data they generate easily, securely and freely accessible to users by default.</span><span class="chips"><span class="chip">Art. 3</span></span></li>
+                  <li><span>On a user’s request, data holders must share data with third parties on fair, reasonable and non-discriminatory terms.</span><span class="chips"><span class="chip">Art. 5</span> <span class="chip">Art. 8</span></span></li>
+                  <li><span>Unilaterally imposed unfair contractual terms on data access are not binding.</span><span class="chips"><span class="chip">Art. 13</span></span></li>
+                  <li><span>Providers must remove obstacles to switching cloud services and guard non-personal data held in the EU against unlawful foreign governmental access.</span><span class="chips"><span class="chip">Art. 23</span> <span class="chip">Art. 32</span></span></li>
+                </ul>
+              </div>
+            </div>
+          </main>
+        </div>
+      </div></div>
+    </div>
+
+    <ul class="legend">
+      <li><span class="n">1</span><span><b>A TOC you can actually scan.</b> Left rail, sentence case, roman numerals as quiet gold markers, article ranges per chapter — the current all-caps boxes make every chapter shout equally.</span></li>
+      <li><span class="n">2</span><span><b>Legal status up front.</b> “In force” and “applies from” are the first things a practitioner checks; today they’re absent.</span></li>
+      <li><span class="n">3</span><span><b>One jump box instead of two number inputs.</b> Accepts “23”, “art 23” or “rec 40”, with a keyboard shortcut — the paired Article/Recital fields with “Go” buttons become one affordance.</span></li>
+      <li><span class="n">4</span><span><b>AI content is labelled as such.</b> A gold spark, an explicit “verify against the official text”, and article chips aligned in a consistent right column instead of floating mid-sentence.</span></li>
+    </ul>
+  </section>
+
+  <!-- ==================== MOCK-UP 3 : READER ==================== -->
+  <section class="shot">
+    <div class="shot-head"><span class="shot-num">03</span><h2>Article reader — the text, with its context beside it</h2></div>
+    <p class="shot-sub">This is where your best data — recital links, definitions, case law — currently hides behind navigation. The reader becomes three zones: contents on the left, a fixed-measure serif column in the middle, and a context rail on the right showing the recitals and cases that belong to <em>this</em> article.</p>
+
+    <div class="frame">
+      <div class="frame-bar"><div class="dots"><i></i><i></i><i></i></div><div class="urlbar">legalviz.eu/eli/reg/2023/2854/art/1</div></div>
+      <div class="frame-scroll"><div class="mk">
+
+        <div class="mk-top">
+          <div class="mk-brand">
+            <svg class="starmark" width="24" height="24" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="10" fill="#1c2f6e"/><g fill="#d9ab3c"><circle cx="17" cy="10" r="1.1"/><circle cx="16.06" cy="13.5" r="1.1"/><circle cx="13.5" cy="16.06" r="1.1"/><circle cx="10" cy="17" r="1.1"/><circle cx="6.5" cy="16.06" r="1.1"/><circle cx="3.94" cy="13.5" r="1.1"/><circle cx="3" cy="10" r="1.1"/><circle cx="3.94" cy="6.5" r="1.1"/><circle cx="6.5" cy="3.94" r="1.1"/><circle cx="10" cy="3" r="1.1"/><circle cx="13.5" cy="3.94" r="1.1"/><circle cx="16.06" cy="6.5" r="1.1"/></g></svg>
+          </div>
+          <span class="crumb" style="position:relative"><b>Data Act</b><span class="sep">/</span>Chapter I — General provisions<span class="note" style="top:-9px;right:-30px">5</span></span>
+          <div class="grow"></div>
+          <div class="mk-search-sm">Search this law…<span class="k">/</span></div>
+          <span class="mk-pill-btn">EN ▾</span>
+        </div>
+
+        <div class="mk-body">
+          <aside class="mk-rail read-rail" style="min-height:760px">
+            <div class="jump">Go to…<span class="k">g</span></div>
+            <p class="rail-label">Contents</p>
+            <ul class="toc">
+              <li class="open">
+                <div class="ch"><span class="rn">I</span><span class="t"><b>General provisions</b></span></div>
+                <ul class="arts">
+                  <li class="on"><b>Art. 1</b> · Subject matter and scope</li>
+                  <li><b>Art. 2</b> · Definitions</li>
+                </ul>
+              </li>
+              <li><div class="ch"><span class="rn">II</span><span class="t">B2C &amp; B2B data sharing</span><span class="range">3–7</span></div></li>
+              <li><div class="ch"><span class="rn">III</span><span class="t">Obligations for data holders</span><span class="range">8–12</span></div></li>
+              <li><div class="ch"><span class="rn">IV</span><span class="t">Unfair contractual terms</span><span class="range">13</span></div></li>
+              <li><div class="ch"><span class="rn">V</span><span class="t">Public sector access</span><span class="range">14–22</span></div></li>
+              <li><div class="ch"><span class="rn">VI</span><span class="t">Switching providers</span><span class="range">23–31</span></div></li>
+              <li><div class="ch"><span class="rn">VII</span><span class="t">International access</span><span class="range">32</span></div></li>
+              <li><div class="ch"><span class="rn">VIII</span><span class="t">Interoperability</span><span class="range">33–36</span></div></li>
+            </ul>
+          </aside>
+
+          <main class="read-main">
+            <article class="article-col">
+              <p class="art-eyebrow" style="position:relative">Chapter I · General provisions<span class="note" style="top:-6px;right:0">1</span></p>
+              <h1>Article 1</h1>
+              <p class="art-sub">Subject matter and scope</p>
+
+              <div class="law-text" style="padding-left:44px">
+                <div class="para">
+                  <span class="pn">1.</span>
+                  <div class="pt">This Regulation lays down harmonised rules, inter alia, on:
+                    <ol class="pts">
+                      <li><span class="m">(a)</span><span>the making available of <span class="dt">product data</span> and <span class="dt">related service data</span> to the <span class="dt">user</span> of the <span class="dt">connected product</span> or related service;</span></li>
+                      <li><span class="m">(b)</span><span>the making available of data by <span class="dt open">data holders</span> to <span class="dt">data recipients</span>;</span></li>
+                      <li><span class="m">(c)</span><span>the making available of data by data holders to public sector bodies, the Commission, the European Central Bank and Union bodies, where there is an exceptional need for those data for the performance of a specific task carried out in the public interest;</span></li>
+                      <li><span class="m">(d)</span><span>facilitating switching between <span class="dt">data processing services</span>;</span></li>
+                      <li><span class="m">(e)</span><span>introducing safeguards against unlawful third-party access to <span class="dt">non-personal data</span>; and</span></li>
+                      <li><span class="m">(f)</span><span>the development of <span class="dt">interoperability</span> standards for data to be accessed, transferred and used.</span></li>
+                    </ol>
+                  </div>
+                </div>
+                <div class="para">
+                  <span class="pn">2.</span>
+                  <div class="pt">This Regulation covers personal and non-personal data, including the following types of data, in the following contexts:
+                    <ol class="pts">
+                      <li><span class="m">(a)</span><span><a class="xref">Chapter II</a> applies to data, with the exception of content, concerning the performance, use and environment of connected products and related services;</span></li>
+                      <li><span class="m">(b)</span><span><a class="xref">Chapter III</a> applies to any private sector data that is subject to statutory data sharing obligations;</span></li>
+                    </ol>
+                  </div>
+                </div>
+              </div>
+
+              <div class="defpop" style="left:150px;top:342px">
+                <span class="note" style="top:-11px;right:-11px">2</span>
+                <div class="term">data holder <span class="src">Art. 2(13)</span></div>
+                <p>A natural or legal person that has the right or obligation, in accordance with this Regulation, to use and make available data, including, where contractually agreed, product data or related service data.</p>
+              </div>
+
+              <div class="read-foot" style="position:relative">
+                <span class="note" style="top:-11px;left:calc(50% - 11px)">4</span>
+                <span class="prev"><span>Previous</span>—</span>
+                <div class="mid"><div class="lab">Article 1 of 50 · keys: j / k</div><div class="bar"><i></i></div></div>
+                <span class="next"><span>Next</span>Art. 2 — Definitions →</span>
+              </div>
+            </article>
+          </main>
+
+          <aside class="ctx-rail">
+            <span class="note" style="top:26px;left:-6px">3</span>
+            <div class="ctx-card">
+              <div class="ctx-tabs"><span class="on">Recitals · 3</span><span>Case law · 0</span><span>Cited by · 4</span></div>
+              <div class="ctx-body">
+                <div class="rec">
+                  <div class="rh"><b>Recital 5</b><span class="why">explains ¶1(a)</span></div>
+                  <p>…this Regulation should ensure that users of a connected product or related service in the Union can access, in a timely manner, the data generated by its use…</p>
+                </div>
+                <div class="rec">
+                  <div class="rh"><b>Recital 20</b><span class="why">explains ¶1(b)</span></div>
+                  <p>…data holders should make data available to data recipients under fair, reasonable and non-discriminatory terms and in a transparent manner…</p>
+                </div>
+                <div class="rec">
+                  <div class="rh"><b>Recital 79</b><span class="why">explains ¶1(e)</span></div>
+                  <p>…safeguards should apply where international access to non-personal data held in the Union would conflict with Union or national law…</p>
+                </div>
+                <div class="ctx-note">Recital matches computed on-device (TF-IDF)</div>
+              </div>
+            </div>
+          </aside>
+        </div>
+      </div></div>
+    </div>
+
+    <ul class="legend">
+      <li><span class="n">1</span><span><b>You always know where you are.</b> A chapter eyebrow above the article number, plus the breadcrumb — no more bare “Article 1” floating without context.</span></li>
+      <li><span class="n">2</span><span><b>Definitions come to you.</b> Dotted terms already exist; the popover shows the Art. 2 definition inline with its source, instead of making the reader jump away.</span></li>
+      <li><span class="n">3</span><span><b>The context rail is the product.</b> Recital links (your TF-IDF mapping), case law and cross-references live beside the text with a “why matched” hint — today they’re invisible until you hunt.</span></li>
+      <li><span class="n">4</span><span><b>Reading has momentum.</b> Prev/next with the next article’s title, a progress dash, and j/k keys — the current sidebar arrows are easy to miss.</span></li>
+      <li><span class="n">5</span><span><b>Hanging paragraph numbers.</b> “1.” and “(a)” sit in the margin so the legal text itself stays flush left at a fixed ~66-character measure.</span></li>
+    </ul>
+  </section>
+
+  <!-- ==================== QUICK WINS ==================== -->
+  <section class="wins">
+    <h2>If you only change five things</h2>
+    <p>Roughly ordered by effort — the first column is CSS-and-copy-level work in the existing components; the second column touches layout and data flow.</p>
+    <div class="win-grid">
+      <div class="win"><span class="tag now">quick win</span><h3>Relative dates + resume position</h3><p>Replace “Monday / Thursday” with “2 days ago” and store the last article per law (it’s already in the URL) — <code>LandingLibrary.jsx</code>.</p></div>
+      <div class="win"><span class="tag now">quick win</span><h3>Sentence-case TOC with article ranges</h3><p>Stop uppercasing chapter titles; add “Art. 1–2” ranges and quiet roman numerals. Biggest legibility gain per line of code.</p></div>
+      <div class="win"><span class="tag now">quick win</span><h3>Status in the law header</h3><p>Surface “In force · applies from …” pills from the metadata you already fetch; label the AI overview as generated.</p></div>
+      <div class="win"><span class="tag later">bigger move</span><h3>TOC left, context right</h3><p>Move contents to the left rail and give recitals / case law / cited-by a tabbed rail next to the article in <code>LawViewer.jsx</code>.</p></div>
+      <div class="win"><span class="tag later">bigger move</span><h3>One “go to” box</h3><p>Merge the Article/Recital inputs into a single parser (“23”, “rec 40”) with a <code>g</code> shortcut, and add j/k prev-next keys.</p></div>
+      <div class="win"><span class="tag later">bigger move</span><h3>Definition popovers</h3><p>Upgrade the dotted defined-terms to popovers quoting the Art. 2 definition with a link — the parser already extracts definitions.</p></div>
+    </div>
+  </section>
+</div>

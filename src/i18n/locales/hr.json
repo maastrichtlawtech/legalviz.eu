@@ -221,6 +221,26 @@
     "external": "Reference na drugu zakonodavstvo:",
     "resolving": "Rješavanje…"
   },
+  "citedBy": {
+    "title": "Citirano u",
+    "subtitle": "Odredbe i presude koje citiraju ovaj članak",
+    "loading": "Učitavanje citata…",
+    "legislationLabel": "Zakonodavstvo ({count})",
+    "judgmentsLabel": "Presude ({count})",
+    "empty": "U modernom korpusu još nema poznatih citata.",
+    "unavailable": "Citati trenutačno nisu dostupni.",
+    "footnote": "Brojevi su donja granica iz modernog zakonodavnog korpusa (nakon 2004.); pokrivenost presuda je djelomična.",
+    "andMore": "I još {count} koji nisu prikazani.",
+    "showAll": "Prikaži svih {count} vraćenih citata",
+    "showLess": "Prikaži manje citata",
+    "openLaw": "Otvori {law}, {unit}",
+    "reference": "→ Art. {article}{paragraph}{point}",
+    "unit": {
+      "article": "Članak {n}",
+      "recital": "Uvodna izjava {n}",
+      "annex": "Prilog {n}"
+    }
+  },
   "lawViewer": {
     "notAvailableTitle": "Ovaj zakon još nije dostupan ovdje",
     "notAvailableMessage": "Nismo mogli pronaći strukturiranu verziju teksta koju koristimo za prikaz ovog zakona u LegalViz. Zakon sam može biti dostupan na EUR-Lex.",

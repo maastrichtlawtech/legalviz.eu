@@ -221,6 +221,26 @@
     "external": "Odkazy na jiné právní předpisy:",
     "resolving": "Načítání…"
   },
+  "citedBy": {
+    "title": "Citováno v",
+    "subtitle": "Ustanovení a rozsudky, které citují tento článek",
+    "loading": "Načítání citací…",
+    "legislationLabel": "Právní předpisy ({count})",
+    "judgmentsLabel": "Rozsudky ({count})",
+    "empty": "V moderním korpusu zatím nejsou známy žádné citace.",
+    "unavailable": "Citace nejsou momentálně k dispozici.",
+    "footnote": "Počty jsou dolní hranicí z moderního korpusu právních předpisů (po roce 2004); pokrytí rozsudků je částečné.",
+    "andMore": "A dalších {count} nezobrazeno.",
+    "showAll": "Zobrazit všech {count} vrácených citací",
+    "showLess": "Zobrazit méně citací",
+    "openLaw": "Otevřít {law}, {unit}",
+    "reference": "→ Art. {article}{paragraph}{point}",
+    "unit": {
+      "article": "Článek {n}",
+      "recital": "Bod odůvodnění {n}",
+      "annex": "Příloha {n}"
+    }
+  },
   "lawViewer": {
     "notAvailableTitle": "Tento předpis zde zatím není k dispozici",
     "notAvailableMessage": "Nepodařilo se nám najít strukturovanou verzi textu, kterou používáme k zobrazení tohoto předpisu v LegalViz. Samotný předpis může být stále dostupný v EUR-Lex.",

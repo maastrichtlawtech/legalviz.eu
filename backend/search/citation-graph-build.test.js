@@ -12,6 +12,7 @@ test("CLI options and source unit types are normalized", () => {
   assert.deepEqual(parseCliArgs(["--corpusDir", "/corpus", "--out", "/graph.json", "--limit", "20", "--fromYear", "2010", "--toYear", "2020", "--maxXmlBytes", "1024", "--batchSize", "25"]), {
     corpusDir: "/corpus", outputPath: "/graph.json", limit: 20, fromYear: 2010, toYear: 2020, maxXmlBytes: 1024, batchSize: 25,
   });
+  assert.throws(() => parseCliArgs(["--limit", "0"]), /Invalid value/);
   assert.throws(() => parseCliArgs(["--maxXmlBytes", "0"]), /Invalid value/);
   assert.throws(() => parseCliArgs(["--batchSize", "0"]), /Invalid value/);
   assert.equal(sourceUnitTypeFor("recital_12"), "recital");
@@ -115,6 +116,26 @@ test("builder does not use operative-only fallback for malformed annex markup", 
   const nested = stripCompleteUppercaseAnnexes("<ACT><ANNEX>x</ANNEX></ACT>");
   assert.equal(nested.annexElementsOmitted, 0);
   assert.equal(nested.hasUnmatchedAnnexMarkup, true);
+});
+
+test("builder does not use operative-only fallback for a self-closing annex sibling", async () => {
+  let parseCalls = 0;
+  // A self-closing <ANNEX ID="1"/> is consumed as an opening tag, and the lazy
+  // body scan swallows <IMPORTANT/> and everything up to annex 2's </ANNEX> —
+  // silently deleting operative content. The builder must reject this fallback.
+  const xml = `<ACT></ACT><ANNEX ID="1"/><IMPORTANT/><ANNEX ID="2">${"x".repeat(200)}</ANNEX>`;
+  const artifact = await buildCitationGraph({
+    files: ["/fake/32020R0001.xml.gz"], outputPath: null, maxXmlBytes: 50,
+    legalCache: { isReady: () => true, getByCelex: () => null },
+    readXml: async () => xml, wrapXml: (value) => value,
+    parseXml: async () => { parseCalls += 1; return {}; },
+  });
+  assert.equal(parseCalls, 0);
+  assert.equal(artifact.stats.oversizedLawsSkipped, 1);
+  assert.equal(artifact.stats.oversizedLawsOperativeOnly, 0);
+  assert.equal(artifact.failures[0].type, "oversized");
+  const stripped = stripCompleteUppercaseAnnexes(xml);
+  assert.equal(stripped.hasSelfClosingAnnex, true);
 });
 
 test("builder resolves, deduplicates, reports failures/unresolved refs, and marks case law partial", async () => {

@@ -3,7 +3,7 @@ const path = require("path");
 const zlib = require("zlib");
 const GRAPH_VERSION = 1;
 
-const DEFAULT_CITATION_GRAPH_PATH = process.env.CITATION_GRAPH_PATH || path.join(__dirname, "data", "citation-graph.json");
+const DEFAULT_CITATION_GRAPH_PATH = path.join(__dirname, "data", "citation-graph.json");
 const normalize = (value) => String(value == null ? "" : value).trim().toUpperCase();
 const sourceKey = (edge) => [edge.kind, edge.sourceCelex, edge.sourceUnitType, edge.sourceUnit].join("|");
 

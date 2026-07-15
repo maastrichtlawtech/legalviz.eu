@@ -221,6 +221,26 @@
     "external": "Odwołania do innego ustawodawstwa:",
     "resolving": "Rozwiązywanie…"
   },
+  "citedBy": {
+    "title": "Cytowane przez",
+    "subtitle": "Przepisy i wyroki cytujące ten artykuł",
+    "loading": "Ładowanie cytowań…",
+    "legislationLabel": "Prawodawstwo ({count})",
+    "judgmentsLabel": "Wyroki ({count})",
+    "empty": "Brak znanych cytowań we współczesnym korpusie.",
+    "unavailable": "Cytowania są obecnie niedostępne.",
+    "footnote": "Liczby stanowią dolną granicę na podstawie współczesnego korpusu prawodawstwa (po 2004 r.); pokrycie wyroków jest częściowe.",
+    "andMore": "I {count} więcej, które nie są wyświetlane.",
+    "showAll": "Pokaż wszystkie {count} zwrócone cytowania",
+    "showLess": "Pokaż mniej cytowań",
+    "openLaw": "Otwórz {law}, {unit}",
+    "reference": "→ Art. {article}{paragraph}{point}",
+    "unit": {
+      "article": "Artykuł {n}",
+      "recital": "Motyw {n}",
+      "annex": "Załącznik {n}"
+    }
+  },
   "lawViewer": {
     "notAvailableTitle": "To prawo nie jest jeszcze dostępne tutaj",
     "notAvailableMessage": "Nie znaleźliśmy strukturalnej wersji tekstu, którą używamy do wyświetlenia tego prawa w LegalViz. Prawo nadal może być dostępne na EUR-Lex.",

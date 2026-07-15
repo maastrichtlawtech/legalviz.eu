@@ -1,7 +1,7 @@
 const { z } = require('zod');
 const { JSDOM } = require('jsdom');
 
-const { ClientError, validateLang } = require('../shared/api-utils');
+const { ClientError, requireCitationGraph, validateLang } = require('../shared/api-utils');
 const { validateCelex, parseReferenceText } = require('../shared/reference-utils');
 const { fetchCaseLaw, fetchAmendments, fetchImplementing } = require('../shared/law-queries');
 const { ensureRecitalTitles, getCachedRecitalTitles } = require('../shared/recital-title-service');
@@ -91,17 +91,6 @@ function requireLang(lang) {
 
 function jsonResult(obj) {
   return { content: [{ type: 'text', text: JSON.stringify(obj, null, 2) }] };
-}
-
-function requireCitationGraph(store) {
-  if (!store || (typeof store.isReady === 'function' && !store.isReady())) {
-    throw new ClientError(
-      'The citation graph is not loaded on the server yet. Please try again shortly.',
-      503,
-      'citation_graph_unavailable'
-    );
-  }
-  return store;
 }
 
 /** Wrap a tool handler so any error becomes a model-readable isError result. */

@@ -5,6 +5,9 @@ export function isCitedByUnavailableError(error) {
     && (error.status === 404 || error.status === 503 || error.code === "citation_graph_unavailable");
 }
 
+// The backend store (publicSourceUnit in citation-graph-store.js) already strips
+// these recital_/annex_ prefixes; this client-side copy is deliberate defense for
+// older or raw payloads that may still carry them — do not "simplify" it away.
 export function normalizeCitedByUnit(unitType, unit) {
   if (typeof unit !== "string") return unit;
   const normalizedType = String(unitType || "").trim().toLowerCase();

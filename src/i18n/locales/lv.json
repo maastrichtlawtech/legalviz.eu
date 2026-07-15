@@ -221,6 +221,26 @@
     "external": "Atsauces uz citu normatīvo aktu:",
     "resolving": "Atrisināšana…"
   },
+  "citedBy": {
+    "title": "Citēts",
+    "subtitle": "Noteikumi un spriedumi, kas citē šo pantu",
+    "loading": "Ielādē citātus…",
+    "legislationLabel": "Tiesību akti ({count})",
+    "judgmentsLabel": "Spriedumi ({count})",
+    "empty": "Mūsdienu korpusā vēl nav zināmu citātu.",
+    "unavailable": "Citāti pašlaik nav pieejami.",
+    "footnote": "Skaitļi ir apakšējā robeža, kas balstīta uz mūsdienu tiesību aktu korpusu (pēc 2004. gada); spriedumu tvērums ir daļējs.",
+    "andMore": "Un vēl {count}, kas nav parādīti.",
+    "showAll": "Rādīt visus {count} atgrieztos citātus",
+    "showLess": "Rādīt mazāk citātu",
+    "openLaw": "Atvērt {law}, {unit}",
+    "reference": "→ Art. {article}{paragraph}{point}",
+    "unit": {
+      "article": "Pants {n}",
+      "recital": "Apsvērums {n}",
+      "annex": "Pielikums {n}"
+    }
+  },
   "lawViewer": {
     "notAvailableTitle": "Šis likums vēl šeit nav pieejams",
     "notAvailableMessage": "Mēs neatradām strukturētu teksta versiju, ko izmantojam šī likuma parādīšanai LegalViz. Likums joprojām var būt pieejams EUR-Lex.",

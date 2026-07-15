@@ -2,7 +2,7 @@ const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
 
-const { ClientError } = require("../shared/api-utils");
+const { ClientError, requireCitationGraph } = require("../shared/api-utils");
 const { parseFmxXml } = require("../shared/fmx-parser-node");
 const { createSearchHandler } = require("../search/search-route");
 const { fetchMetadata, fetchAmendments, fetchImplementing, fetchCaseLaw } = require("../shared/law-queries");
@@ -80,28 +80,6 @@ function parsePaginationValue(value, name, { defaultValue, min, max = Infinity }
   return parsed;
 }
 
-function requireCitationGraph(store) {
-  if (!store || (typeof store.isReady === 'function' && !store.isReady())) {
-    throw new ClientError(
-      'The citation graph is not loaded on the server yet. Please try again shortly.',
-      503,
-      'citation_graph_unavailable'
-    );
-  }
-  return store;
-}
-
-function mapCitationGraphError(err) {
-  if (err?.code === 'citation_graph_unavailable') {
-    return new ClientError(
-      'The citation graph is not loaded on the server yet. Please try again shortly.',
-      503,
-      'citation_graph_unavailable'
-    );
-  }
-  return err;
-}
-
 function registerApiRoutes(app, deps) {
   const {
     analytics,
@@ -169,7 +147,7 @@ function registerApiRoutes(app, deps) {
       const offset = parsePaginationValue(req.query.offset, 'offset', { defaultValue: 0, min: 0 });
       res.json(requireCitationGraph(citationGraphStore).getArticleCitations(celex, article, { limit, offset }));
     } catch (err) {
-      safeErrorResponse(res, mapCitationGraphError(err), 'Failed to fetch citing provisions');
+      safeErrorResponse(res, err, 'Failed to fetch citing provisions');
     }
   });
 
@@ -181,7 +159,7 @@ function registerApiRoutes(app, deps) {
       }
       res.json(requireCitationGraph(citationGraphStore).getActCitations(celex));
     } catch (err) {
-      safeErrorResponse(res, mapCitationGraphError(err), 'Failed to fetch citation counts');
+      safeErrorResponse(res, err, 'Failed to fetch citation counts');
     }
   });
 

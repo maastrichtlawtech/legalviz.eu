@@ -221,6 +221,26 @@
     "external": "Referințe la alte acte de legislație:",
     "resolving": "Se rezolvă…"
   },
+  "citedBy": {
+    "title": "Citat de",
+    "subtitle": "Dispoziții și hotărâri care citează acest articol",
+    "loading": "Se încarcă citările…",
+    "legislationLabel": "Legislație ({count})",
+    "judgmentsLabel": "Hotărâri ({count})",
+    "empty": "Încă nu există citări cunoscute în corpusul modern.",
+    "unavailable": "Citările nu sunt disponibile în acest moment.",
+    "footnote": "Numărătoarea reprezintă o limită inferioară din corpusul legislativ modern (ulterior anului 2004); acoperirea hotărârilor este parțială.",
+    "andMore": "Și încă {count} neafișate.",
+    "showAll": "Afișează toate cele {count} citări returnate",
+    "showLess": "Afișează mai puține citări",
+    "openLaw": "Deschide {law}, {unit}",
+    "reference": "→ Art. {article}{paragraph}{point}",
+    "unit": {
+      "article": "Articol {n}",
+      "recital": "Considerent {n}",
+      "annex": "Anexă {n}"
+    }
+  },
   "lawViewer": {
     "notAvailableTitle": "Această legislație nu este încă disponibilă aici",
     "notAvailableMessage": "Nu am găsit versiunea de text structurat pe care o folosim pentru a afișa această legislație în LegalViz. Legislația însuși ar putea să fie încă disponibilă pe EUR-Lex.",

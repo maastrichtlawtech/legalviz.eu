@@ -221,6 +221,26 @@
     "external": "Odkazy na inú legislatívu:",
     "resolving": "Riešenie…"
   },
+  "citedBy": {
+    "title": "Citované v",
+    "subtitle": "Ustanovenia a rozsudky, ktoré citujú tento článok",
+    "loading": "Načítavajú sa citácie…",
+    "legislationLabel": "Právne predpisy ({count})",
+    "judgmentsLabel": "Rozsudky ({count})",
+    "empty": "V modernom korpuse zatiaľ nie sú známe žiadne citácie.",
+    "unavailable": "Citácie momentálne nie sú k dispozícii.",
+    "footnote": "Počty predstavujú dolnú hranicu z moderného korpusu právnych predpisov (po roku 2004); pokrytie rozsudkov je čiastočné.",
+    "andMore": "A ďalších {count} nezobrazených.",
+    "showAll": "Zobraziť všetkých {count} vrátených citácií",
+    "showLess": "Zobraziť menej citácií",
+    "openLaw": "Otvoriť {law}, {unit}",
+    "reference": "→ Art. {article}{paragraph}{point}",
+    "unit": {
+      "article": "Článok {n}",
+      "recital": "Odôvodnenie {n}",
+      "annex": "Príloha {n}"
+    }
+  },
   "lawViewer": {
     "notAvailableTitle": "Tento zákon nie je tu zatiaľ dostupný",
     "notAvailableMessage": "Nepodarilo sa nám nájsť štruktúrovanú verziu textu, ktorú používame na zobrazenie tohto zákona v LegalViz. Samotný zákon môže byť stále k dispozícii na EUR-Lex.",

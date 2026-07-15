@@ -221,6 +221,26 @@
     "external": "Referencias a otra legislación:",
     "resolving": "Resolviendo…"
   },
+  "citedBy": {
+    "title": "Citado por",
+    "subtitle": "Disposiciones y sentencias que citan este artículo",
+    "loading": "Cargando citas…",
+    "legislationLabel": "Legislación ({count})",
+    "judgmentsLabel": "Sentencias ({count})",
+    "empty": "Aún no hay citas conocidas en el corpus moderno.",
+    "unavailable": "Las citas no están disponibles en este momento.",
+    "footnote": "Los recuentos son un límite inferior basado en el corpus legislativo moderno (posterior a 2004); la cobertura de las sentencias es parcial.",
+    "andMore": "Y {count} más que no se muestran.",
+    "showAll": "Mostrar las {count} citas devueltas",
+    "showLess": "Mostrar menos citas",
+    "openLaw": "Abrir {law}, {unit}",
+    "reference": "→ Art. {article}{paragraph}{point}",
+    "unit": {
+      "article": "Artículo {n}",
+      "recital": "Considerando {n}",
+      "annex": "Anexo {n}"
+    }
+  },
   "lawViewer": {
     "notAvailableTitle": "Esta ley no está disponible aquí aún",
     "notAvailableMessage": "No pudimos encontrar la versión estructurada que usamos para mostrar esta ley en LegalViz. La ley en sí aún puede estar disponible en EUR-Lex.",

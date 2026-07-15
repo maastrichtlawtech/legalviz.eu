@@ -221,6 +221,26 @@
     "external": "Referências a outra legislação:",
     "resolving": "A resolver…"
   },
+  "citedBy": {
+    "title": "Citado por",
+    "subtitle": "Disposições e acórdãos que citam este artigo",
+    "loading": "A carregar citações…",
+    "legislationLabel": "Legislação ({count})",
+    "judgmentsLabel": "Acórdãos ({count})",
+    "empty": "Ainda não há citações conhecidas no corpus moderno.",
+    "unavailable": "As citações não estão disponíveis neste momento.",
+    "footnote": "As contagens são um limite inferior baseado no corpus legislativo moderno (posterior a 2004); a cobertura dos acórdãos é parcial.",
+    "andMore": "E mais {count} não apresentados.",
+    "showAll": "Mostrar todas as {count} citações devolvidas",
+    "showLess": "Mostrar menos citações",
+    "openLaw": "Abrir {law}, {unit}",
+    "reference": "→ Art. {article}{paragraph}{point}",
+    "unit": {
+      "article": "Artigo {n}",
+      "recital": "Considerando {n}",
+      "annex": "Anexo {n}"
+    }
+  },
   "lawViewer": {
     "notAvailableTitle": "Esta lei ainda não está disponível aqui",
     "notAvailableMessage": "Não conseguimos encontrar a versão estruturada que usamos para exibir esta lei no LegalViz. A lei em si ainda pode estar disponível no EUR-Lex.",

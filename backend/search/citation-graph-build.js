@@ -81,11 +81,19 @@ function stripCompleteUppercaseAnnexes(xml) {
   let annexElementsOmitted = 0;
   let actDepth = 0;
   let cursor = 0;
+  let hasSelfClosingAnnex = false;
   const pieces = [];
   const tokenRe = /<\/?ACT(?:\s[^>]*)?>|<ANNEX(?:\s[^>]*)?>[\s\S]*?<\/ANNEX\s*>/g;
   let match;
   while ((match = tokenRe.exec(source)) !== null) {
     if (match[0].startsWith("<ANNEX")) {
+      // A self-closing annex with attributes (<ANNEX ID="1"/>) is consumed by
+      // the opening-tag alternation (the "/" falls inside [^>]*), and the lazy
+      // body scan then swallows everything up to the NEXT annex's </ANNEX> —
+      // silently deleting non-annex content in between. Flag it so the caller
+      // rejects the operative-only fallback rather than trust the corrupted text.
+      const openTagEnd = match[0].indexOf(">");
+      if (openTagEnd > 0 && match[0][openTagEnd - 1] === "/") hasSelfClosingAnnex = true;
       if (actDepth === 0) {
         pieces.push(source.slice(cursor, match.index));
         cursor = match.index + match[0].length;
@@ -101,7 +109,7 @@ function stripCompleteUppercaseAnnexes(xml) {
   const operativeXml = pieces.join("");
   const hasAct = /<ACT(?:\s|>)/.test(operativeXml);
   const hasUnmatchedAnnexMarkup = /<\/?ANNEX(?:\s|>)/.test(operativeXml);
-  return { operativeXml, annexElementsOmitted, hasAct, hasUnmatchedAnnexMarkup };
+  return { operativeXml, annexElementsOmitted, hasAct, hasUnmatchedAnnexMarkup, hasSelfClosingAnnex };
 }
 
 function legislationEdgesForLaw(sourceCelex, parsed, legalCache, counters) {
@@ -169,7 +177,7 @@ function parseCliArgs(argv) {
     else if (flag === "--out") options.outputPath = value;
     else {
       const number = Number.parseInt(value, 10);
-      if (!Number.isInteger(number) || number < 0 || (["--maxXmlBytes", "--batchSize"].includes(flag) && number === 0)) {
+      if (!Number.isInteger(number) || number < 0 || (["--limit", "--maxXmlBytes", "--batchSize"].includes(flag) && number === 0)) {
         throw new Error(`Invalid value for ${flag}: ${value}`);
       }
       if (flag === "--limit") options.limit = number;
@@ -185,24 +193,8 @@ function parseCliArgs(argv) {
 async function buildCitationGraph(options = {}) {
   const fsApi = options.fsApi || fs;
   const corpusDir = options.corpusDir || DEFAULT_CORPUS_DIR;
-  let files = options.files || await listCorpusFiles(corpusDir, fsApi);
-  files = files.filter((file) => {
-    const match = /^\d(\d{4})/.exec(path.basename(file));
-    const year = match ? Number(match[1]) : null;
-    return (options.fromYear == null || (year != null && year >= options.fromYear))
-      && (options.toYear == null || (year != null && year <= options.toYear));
-  });
-  if (options.limit != null) files = files.slice(0, options.limit);
-  let htmlTreeSkipped = options.htmlTreeSkipped;
-  if (htmlTreeSkipped == null && options.files) htmlTreeSkipped = 0;
-  if (htmlTreeSkipped == null) {
-    const htmlDir = path.basename(corpusDir) === "laws"
-      ? path.join(path.dirname(corpusDir), "laws-html")
-      : null;
-    htmlTreeSkipped = htmlDir
-      ? await (options.countHtmlFiles || (async (dir) => (await listTreeFiles(dir, ".html.gz", fsApi)).length))(htmlDir)
-      : 0;
-  }
+  const files = filterCorpusFiles(options.files || await listCorpusFiles(corpusDir, fsApi), options);
+  const htmlTreeSkipped = await countHtmlTreeSkipped(corpusDir, options);
   const legalCache = options.legalCache || (() => {
     const { JsonLegalCacheStore } = require("./legal-cache-store");
     return new JsonLegalCacheStore(options.searchCachePath);
@@ -233,7 +225,8 @@ async function buildCitationGraph(options = {}) {
         const stripped = stripCompleteUppercaseAnnexes(xml);
         const operativeXmlBytes = Buffer.byteLength(stripped.operativeXml, "utf8");
         if (stripped.annexElementsOmitted > 0 && stripped.hasAct
-          && !stripped.hasUnmatchedAnnexMarkup && operativeXmlBytes <= maxXmlBytes) {
+          && !stripped.hasUnmatchedAnnexMarkup && !stripped.hasSelfClosingAnnex
+          && operativeXmlBytes <= maxXmlBytes) {
           try {
             const parsed = await parseXml(wrapXml(stripped.operativeXml));
             counters.parsedLaws += 1;
@@ -278,32 +271,9 @@ async function buildCitationGraph(options = {}) {
   }
   const caseData = options.caseLawData !== undefined ? options.caseLawData
     : await readCaseLawCache(options.caseLawCachePath, fsApi);
-  edges.push(...caseLawEdges(caseData));
-  const deduped = [...new Map(edges.map((edge) => [edgeKey(edge), edge])).values()].sort(compareEdges);
-  const versions = [...parserVersions].sort();
-  const artifact = {
-    graphVersion: GRAPH_VERSION,
-    parserVersion: versions.length === 1 ? versions[0] : (versions.length ? versions : null),
-    generatedAt: (options.now || (() => new Date()))().toISOString(),
-    coverage: {
-      legislation: {
-        status: "corpus", corpusFiles: files.length, parsedLaws: counters.parsedLaws,
-        htmlTreeSkipped, oversizedLawsSkipped: counters.oversizedLawsSkipped, maxXmlBytes,
-        oversizedLawsOperativeOnly: counters.oversizedLawsOperativeOnly,
-        annexElementsOmitted: counters.annexElementsOmitted,
-        annexCoverage: counters.oversizedLawsOperativeOnly > 0 ? "partial-operative-only" : "full-for-parsed-fmx",
-      },
-      caseLaw: { status: caseData ? "partial-cache" : "not-included", judgments: caseData ? Object.keys(caseData).length : 0 },
-    },
-    stats: {
-      ...counters, failures: failures.length,
-      resolvedReferences: counters.externalReferences - counters.unresolvedReferences,
-      legislationEdges: deduped.filter((edge) => edge.kind === "legislation").length,
-      judgmentEdges: deduped.filter((edge) => edge.kind === "judgment").length,
-      edges: deduped.length,
-    },
-    failures, edges: deduped,
-  };
+  const artifact = assembleArtifact({
+    counters, failures, edges, parserVersions, htmlTreeSkipped, maxXmlBytes, caseData, now: options.now,
+  });
   const outputPath = options.outputPath === undefined ? DEFAULT_CITATION_GRAPH_PATH : options.outputPath;
   if (outputPath) await writeArtifactAtomic(outputPath, artifact, fsApi);
   return artifact;
@@ -329,6 +299,39 @@ async function countHtmlTreeSkipped(corpusDir, options = {}) {
   return (options.countHtmlFiles || (async (dir) => (await listTreeFiles(dir, ".html.gz", fsApi)).length))(htmlDir);
 }
 
+// Assemble the final artifact from accumulated counters/edges. Shared by the
+// single-process builder and the batched shard merge so their output stays
+// byte-identical (JSON.stringify key order is asserted by the tests). Case-law
+// edges are folded in here (before dedup) so both callers get them once.
+function assembleArtifact({ counters, failures, edges, parserVersions, htmlTreeSkipped, maxXmlBytes, caseData, now }) {
+  const allEdges = [...edges, ...caseLawEdges(caseData)];
+  const deduped = [...new Map(allEdges.map((edge) => [edgeKey(edge), edge])).values()].sort(compareEdges);
+  const versions = [...parserVersions].sort();
+  return {
+    graphVersion: GRAPH_VERSION,
+    parserVersion: versions.length === 1 ? versions[0] : (versions.length ? versions : null),
+    generatedAt: (now || (() => new Date()))().toISOString(),
+    coverage: {
+      legislation: {
+        status: "corpus", corpusFiles: counters.corpusFiles, parsedLaws: counters.parsedLaws,
+        htmlTreeSkipped, oversizedLawsSkipped: counters.oversizedLawsSkipped, maxXmlBytes,
+        oversizedLawsOperativeOnly: counters.oversizedLawsOperativeOnly,
+        annexElementsOmitted: counters.annexElementsOmitted,
+        annexCoverage: counters.oversizedLawsOperativeOnly > 0 ? "partial-operative-only" : "full-for-parsed-fmx",
+      },
+      caseLaw: { status: caseData ? "partial-cache" : "not-included", judgments: caseData ? Object.keys(caseData).length : 0 },
+    },
+    stats: {
+      ...counters, failures: failures.length,
+      resolvedReferences: counters.externalReferences - counters.unresolvedReferences,
+      legislationEdges: deduped.filter((edge) => edge.kind === "legislation").length,
+      judgmentEdges: deduped.filter((edge) => edge.kind === "judgment").length,
+      edges: deduped.length,
+    },
+    failures, edges: deduped,
+  };
+}
+
 function runCitationGraphWorker(files, options = {}) {
   return new Promise((resolve, reject) => {
     const worker = new Worker(path.join(__dirname, "citation-graph-worker.js"), {
@@ -340,12 +343,17 @@ function runCitationGraphWorker(files, options = {}) {
       resourceLimits: { maxOldGenerationSizeMb: options.workerHeapMb || DEFAULT_WORKER_HEAP_MB },
     });
     let settled = false;
+    // Once the worker has delivered its result (message or error), tear it down
+    // explicitly so a future handle leak in worker code can't keep the thread —
+    // and thus the build — alive. terminate() returns a promise; fire-and-forget.
+    const stop = () => { worker.terminate().catch(() => {}); };
     worker.once("message", (message) => {
       settled = true;
       if (message?.ok) resolve(message.artifact);
       else reject(new Error(message?.error || "Citation graph worker failed"));
+      stop();
     });
-    worker.once("error", (error) => { settled = true; reject(error); });
+    worker.once("error", (error) => { settled = true; reject(error); stop(); });
     worker.once("exit", (code) => {
       if (!settled && code !== 0) reject(new Error(`Citation graph worker exited with code ${code}`));
       else if (!settled) reject(new Error("Citation graph worker exited without a result"));
@@ -369,37 +377,12 @@ function mergeCitationGraphShards(shards, options = {}) {
     const versions = Array.isArray(shard?.parserVersion) ? shard.parserVersion : [shard?.parserVersion];
     for (const version of versions) if (version != null) parserVersions.add(version);
   }
-  const caseData = options.caseLawData;
-  edges.push(...caseLawEdges(caseData));
-  const deduped = [...new Map(edges.map((edge) => [edgeKey(edge), edge])).values()].sort(compareEdges);
-  const versions = [...parserVersions].sort();
-  return {
-    graphVersion: GRAPH_VERSION,
-    parserVersion: versions.length === 1 ? versions[0] : (versions.length ? versions : null),
-    generatedAt: (options.now || (() => new Date()))().toISOString(),
-    coverage: {
-      legislation: {
-        status: "corpus", corpusFiles: counters.corpusFiles, parsedLaws: counters.parsedLaws,
-        htmlTreeSkipped: options.htmlTreeSkipped || 0,
-        oversizedLawsSkipped: counters.oversizedLawsSkipped,
-        maxXmlBytes: options.maxXmlBytes ?? DEFAULT_MAX_XML_BYTES,
-        oversizedLawsOperativeOnly: counters.oversizedLawsOperativeOnly,
-        annexElementsOmitted: counters.annexElementsOmitted,
-        annexCoverage: counters.oversizedLawsOperativeOnly > 0 ? "partial-operative-only" : "full-for-parsed-fmx",
-      },
-      caseLaw: { status: caseData ? "partial-cache" : "not-included", judgments: caseData ? Object.keys(caseData).length : 0 },
-    },
-    stats: {
-      ...counters,
-      failures: failures.length,
-      resolvedReferences: counters.externalReferences - counters.unresolvedReferences,
-      legislationEdges: deduped.filter((edge) => edge.kind === "legislation").length,
-      judgmentEdges: deduped.filter((edge) => edge.kind === "judgment").length,
-      edges: deduped.length,
-    },
-    failures,
-    edges: deduped,
-  };
+  return assembleArtifact({
+    counters, failures, edges, parserVersions,
+    htmlTreeSkipped: options.htmlTreeSkipped || 0,
+    maxXmlBytes: options.maxXmlBytes ?? DEFAULT_MAX_XML_BYTES,
+    caseData: options.caseLawData, now: options.now,
+  });
 }
 
 async function buildCitationGraphBatched(options = {}) {

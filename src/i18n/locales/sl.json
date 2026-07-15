@@ -221,6 +221,26 @@
     "external": "Sklici na drugo zakonodajo:",
     "resolving": "Razreševanje…"
   },
+  "citedBy": {
+    "title": "Navedeno v",
+    "subtitle": "Določbe in sodbe, ki navajajo ta člen",
+    "loading": "Nalaganje navedb…",
+    "legislationLabel": "Zakonodaja ({count})",
+    "judgmentsLabel": "Sodbe ({count})",
+    "empty": "V sodobnem korpusu še ni znanih navedb.",
+    "unavailable": "Navedbe trenutno niso na voljo.",
+    "footnote": "Števila predstavljajo spodnjo mejo iz sodobnega zakonodajnega korpusa (po letu 2004); pokritost sodb je delna.",
+    "andMore": "In še {count}, ki niso prikazane.",
+    "showAll": "Prikaži vseh {count} vrnjenih navedb",
+    "showLess": "Prikaži manj navedb",
+    "openLaw": "Odpri {law}, {unit}",
+    "reference": "→ Art. {article}{paragraph}{point}",
+    "unit": {
+      "article": "Člen {n}",
+      "recital": "Uvodna izjava {n}",
+      "annex": "Priloga {n}"
+    }
+  },
   "lawViewer": {
     "notAvailableTitle": "Ta zakonodaja še ni dostopna tukaj",
     "notAvailableMessage": "Nismo mogli najti strukturirane verzije besedila, ki jo uporabljamo za prikaz te zakonodaje v LegalViz. Sama zakonodaja je morda še vedno dostopna na EUR-Lex.",

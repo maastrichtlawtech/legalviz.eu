@@ -221,6 +221,26 @@
     "external": "Riferimenti ad altra legislazione:",
     "resolving": "Risoluzione…"
   },
+  "citedBy": {
+    "title": "Citato da",
+    "subtitle": "Disposizioni e sentenze che citano questo articolo",
+    "loading": "Caricamento delle citazioni…",
+    "legislationLabel": "Legislazione ({count})",
+    "judgmentsLabel": "Sentenze ({count})",
+    "empty": "Nessuna citazione nota nel corpus moderno per ora.",
+    "unavailable": "Le citazioni non sono disponibili al momento.",
+    "footnote": "I conteggi rappresentano un limite inferiore basato sul corpus legislativo moderno (successivo al 2004); la copertura delle sentenze è parziale.",
+    "andMore": "E altre {count} non mostrate.",
+    "showAll": "Mostra tutte le {count} citazioni restituite",
+    "showLess": "Mostra meno citazioni",
+    "openLaw": "Apri {law}, {unit}",
+    "reference": "→ Art. {article}{paragraph}{point}",
+    "unit": {
+      "article": "Articolo {n}",
+      "recital": "Considerando {n}",
+      "annex": "Allegato {n}"
+    }
+  },
   "lawViewer": {
     "notAvailableTitle": "Questa legge non è ancora disponibile qui",
     "notAvailableMessage": "Non abbiamo trovato la versione strutturata che utilizziamo per visualizzare questa legge in LegalViz. La legge stessa potrebbe comunque essere disponibile su EUR-Lex.",

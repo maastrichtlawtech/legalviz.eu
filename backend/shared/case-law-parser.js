@@ -207,7 +207,7 @@ function extractArticleCitationsFromText(input) {
       actType: act.actType,
       actCelex: act.actCelex,
       contextual: act.contextual,
-      externalConvention: Boolean(act.externalConvention),
+      ...(act.externalConvention ? { externalConvention: true } : {}),
       article: item.article,
       paragraph: item.paragraph,
       point: item.point,

@@ -273,6 +273,12 @@ section.shot{margin-top:72px}
   padding:7px 11px;font-size:12.5px;color:var(--faint);background:var(--bg);margin-bottom:18px;
 }
 .jump .k{margin-left:auto;font-family:var(--mono);font-size:10px;border:1px solid var(--line);border-radius:4px;padding:0 5px}
+.toc-ov{
+  display:flex;align-items:center;gap:9px;padding:7px 8px;margin-bottom:6px;
+  border-radius:7px;font-size:13px;color:var(--muted);
+}
+.toc-ov .h{flex:none;width:20px;text-align:right;font-size:12px}
+.toc-ov.on{background:var(--blue-soft);color:var(--blue);font-weight:600}
 .toc{list-style:none;margin:0;padding:0;font-size:13px}
 .toc>li{margin-bottom:2px}
 .toc .ch{
@@ -632,6 +638,7 @@ section.shot{margin-top:72px}
             <span class="note" style="top:74px;right:-11px">3</span>
             <div class="jump">Go to article or recital…<span class="k">g</span></div>
             <p class="rail-label" style="position:relative">Contents<span class="note" style="top:-8px;left:88px">1</span></p>
+            <div class="toc-ov on"><span class="h">⌂</span><span>Overview &amp; AI summary</span></div>
             <ul class="toc">
               <li class="open">
                 <div class="ch"><span class="rn">I</span><span class="t"><b>General provisions</b></span><span class="range">1–2</span></div>
@@ -738,7 +745,7 @@ section.shot{margin-top:72px}
           <div class="mk-brand">
             <svg class="starmark" width="24" height="24" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="10" fill="#1c2f6e"/><g fill="#d9ab3c"><circle cx="17" cy="10" r="1.1"/><circle cx="16.06" cy="13.5" r="1.1"/><circle cx="13.5" cy="16.06" r="1.1"/><circle cx="10" cy="17" r="1.1"/><circle cx="6.5" cy="16.06" r="1.1"/><circle cx="3.94" cy="13.5" r="1.1"/><circle cx="3" cy="10" r="1.1"/><circle cx="3.94" cy="6.5" r="1.1"/><circle cx="6.5" cy="3.94" r="1.1"/><circle cx="10" cy="3" r="1.1"/><circle cx="13.5" cy="3.94" r="1.1"/><circle cx="16.06" cy="6.5" r="1.1"/></g></svg>
           </div>
-          <span class="crumb" style="position:relative"><b>Data Act</b><span class="sep">/</span>Chapter I — General provisions<span class="note" style="top:-9px;right:-30px">5</span></span>
+          <span class="crumb" style="position:relative"><b style="color:var(--link)">Data Act</b><span class="sep">/</span>Chapter I — General provisions<span class="note" style="top:-9px;right:-30px">5</span></span>
           <div class="grow"></div>
           <div class="mk-search-sm">Search this law…<span class="k">/</span></div>
           <span class="mk-pill-btn">EN ▾</span>
@@ -748,6 +755,7 @@ section.shot{margin-top:72px}
           <aside class="mk-rail read-rail" style="min-height:760px">
             <div class="jump">Go to…<span class="k">g</span></div>
             <p class="rail-label">Contents</p>
+            <div class="toc-ov" style="position:relative"><span class="h">⌂</span><span>Overview &amp; AI summary</span><span class="note" style="top:-8px;right:-11px">6</span></div>
             <ul class="toc">
               <li class="open">
                 <div class="ch"><span class="rn">I</span><span class="t"><b>General provisions</b></span></div>
@@ -805,7 +813,7 @@ section.shot{margin-top:72px}
 
               <div class="read-foot" style="position:relative">
                 <span class="note" style="top:-11px;left:calc(50% - 11px)">4</span>
-                <span class="prev"><span>Previous</span>—</span>
+                <span class="prev" style="color:var(--link)"><span>Previous</span>← Overview</span>
                 <div class="mid"><div class="lab">Article 1 of 50 · keys: j / k</div><div class="bar"><i></i></div></div>
                 <span class="next"><span>Next</span>Art. 2 — Definitions →</span>
               </div>
@@ -843,6 +851,7 @@ section.shot{margin-top:72px}
       <li><span class="n">3</span><span><b>The context rail is the product.</b> Recital links (your TF-IDF mapping), case law and cross-references live beside the text with a “why matched” hint — today they’re invisible until you hunt.</span></li>
       <li><span class="n">4</span><span><b>Reading has momentum.</b> Prev/next with the next article’s title, a progress dash, and j/k keys — the current sidebar arrows are easy to miss.</span></li>
       <li><span class="n">5</span><span><b>Hanging paragraph numbers.</b> “1.” and “(a)” sit in the margin so the legal text itself stays flush left at a fixed ~66-character measure.</span></li>
+      <li><span class="n">6</span><span><b>The overview is always one step away.</b> It sits as “position zero” of the contents (⌂ Overview &amp; AI summary), the law name in the breadcrumb is a visible link to it, and on Article 1 the “Previous” slot points back to the overview instead of sitting empty.</span></li>
     </ul>
   </section>
 
@@ -859,7 +868,7 @@ section.shot{margin-top:72px}
           <div class="mk-brand">
             <svg class="starmark" width="24" height="24" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="10" fill="#1c2f6e"/><g fill="#d9ab3c"><circle cx="17" cy="10" r="1.1"/><circle cx="16.06" cy="13.5" r="1.1"/><circle cx="13.5" cy="16.06" r="1.1"/><circle cx="10" cy="17" r="1.1"/><circle cx="6.5" cy="16.06" r="1.1"/><circle cx="3.94" cy="13.5" r="1.1"/><circle cx="3" cy="10" r="1.1"/><circle cx="3.94" cy="6.5" r="1.1"/><circle cx="6.5" cy="3.94" r="1.1"/><circle cx="10" cy="3" r="1.1"/><circle cx="13.5" cy="3.94" r="1.1"/><circle cx="16.06" cy="6.5" r="1.1"/></g></svg>
           </div>
-          <span class="crumb"><b>GDPR</b><span class="sep">/</span>Chapter I — General provisions</span>
+          <span class="crumb"><b style="color:var(--link)">GDPR</b><span class="sep">/</span>Chapter I — General provisions</span>
           <div class="grow"></div>
           <div class="mk-search-sm">Search this law…<span class="k">/</span></div>
           <span class="mk-pill-btn">EN + DE ▾</span>
@@ -869,6 +878,7 @@ section.shot{margin-top:72px}
           <aside class="rail-mini" style="position:relative">
             <span class="note" style="top:14px;right:-11px">3</span>
             <span class="ico">☰</span>
+            <span class="ico" title="Overview">⌂</span>
             <span class="rn2 on">I</span>
             <span class="rn2">II</span>
             <span class="rn2">III</span>
@@ -913,7 +923,7 @@ section.shot{margin-top:72px}
             </div>
 
             <div class="read-foot">
-              <span class="prev"><span>Previous</span>—</span>
+              <span class="prev" style="color:var(--link)"><span>Previous</span>← Overview</span>
               <div class="mid"><div class="lab">Article 1 of 99 · keys: j / k</div><div class="bar"><i style="width:1%"></i></div></div>
               <span class="next"><span>Next</span>Art. 2 — Material scope →</span>
             </div>

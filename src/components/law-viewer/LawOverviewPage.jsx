@@ -17,7 +17,7 @@ const ACT_TYPE_KEY = {
 /**
  * CJEU case-law action for the overview header. Mirrors the sidebar
  * CaseLawButton's load-on-click / auto-open behavior, styled as an outline
- * button with a beta pill.
+ * button.
  */
 function OverviewCaseLawButton({ celex, currentLang, t }) {
   const [modalOpen, setModalOpen] = useState(false);
@@ -66,7 +66,6 @@ function OverviewCaseLawButton({ celex, currentLang, t }) {
         {loading ? <Loader2 size={16} className="animate-spin" /> : <Scale size={16} />}
         {t("metadata.caseLaw")}
         {hasCases ? ` (${cases.length})` : ""}
-        <Pill variant="beta">{t("common.beta")}</Pill>
       </button>
       {hasCases ? (
         <CaseLawModal

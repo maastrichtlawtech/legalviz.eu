@@ -3,7 +3,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const zlib = require("node:zlib");
-const { DatabaseSync } = require("node:sqlite");
+const Database = require("better-sqlite3");
 
 const { enrichSearchRecord } = require("./search-ranking");
 const DEFAULT_SEARCH_CACHE_PATH = path.join(__dirname, "data", "search-cache.json");
@@ -41,7 +41,7 @@ function buildSqliteData({
   const tempPath = `${outputPath}.${process.pid}.tmp`;
   fs.rmSync(tempPath, { force: true });
 
-  const database = new DatabaseSync(tempPath);
+  const database = new Database(tempPath);
   try {
     database.exec(`
       PRAGMA journal_mode = OFF;

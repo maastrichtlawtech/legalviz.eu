@@ -503,7 +503,9 @@ Important: restart the API server after rebuilding the cache, because the cache 
 `npm run build:sqlite-data` converts `search-cache.json(.gz)` and
 `case-law-cache-v5.json(.gz)` into `search/data/data.sqlite`. It writes a
 temporary database, validates its schema, row counts, and integrity, then
-renames it atomically. Runtime opens the result read-only.
+renames it atomically. Runtime opens the result read-only through
+`better-sqlite3`; the serving path does not depend on Node's experimental
+`node:sqlite` API.
 
 The in-memory MiniSearch index contains titles and aliases only. Excerpts live
 in a contentless FTS5 index and are consulted after deterministic and title

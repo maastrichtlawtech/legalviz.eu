@@ -1,8 +1,8 @@
 const fs = require("fs");
 const path = require("path");
 const zlib = require("zlib");
+const Database = require("better-sqlite3");
 const MiniSearch = require("minisearch");
-const { DatabaseSync } = require("node:sqlite");
 
 const {
   determineMatchReason,
@@ -317,7 +317,7 @@ class JsonLegalCacheStore {
 
   loadFromSqlite() {
     try {
-      const database = new DatabaseSync(this.sqlitePath, { readOnly: true });
+      const database = new Database(this.sqlitePath, { readonly: true, fileMustExist: true });
       const schemaVersion = database.prepare("PRAGMA user_version").get().user_version;
       if (schemaVersion !== SQLITE_SCHEMA_VERSION) {
         database.close();

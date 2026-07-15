@@ -579,10 +579,180 @@
           "oversized": 0,
           "explicitUnresolved": 0,
           "clean": true
+        },
+        {
+          "offset": 0,
+          "selected": 1,
+          "scanned": 1,
+          "errors": 0,
+          "oversized": 0,
+          "explicitUnresolved": 0,
+          "clean": true,
+          "years": [
+            "1955"
+          ]
+        },
+        {
+          "offset": 0,
+          "selected": 1,
+          "scanned": 1,
+          "errors": 0,
+          "oversized": 0,
+          "explicitUnresolved": 0,
+          "clean": true,
+          "years": [
+            "1961"
+          ]
+        },
+        {
+          "offset": 0,
+          "selected": 2,
+          "scanned": 2,
+          "errors": 0,
+          "oversized": 0,
+          "explicitUnresolved": 0,
+          "clean": true,
+          "years": [
+            "1962"
+          ]
+        },
+        {
+          "offset": 0,
+          "selected": 3,
+          "scanned": 3,
+          "errors": 0,
+          "oversized": 0,
+          "explicitUnresolved": 0,
+          "clean": true,
+          "years": [
+            "1963"
+          ]
+        },
+        {
+          "offset": 0,
+          "selected": 3,
+          "scanned": 3,
+          "errors": 0,
+          "oversized": 0,
+          "explicitUnresolved": 0,
+          "clean": true,
+          "years": [
+            "1964"
+          ]
+        },
+        {
+          "offset": 0,
+          "selected": 3,
+          "scanned": 3,
+          "errors": 0,
+          "oversized": 0,
+          "explicitUnresolved": 0,
+          "clean": true,
+          "years": [
+            "1965"
+          ]
+        },
+        {
+          "offset": 0,
+          "selected": 1,
+          "scanned": 1,
+          "errors": 0,
+          "oversized": 0,
+          "explicitUnresolved": 0,
+          "clean": true,
+          "years": [
+            "1966"
+          ]
+        },
+        {
+          "offset": 0,
+          "selected": 3,
+          "scanned": 3,
+          "errors": 0,
+          "oversized": 0,
+          "explicitUnresolved": 0,
+          "clean": true,
+          "years": [
+            "1967"
+          ]
+        },
+        {
+          "offset": 0,
+          "selected": 3,
+          "scanned": 3,
+          "errors": 0,
+          "oversized": 0,
+          "explicitUnresolved": 0,
+          "clean": true,
+          "years": [
+            "1968"
+          ]
+        },
+        {
+          "offset": 0,
+          "selected": 3,
+          "scanned": 3,
+          "errors": 0,
+          "oversized": 0,
+          "explicitUnresolved": 0,
+          "clean": true,
+          "years": [
+            "1969"
+          ]
         }
       ],
       "available": 8752,
       "years": {
+        "1955": {
+          "runs": 1,
+          "cleanRuns": 1,
+          "scanned": 1
+        },
+        "1961": {
+          "runs": 1,
+          "cleanRuns": 1,
+          "scanned": 1
+        },
+        "1962": {
+          "runs": 1,
+          "cleanRuns": 1,
+          "scanned": 2
+        },
+        "1963": {
+          "runs": 1,
+          "cleanRuns": 1,
+          "scanned": 3
+        },
+        "1964": {
+          "runs": 1,
+          "cleanRuns": 1,
+          "scanned": 3
+        },
+        "1965": {
+          "runs": 1,
+          "cleanRuns": 1,
+          "scanned": 3
+        },
+        "1966": {
+          "runs": 1,
+          "cleanRuns": 1,
+          "scanned": 1
+        },
+        "1967": {
+          "runs": 1,
+          "cleanRuns": 1,
+          "scanned": 3
+        },
+        "1968": {
+          "runs": 1,
+          "cleanRuns": 1,
+          "scanned": 3
+        },
+        "1969": {
+          "runs": 1,
+          "cleanRuns": 1,
+          "scanned": 3
+        },
         "2016": {
           "runs": 2,
           "cleanRuns": 2,

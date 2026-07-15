@@ -15,15 +15,15 @@ function GoldSparkle({ size = 15 }) {
 
 function CitationChips({ citations, onArticleClick, t }) {
   if (!citations?.length) return null;
-  return (
-    <span className="ml-2 inline-flex flex-wrap gap-1 align-middle">
-      {citations.map((article) => (
-        <Chip key={article} onClick={() => onArticleClick?.(article)}>
-          {t("lawViewer.artShort")} {article}
-        </Chip>
-      ))}
-    </span>
-  );
+  return citations.map((article) => (
+    <Chip
+      key={article}
+      onClick={() => onArticleClick?.(article)}
+      className="ml-1 align-baseline"
+    >
+      {t("lawViewer.artShort")} {article}
+    </Chip>
+  ));
 }
 
 function CitedText({ block, onArticleClick, t }) {
@@ -115,9 +115,13 @@ export function LawSummary({ celex, lang = "EN", onArticleClick, className = "ro
                         <span className="h-1.5 w-1.5 shrink-0 translate-y-1 rounded-full bg-eu-gold dark:bg-eu-gold-bright" />
                         <span className="min-w-0 flex-1">{item.text}</span>
                         {item.citations?.length ? (
-                          <span className="inline-flex shrink-0 flex-wrap justify-end gap-1 pl-2">
+                          <span className="ml-auto shrink-0 space-x-1 pl-3 text-right">
                             {item.citations.map((article) => (
-                              <Chip key={article} onClick={() => onArticleClick?.(article)}>
+                              <Chip
+                                key={article}
+                                onClick={() => onArticleClick?.(article)}
+                                className="align-baseline"
+                              >
                                 {t("lawViewer.artShort")} {article}
                               </Chip>
                             ))}

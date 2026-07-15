@@ -3,7 +3,7 @@
  */
 export const Chip = ({ children, onClick, className = "" }) => {
   const classes =
-    `inline-block rounded px-[7px] py-px font-mono text-[11px] text-eu-blue bg-eu-blue-soft dark:text-eu-blue-bright dark:bg-eu-blue-soft-dark ` +
+    `inline-block whitespace-nowrap rounded px-[7px] py-px font-mono text-[11px] text-eu-blue bg-eu-blue-soft dark:text-eu-blue-bright dark:bg-eu-blue-soft-dark ` +
     className;
 
   if (onClick) {

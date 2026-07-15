@@ -24,7 +24,7 @@
   --color-eu-gold-soft: #f5ecd6;
   --color-eu-gold-soft-dark: #2e2712;
   --color-ink: #171d33;
-  --color-paper: #f2f3f7;
+  --color-paper: #f7f5f1;
   --color-paper-dark: #0d1017;
   --color-panel-dark: #151a25;
 
@@ -35,8 +35,8 @@
 .prose {
   font-family: 'Merriweather', serif;
   line-height: 1.8;
-  color: #1f2937;
-  /* gray-800 - softer than pure black */
+  color: #292524;
+  /* stone-800 — warm near-black; blue-grays read clinical under a serif */
 }
 
 :root.dark .prose {

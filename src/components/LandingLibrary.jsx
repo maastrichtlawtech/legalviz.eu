@@ -182,7 +182,7 @@ function EssentialsShelf({ locale, t, excludeCelexes }) {
           <Link
             key={law.slug}
             to={getCanonicalLawRoute(law, null, null, locale)}
-            className="flex flex-col rounded-2xl border border-eu-blue-soft-dark/40 bg-paper p-4 text-left transition hover:border-eu-blue/40 hover:shadow-md dark:border-panel-dark dark:bg-panel-dark dark:hover:border-eu-blue/50"
+            className="flex flex-col rounded-2xl border border-gray-200 bg-white p-4 text-left shadow-sm transition hover:border-eu-blue/40 hover:shadow-md dark:border-gray-800 dark:bg-panel-dark dark:hover:border-eu-blue/50"
           >
             <h3 className="font-display text-[15px] font-bold text-eu-navy dark:text-paper">
               {law.label}

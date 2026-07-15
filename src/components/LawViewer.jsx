@@ -262,7 +262,7 @@ export function LawViewer() {
   ]);
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white transition-colors duration-500 print:bg-white dark:from-gray-950 dark:to-gray-900">
+    <div className="min-h-screen bg-gradient-to-b from-paper to-white transition-colors duration-500 print:bg-white dark:from-gray-950 dark:to-gray-900">
       <SEO title={derived.seoData.title} description={derived.seoData.description} type="article" />
       <div className="print:hidden">
         <TopBar

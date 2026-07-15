@@ -32,6 +32,7 @@ const zlib = require("zlib");
 const { spawn } = require("child_process");
 
 const { readCorpusDates, normalizeCelexKey } = require("./law-corpus-dates.js");
+const { enrichRecordsWithEurovoc } = require("./eurovoc-enrich.js");
 
 const CORPUS_DIR = path.join(__dirname, "data");
 const FMX_ROOT = path.join(CORPUS_DIR, "laws");
@@ -245,7 +246,7 @@ async function runPool(jobs, concurrency) {
   return failed;
 }
 
-async function driver() {
+async function driver({ noEurovoc = false } = {}) {
   const t0 = Date.now();
   const { enrichSearchRecord } = require("./search-ranking.js");
 
@@ -366,6 +367,28 @@ async function driver() {
     records: merged,
   };
 
+  // EuroVoc topics are SPARQL metadata, so — like the dates overlaid above —
+  // they can't be reconstructed from disk. This is the one network call in an
+  // otherwise offline build, and it runs *here in the driver*: the workers keep
+  // their hard `fetch` block, so a corpus miss still fails loudly instead of
+  // silently scraping. Skip it with --no-eurovoc for a genuinely offline run.
+  //
+  // It runs as part of the build rather than as a follow-up pass because a
+  // CELEX-keyed sidecar bolted on afterwards strands every record it never saw,
+  // silently (see eurovoc-enrich.js). Best-effort: topics never fail a build.
+  if (noEurovoc) {
+    console.log("[corpus-build] EuroVoc enrichment skipped (--no-eurovoc)");
+  } else {
+    try {
+      const stats = await enrichRecordsWithEurovoc(payload.records, {
+        log: (message) => console.log(`[corpus-build] [eurovoc] ${message}`),
+      });
+      console.log(`[corpus-build] EuroVoc: ${stats.withLabels} records with topics (${stats.fromJournal} from journal, ${stats.fetched} fetched)`);
+    } catch (error) {
+      console.log(`[corpus-build] EuroVoc enrichment failed, cache ships without topics: ${error.message}`);
+    }
+  }
+
   // Back up the old cache, then write the new one atomically.
   if (fs.existsSync(CACHE_PATH) && !fs.existsSync(BACKUP_PATH)) {
     fs.copyFileSync(CACHE_PATH, BACKUP_PATH);
@@ -400,7 +423,7 @@ async function main() {
     await runWorker(variant, batchPath, outPath);
     return;
   }
-  await driver();
+  await driver({ noEurovoc: args.includes("--no-eurovoc") });
 }
 
 if (require.main === module) {

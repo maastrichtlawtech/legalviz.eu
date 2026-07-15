@@ -39,6 +39,7 @@ backend/search/data/shards/
 backend/search/data/html-shards/
 backend/search/data/search-build-state*.json
 backend/search/data/law-dates.json
+backend/search/data/eurovoc.json
 backend/search/data/case-law-harvest-state.json*
 backend/search/data/case-law-targets.txt
 backend/search/data/search-cache-historical*.json

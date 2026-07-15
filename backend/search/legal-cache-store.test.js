@@ -9,7 +9,6 @@ const {
 } = require("./legal-cache-store");
 
 const fixturePath = path.join(__dirname, "__fixtures__", "search-fixture.json");
-const eurovocFixturePath = path.join(__dirname, "__fixtures__", "eurovoc-fixture.json");
 
 test("legal cache store loads fixture successfully", () => {
   const store = new JsonLegalCacheStore(fixturePath);
@@ -134,8 +133,10 @@ test("legal cache store searchLaws ranks a regulation above a decision for an \"
   );
 });
 
-test("legal cache store attaches EuroVoc topics from the sidecar", () => {
-  const store = new JsonLegalCacheStore(fixturePath, eurovocFixturePath);
+// Topics ride in the cache itself from data-v6 on — there is no sidecar to
+// merge, and no way for one to drift out of sync with the records.
+test("legal cache store exposes EuroVoc topics carried by the cache", () => {
+  const store = new JsonLegalCacheStore(fixturePath);
   store.load();
 
   const match = store.getByCelex("32016R0679");
@@ -150,8 +151,8 @@ test("legal cache store attaches EuroVoc topics from the sidecar", () => {
   ]);
 });
 
-test("legal cache store caps searchLaws topics at 5 and defaults to empty array without a sidecar entry", () => {
-  const store = new JsonLegalCacheStore(fixturePath, eurovocFixturePath);
+test("legal cache store caps searchLaws topics at 5 and defaults to empty array for a record with none", () => {
+  const store = new JsonLegalCacheStore(fixturePath);
   store.load();
 
   const [gdpr] = store.searchLaws("32016R0679", { limit: 1 });
@@ -168,15 +169,28 @@ test("legal cache store caps searchLaws topics at 5 and defaults to empty array 
   assert.deepEqual(dataAct.topics, []);
 });
 
-test("legal cache store degrades gracefully when the EuroVoc sidecar is missing", () => {
-  const missingEurovocPath = path.join(os.tmpdir(), `missing-eurovoc-${Date.now()}.json`);
-  const store = new JsonLegalCacheStore(fixturePath, missingEurovocPath);
+// A cache built by search-build.js carries no eurovoc field at all (the fold
+// happens before release). That must read as "no topics", not throw.
+test("legal cache store serves a cache whose records carry no topics field", () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "legal-cache-store-no-topics-"));
+  const tempPath = path.join(tempDir, "no-topics.json");
+  fs.writeFileSync(tempPath, JSON.stringify({
+    records: [{
+      celex: "31985L0374",
+      title: "Council Directive 85/374/EEC on liability for defective products",
+      type: "directive",
+      date: "1985-07-25",
+      eli: "http://data.europa.eu/eli/dir/1985/374/oj",
+    }],
+  }), "utf8");
 
+  const store = new JsonLegalCacheStore(tempPath);
   assert.equal(store.load(), true);
   assert.equal(store.getStatus().ready, true);
 
-  const [gdpr] = store.searchLaws("32016R0679", { limit: 1 });
-  assert.deepEqual(gdpr.topics, []);
+  const [directive] = store.searchLaws("31985L0374", { limit: 1 });
+  assert.deepEqual(directive.topics, []);
+  assert.equal(directive.date, "1985-07-25");
 });
 
 test("legal cache store stays searchable when a CELEX is duplicated", () => {

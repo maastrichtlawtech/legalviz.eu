@@ -10,6 +10,7 @@ const { enrichSearchRecord, inferTypeFromCelex } = require("./search-ranking");
 const { parseFmxXml } = require("../shared/fmx-parser-node");
 const { readCorpusXml, writeCorpusXml } = require("./law-corpus-store");
 const { mergeCorpusDates } = require("./law-corpus-dates");
+const { enrichRecordsWithEurovoc } = require("./eurovoc-enrich");
 
 const execFileAsync = promisify(execFile);
 const SPARQL_ENDPOINT = "https://publications.europa.eu/webapi/rdf/sparql";
@@ -854,12 +855,40 @@ async function reEnrichCurrentCache(options = {}) {
   };
   nextPayload.count = nextPayload.records.length;
 
+  await attachEurovocTopics(nextPayload.records, options, logProgress);
+
   await writeCacheAtomically(cachePath, nextPayload);
   return nextPayload;
 }
 
 async function writeCacheAtomically(cachePath, payload) {
   await writeJsonAtomically(cachePath, payload);
+}
+
+// Attach EuroVoc topics to a finished record set, so a built cache is complete
+// and nothing has to remember to run a second pass afterwards (a stale
+// CELEX-keyed sidecar is invisible — topics just go empty; see eurovoc-enrich).
+//
+// Best-effort, like the date manifest above: topics are a nice-to-have and a
+// Cellar outage must never throw away a multi-hour harvest. The journal is
+// flushed on failure, so a re-run resumes rather than refetching. Opt out with
+// `eurovoc: false` (`--no-eurovoc`) for a faster offline-ish build.
+async function attachEurovocTopics(records, options, log) {
+  if (options.eurovoc === false) {
+    log("EuroVoc enrichment skipped (--no-eurovoc)");
+    return;
+  }
+  try {
+    const stats = await enrichRecordsWithEurovoc(records, {
+      journalPath: options.eurovocJournalPath,
+      limit: options.eurovocLimit,
+      runQueryFn: options.eurovocRunQueryFn,
+      log: (message) => log(`[eurovoc] ${message}`),
+    });
+    log(`EuroVoc: ${stats.withLabels} records with topics (${stats.fromJournal} from journal, ${stats.fetched} fetched)`);
+  } catch (error) {
+    log(`EuroVoc enrichment failed, cache will ship without topics: ${error.message}`);
+  }
 }
 
 async function buildSearchCache(options = {}) {
@@ -969,6 +998,8 @@ async function buildSearchCache(options = {}) {
   };
   payload.count = payload.records.length;
 
+  await attachEurovocTopics(payload.records, options, logProgress);
+
   await writeCacheAtomically(cachePath, payload);
   await writeStateAtomically(statePath, createStatePayload({
     cachePath,
@@ -1027,6 +1058,7 @@ module.exports = {
   DEFAULT_SEARCH_STATE_PATH,
   CORPUS_DIR,
   EXCERPT_MAX_LENGTH,
+  attachEurovocTopics,
   buildExcerptFromCombined,
   buildSearchCache,
   extractExcerptFromXml,

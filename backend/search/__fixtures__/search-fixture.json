@@ -9,7 +9,16 @@
       "date": "2016-04-27",
       "eli": "http://data.europa.eu/eli/reg/2016/679/oj",
       "fmxAvailable": true,
-      "fmxUnavailable": false
+      "fmxUnavailable": false,
+      "eurovoc": [
+        "data protection",
+        "personal data",
+        "protection of privacy",
+        "data transfer",
+        "approximation of laws",
+        "EU Member State",
+        "electronic data processing"
+      ]
     },
     {
       "celex": "32022R1925",
@@ -18,7 +27,12 @@
       "date": "2022-09-14",
       "eli": "http://data.europa.eu/eli/reg/2022/1925/oj",
       "fmxAvailable": true,
-      "fmxUnavailable": false
+      "fmxUnavailable": false,
+      "eurovoc": [
+        "digital economy",
+        "competition policy",
+        "online platform"
+      ]
     },
     {
       "celex": "32022R2065",

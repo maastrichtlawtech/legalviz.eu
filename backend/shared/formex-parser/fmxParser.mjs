@@ -864,7 +864,6 @@ export function extractCrossRefsFromText(text, lang) {
   // External law references (mostly language-independent abbreviations)
   EXTERNAL_LAW_RE.lastIndex = 0;
   while ((m = EXTERNAL_LAW_RE.exec(text)) !== null) {
-    const surroundingText = text.slice(m.index, m.index + 160);
     const institutionalContext = text.slice(Math.max(0, m.index - 120), m.index + 220);
     const ecscAuthority = /\bHigh Authority\b/i.test(text.slice(Math.max(0, m.index - 80), m.index + 80));
     const institutionalIssuer = hasInstitutionalIssuerContext(text, m.index);

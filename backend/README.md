@@ -485,6 +485,50 @@ Default files:
 
 Important: restart the API server after rebuilding the cache, because the cache is loaded on startup.
 
+### Metadata that isn't in the corpus (dates + EuroVoc topics)
+
+`date` and `eurovoc` are SPARQL metadata that the gzipped source on disk doesn't
+carry, so an offline rebuild (`build-cache-from-corpus.js`) can't reconstruct
+them. Both builders fill them in, and **both fields ship inside the release
+asset** from `data-v6` on — the server reads them straight off each record and
+merges nothing at startup.
+
+- **`date`** (`cdm:work_date_document`) — `search-build.js` persists it for every
+  year it harvests into `search/data/law-dates.json` (`law-corpus-dates.js`),
+  which the offline rebuild overlays back onto its records.
+- **`eurovoc`** (subject labels) — `search/eurovoc-enrich.js` runs as the **last
+  step of both builders**, fetching labels for any record that doesn't have them
+  and journaling results to `search/data/eurovoc.json`.
+
+Both files are **gitignored build-time artifacts**. `eurovoc.json` is a resume
+journal only: it means an interrupted harvest (~800 batches over Cellar) doesn't
+restart from zero, and a rebuild reuses labels already fetched for unchanged
+acts.
+
+Enrichment is part of the build **on purpose**. Topics are keyed by CELEX, so a
+pass bolted on afterwards is generated against one cache and served alongside
+another — every record it never saw silently serves empty topics, and nothing
+errors. That is exactly how the `data-v5` corpus expansion (13k → 80k acts) left
+~83% of records topic-less.
+
+It's best-effort: a Cellar outage logs and ships the cache without topics rather
+than discarding a multi-hour harvest. Opt out with `--no-eurovoc`, which for
+`build-cache-from-corpus.js` also restores a genuinely network-free build (the
+enrichment runs in the driver; the parse workers keep their hard `fetch` block
+either way).
+
+If a cache is fine but its topics aren't — a build ran `--no-eurovoc`, or EuroVoc
+changed upstream — backfill without a rebuild:
+
+```bash
+node --max-old-space-size=8192 search/fetch-eurovoc.js
+```
+
+Publish `search-cache.json.gz` as the next `data-vN` release asset and bump
+`DATA_RELEASE_TAG` in `backend/Dockerfile`. Note that the Dockerfile fetches
+**both** `search-cache.json.gz` and `case-law-cache-v5.json.gz` from that one
+tag, so a new release must carry both assets even when only one changed.
+
 ## Project Layout
 
 ```text

@@ -37,7 +37,7 @@ RUN ls -1 /ms-playwright/ || true
 # Placed before `COPY . .` so this (large) layer stays cached across code
 # changes and only re-runs when DATA_RELEASE_TAG is bumped for a new data build.
 ARG DATA_RELEASE_REPO=maastrichtlawtech/legalviz.eu
-ARG DATA_RELEASE_TAG=data-v5
+ARG DATA_RELEASE_TAG=data-v6
 RUN command -v curl >/dev/null 2>&1 \
     || (apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*)
 RUN mkdir -p search/data \

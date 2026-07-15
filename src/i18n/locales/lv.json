@@ -139,6 +139,7 @@
     "importResolveFailed": "Šo EUR-Lex lapu nevarēja sasaistīt ar tiesību aktu, ko LegalViz var atvērt.",
     "addLawShort": "Pievienot vēl vienu tiesību aktu",
     "addByReferenceTitle": "Pievienot pēc juridiskās norādes",
+    "extensionInline": "Vai arī instalējiet mūsu paplašinājumu, lai atvērtu jebkuru tiesību aktu tieši no EUR-Lex, noklikšķinot uz paplašinājuma ikonas, nekopējot URL:",
     "manualAddLaw": "Pievienot likumu manuāli",
     "recentDescription": "Atgriezieties pie nesen atvērtajiem likumiem.",
     "recentEmpty": "Vēl nav nesen atvērtu likumu.",

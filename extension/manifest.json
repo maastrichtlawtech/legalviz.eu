@@ -1,0 +1,33 @@
+{
+  "manifest_version": 3,
+  "name": "LegalViz.EU",
+  "version": "2.1.0",
+  "description": "Read EU law beautifully, and with ease",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "eur-lex-visualiser@maastrichtlawtech.github.io",
+      "strict_min_version": "109.0",
+      "data_collection_permissions": {
+        "required": ["none"]
+      }
+    }
+  },
+  "permissions": ["activeTab"],
+  "action": {
+    "default_title": "Open in LegalViz.EU",
+    "default_icon": {
+      "16": "icon16.png",
+      "48": "icon48.png",
+      "128": "icon128.png"
+    }
+  },
+  "background": {
+    "scripts": ["background.js"],
+    "service_worker": "background.js"
+  },
+  "icons": {
+    "16": "icon16.png",
+    "48": "icon48.png",
+    "128": "icon128.png"
+  }
+}

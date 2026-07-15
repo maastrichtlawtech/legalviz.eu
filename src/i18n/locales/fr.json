@@ -139,6 +139,7 @@
     "importResolveFailed": "Cette page EUR-Lex n'a pas pu être associée à un acte que LegalViz peut ouvrir.",
     "addLawShort": "Ajouter un autre acte",
     "addByReferenceTitle": "Ajouter par référence juridique",
+    "extensionInline": "Ou installez notre extension pour ouvrir directement n'importe quel acte depuis EUR-Lex en cliquant sur l'icône de l'extension, sans copier d'URL :",
     "manualAddLaw": "Ajouter une loi manuellement",
     "recentDescription": "Revenez aux lois que vous avez ouvertes récemment.",
     "recentEmpty": "Aucune loi ouverte récemment. Recherchez-en une pour commencer.",

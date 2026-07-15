@@ -139,6 +139,7 @@
     "importResolveFailed": "Šio EUR-Lex puslapio nepavyko susieti su teisės aktu, kurį gali atidaryti „LegalViz“.",
     "addLawShort": "Pridėti dar vieną teisės aktą",
     "addByReferenceTitle": "Pridėti pagal teisinę nuorodą",
+    "extensionInline": "Arba įdiekite mūsų plėtinį ir atidarykite bet kurį teisės aktą tiesiai iš EUR-Lex spustelėdami plėtinio piktogramą, nekopijuodami URL:",
     "manualAddLaw": "Pridėti įstatymą rankiniu būdu",
     "recentDescription": "Grįžkite prie neseniai atidarytų įstatymų.",
     "recentEmpty": "Dar nėra neseniai atidarytų įstatymų.",

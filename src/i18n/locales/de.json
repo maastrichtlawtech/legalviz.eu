@@ -139,6 +139,7 @@
     "importResolveFailed": "Diese EUR-Lex-Seite konnte keinem Gesetz zugeordnet werden, das LegalViz öffnen kann.",
     "addLawShort": "Weiteres Gesetz hinzufügen",
     "addByReferenceTitle": "Über Rechtsfundstelle hinzufügen",
+    "extensionInline": "Oder installieren Sie unsere Erweiterung, um jedes Gesetz direkt aus EUR-Lex zu öffnen, indem Sie auf das Erweiterungssymbol klicken, ohne URLs zu kopieren:",
     "manualAddLaw": "Gesetz manuell hinzufügen",
     "recentDescription": "Kehren Sie zu den Gesetzen zurück, die Sie kürzlich geöffnet haben.",
     "recentEmpty": "Noch keine kürzlich geöffneten Gesetze. Suchen Sie eines, um loszulegen.",

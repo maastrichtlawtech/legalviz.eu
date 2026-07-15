@@ -139,6 +139,7 @@
     "importResolveFailed": "Această pagină EUR-Lex nu a putut fi asociată cu un act pe care LegalViz îl poate deschide.",
     "addLawShort": "Adăugați încă un act",
     "addByReferenceTitle": "Adăugați după referință juridică",
+    "extensionInline": "Sau instalați extensia noastră pentru a deschide orice act direct din EUR-Lex făcând clic pe pictograma extensiei, fără a copia URL-uri:",
     "manualAddLaw": "Adaugă lege manual",
     "recentDescription": "Reveniți la legile pe care le-ați deschis recent.",
     "recentEmpty": "Nu există legi deschise recent. Căutați una pentru a începe.",

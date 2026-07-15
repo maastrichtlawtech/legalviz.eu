@@ -139,6 +139,7 @@
     "importResolveFailed": "Denne EUR-Lex-side kunne ikke knyttes til en lov, som LegalViz kan åbne.",
     "addLawShort": "Tilføj endnu en lov",
     "addByReferenceTitle": "Tilføj via lovhenvisning",
+    "extensionInline": "Eller installer vores udvidelse for at åbne enhver lov direkte fra EUR-Lex ved at klikke på udvidelsesikonet uden at kopiere URL'er:",
     "manualAddLaw": "Tilføj lov manuelt",
     "recentDescription": "Gå tilbage til de love, du har åbnet for nylig.",
     "recentEmpty": "Ingen nyligt åbnede love endnu. Søg efter en for at komme i gang.",

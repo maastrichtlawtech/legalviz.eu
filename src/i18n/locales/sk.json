@@ -139,6 +139,7 @@
     "importResolveFailed": "Túto stránku EUR-Lex sa nepodarilo priradiť k predpisu, ktorý môže LegalViz otvoriť.",
     "addLawShort": "Pridať ďalší predpis",
     "addByReferenceTitle": "Pridať podľa právnej referencie",
+    "extensionInline": "Alebo si nainštalujte naše rozšírenie a otvárajte akýkoľvek predpis priamo z EUR-Lexu kliknutím na ikonu rozšírenia bez kopírovania URL adries:",
     "manualAddLaw": "Pridať zákon manuálne",
     "recentDescription": "Vráťte sa k zákonom, ktoré ste nedávno otvorili.",
     "recentEmpty": "Zatiaľ žiadne nedávno otvorené zákony.",

@@ -139,6 +139,7 @@
     "importResolveFailed": "Esta página EUR-Lex não pôde ser associada a uma lei que o LegalViz possa abrir.",
     "addLawShort": "Adicionar outra lei",
     "addByReferenceTitle": "Adicionar por referência jurídica",
+    "extensionInline": "Ou instale a nossa extensão para abrir qualquer lei diretamente a partir do EUR-Lex clicando no ícone da extensão, sem copiar URLs:",
     "manualAddLaw": "Adicionar lei manualmente",
     "recentDescription": "Volte às leis que abriu recentemente.",
     "recentEmpty": "Ainda não há leis abertas recentemente. Pesquise uma para começar.",

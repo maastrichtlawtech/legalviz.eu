@@ -139,6 +139,7 @@
     "importResolveFailed": "Nie udało się powiązać tej strony EUR-Lex z aktem, który LegalViz może otworzyć.",
     "addLawShort": "Dodaj kolejny akt",
     "addByReferenceTitle": "Dodaj według odniesienia prawnego",
+    "extensionInline": "Lub zainstaluj nasze rozszerzenie, aby otwierać dowolny akt bezpośrednio z EUR-Lex po kliknięciu ikony rozszerzenia, bez kopiowania adresów URL:",
     "manualAddLaw": "Dodaj prawo ręcznie",
     "recentDescription": "Wróć do praw, które ostatnio otworzyłeś.",
     "recentEmpty": "Brak ostatnio otwieranych praw. Wyszukaj, aby rozpocząć.",

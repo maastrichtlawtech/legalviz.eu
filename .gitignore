@@ -6,6 +6,8 @@ experiments/
 .venv/
 .claude/
 
+web-ext-artifacts/
+
 # Logs
 logs
 *.log

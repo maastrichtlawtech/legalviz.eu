@@ -139,6 +139,7 @@
     "importResolveFailed": "Deze EUR-Lex-pagina kon niet worden gekoppeld aan een wet die LegalViz kan openen.",
     "addLawShort": "Nog een wet toevoegen",
     "addByReferenceTitle": "Toevoegen via juridische verwijzing",
+    "extensionInline": "Of installeer onze extensie om elke wet direct vanuit EUR-Lex te openen door op het extensiepictogram te klikken, zonder URL's te kopiëren:",
     "manualAddLaw": "Wet handmatig toevoegen",
     "recentDescription": "Ga terug naar de wetten die u onlangs hebt geopend.",
     "recentEmpty": "Nog geen recent geopende wetten. Zoek er een om te beginnen.",

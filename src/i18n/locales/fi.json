@@ -139,6 +139,7 @@
     "importResolveFailed": "Tätä EUR-Lex-sivua ei voitu yhdistää säädökseen, jonka LegalViz voi avata.",
     "addLawShort": "Lisää toinen säädös",
     "addByReferenceTitle": "Lisää oikeusviitteellä",
+    "extensionInline": "Tai asenna laajennuksemme avataksesi minkä tahansa säädöksen suoraan EUR-Lexistä napsauttamalla laajennuksen kuvaketta ilman URL-osoitteiden kopiointia:",
     "manualAddLaw": "Lisää laki manuaalisesti",
     "recentDescription": "Palaa lakeihin, jotka avasit äskettäin.",
     "recentEmpty": "Ei äskettäin avattuja lakeja. Hae lakia aloittaaksesi.",

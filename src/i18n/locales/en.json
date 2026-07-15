@@ -129,6 +129,7 @@
     "searchHint": "Search primary EU acts by title, reference, or CELEX, then open them directly.",
     "searchPlaceholderMobile": "Search primary EU acts",
     "searchPlaceholder": "Search primary EU acts by title, reference, or CELEX",
+    "extensionInline": "Or install our extension to open any law directly from EUR-Lex by clicking the extension icon, without copying URLs:",
     "manualAddLaw": "Manually add law",
     "libraryTitle": "Your library",
     "libraryDescription": "Open a law you have already added and continue reading where you left off.",

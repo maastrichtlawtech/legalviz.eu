@@ -139,6 +139,7 @@
     "importResolveFailed": "Ezt az EUR-Lex oldalt nem lehetett olyan jogszabályhoz kapcsolni, amelyet a LegalViz meg tud nyitni.",
     "addLawShort": "Újabb jogszabály hozzáadása",
     "addByReferenceTitle": "Hozzáadás jogi hivatkozással",
+    "extensionInline": "Vagy telepítse a bővítményünket, hogy bármely jogszabályt közvetlenül az EUR-Lexből nyisson meg a bővítmény ikonjára kattintva, URL-ek másolása nélkül:",
     "manualAddLaw": "Jogszabály kézi hozzáadása",
     "recentDescription": "Térjen vissza a nemrég megnyitott jogszabályokhoz.",
     "recentEmpty": "Még nincsenek nemrég megnyitott jogszabályok. Keressen egyet a kezdéshez.",

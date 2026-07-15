@@ -139,6 +139,7 @@
     "importResolveFailed": "Te strani EUR-Lex ni bilo mogoče povezati z aktom, ki ga LegalViz lahko odpre.",
     "addLawShort": "Dodaj še en akt",
     "addByReferenceTitle": "Dodaj po pravnem sklicu",
+    "extensionInline": "Ali namestite našo razširitev, da odprete kateri koli akt neposredno iz EUR-Lexa s klikom na ikono razširitve, brez kopiranja URL-jev:",
     "manualAddLaw": "Ročno dodaj zakon",
     "recentDescription": "Vrnite se k zakonom, ki ste jih nedavno odprli.",
     "recentEmpty": "Še ni nedavno odprtih zakonov.",

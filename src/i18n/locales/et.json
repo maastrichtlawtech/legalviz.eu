@@ -139,6 +139,7 @@
     "importResolveFailed": "Seda EUR-Lexi lehte ei saanud siduda õigusaktiga, mida LegalViz suudab avada.",
     "addLawShort": "Lisa veel üks õigusakt",
     "addByReferenceTitle": "Lisa õigusviite järgi",
+    "extensionInline": "Või paigaldage meie laiendus, et avada mis tahes õigusakt otse EUR-Lexist, klõpsates laienduse ikooni, ilma URL-e kopeerimata:",
     "manualAddLaw": "Lisa seadus käsitsi",
     "recentDescription": "Pöörduge tagasi hiljuti avatud seaduste juurde.",
     "recentEmpty": "Hiljuti avatud seadusi pole veel. Otsige alustamiseks.",

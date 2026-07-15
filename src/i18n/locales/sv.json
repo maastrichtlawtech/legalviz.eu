@@ -139,6 +139,7 @@
     "importResolveFailed": "Den här EUR-Lex-sidan kunde inte kopplas till en rättsakt som LegalViz kan öppna.",
     "addLawShort": "Lägg till en rättsakt till",
     "addByReferenceTitle": "Lägg till via rättslig hänvisning",
+    "extensionInline": "Eller installera vårt tillägg för att öppna vilken rättsakt som helst direkt från EUR-Lex genom att klicka på tilläggsikonen, utan att kopiera URL:er:",
     "manualAddLaw": "Lägg till lag manuellt",
     "recentDescription": "Gå tillbaka till de lagar du öppnade nyligen.",
     "recentEmpty": "Inga nyligen öppnade lagar ännu. Sök efter en för att börja.",

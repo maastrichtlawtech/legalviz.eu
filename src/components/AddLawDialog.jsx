@@ -137,6 +137,30 @@ export function AddLawDialog({
                 </p>
               ) : null}
             </div>
+
+            <div className="border-t border-gray-100 pt-5 text-sm text-gray-600 dark:border-gray-800 dark:text-gray-400">
+              <p>
+                {t("landing.extensionInline")}{" "}
+                <a
+                  href="https://chromewebstore.google.com/detail/eur-lex-visualiser/akkfdjadggheloggnfonppfkbifanpbc"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline underline-offset-2 hover:text-gray-900 dark:hover:text-gray-200"
+                >
+                  Chrome / Edge / Brave
+                </a>
+                {" · "}
+                <a
+                  href="https://addons.mozilla.org/en-US/firefox/addon/eur-lex-visualiser/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline underline-offset-2 hover:text-gray-900 dark:hover:text-gray-200"
+                >
+                  Firefox
+                </a>
+                .
+              </p>
+            </div>
           </div>
         </div>
       </div>

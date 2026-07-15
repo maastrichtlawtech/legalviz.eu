@@ -139,6 +139,7 @@
     "importResolveFailed": "Ovu stranicu EUR-Lexa nije bilo moguće povezati s propisom koji LegalViz može otvoriti.",
     "addLawShort": "Dodaj još jedan propis",
     "addByReferenceTitle": "Dodaj prema pravnoj oznaci",
+    "extensionInline": "Ili instalirajte naše proširenje kako biste otvorili bilo koji propis izravno s EUR-Lexa klikom na ikonu proširenja, bez kopiranja URL-ova:",
     "manualAddLaw": "Ručno dodaj zakon",
     "recentDescription": "Vratite se na zakone koje ste nedavno otvorili.",
     "recentEmpty": "Još nema nedavno otvorenih zakona. Pretražite jedan za početak.",

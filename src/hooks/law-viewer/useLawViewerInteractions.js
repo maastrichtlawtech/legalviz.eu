@@ -50,6 +50,17 @@ export function useLawViewerInteractions({
       if (event.key === "ArrowRight" && index >= 0 && index < currentList.length - 1) {
         onPrevNext(selected.kind, index + 1);
       }
+
+      // Vim-style j / k as previous / next, without modifiers (mirrors the
+      // reading-footer hint). Guard against combos so browser shortcuts pass.
+      if (!event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey) {
+        if (event.key === "k" && index > 0) {
+          onPrevNext(selected.kind, index - 1);
+        }
+        if (event.key === "j" && index >= 0 && index < currentList.length - 1) {
+          onPrevNext(selected.kind, index + 1);
+        }
+      }
     };
 
     window.addEventListener("keydown", handleKeyDown);

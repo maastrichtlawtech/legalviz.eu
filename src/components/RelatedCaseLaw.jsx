@@ -118,7 +118,6 @@ export function RelatedCaseLaw({ celex, articleNumber, currentLang = "EN" }) {
           <span className="flex min-w-0 items-center gap-2">
             <Scale size={16} className="shrink-0 text-teal-700 dark:text-teal-300" />
             <span className="font-semibold text-gray-900 dark:text-gray-100">{title}</span>
-            <span className="rounded bg-teal-200 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-teal-800 dark:bg-teal-800 dark:text-teal-200">{t("common.beta")}</span>
           </span>
           <span className="flex shrink-0 items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
             <Loader2 size={14} className="animate-spin" />
@@ -162,7 +161,6 @@ export function RelatedCaseLaw({ celex, articleNumber, currentLang = "EN" }) {
           <span className="rounded-full bg-teal-100 px-2.5 py-0.5 text-sm font-medium text-teal-800 dark:bg-teal-900/40 dark:text-teal-200">
             {matching.length}
           </span>
-          <span className="rounded bg-teal-200 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-teal-800 dark:bg-teal-800 dark:text-teal-200">{t("common.beta")}</span>
         </span>
       </div>
 

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo } from "react";
 import { Loader2, RefreshCw } from "lucide-react";
 import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 
@@ -35,14 +35,14 @@ import { useProcessedLawHtml } from "../hooks/law-viewer/useProcessedLawHtml.js"
 import { useLawViewerDerivedState } from "../hooks/law-viewer/useLawViewerDerivedState.js";
 import { useLawViewerPrint } from "../hooks/law-viewer/useLawViewerPrint.js";
 import { EU_LANGUAGES } from "../utils/formexApi.js";
-import {
-  ARTICLE_NAVIGATION_HINT_DISMISSED_KEY,
-  shouldShowArticleNavigationHint,
-} from "../utils/law-viewer/navigationHint.js";
+import { getCanonicalLawRoute } from "../utils/lawRouting.js";
+import { buildChapterEyebrow } from "../utils/law-viewer/tocFormat.js";
 import { LawViewerLoadingState } from "./law-viewer/LawViewerLoadingState.jsx";
 import { LawViewerErrorState } from "./law-viewer/LawViewerErrorState.jsx";
 import { LawViewerSidebar } from "./law-viewer/LawViewerSidebar.jsx";
 import { LawViewerSideBySide } from "./law-viewer/LawViewerSideBySide.jsx";
+import { LawViewerReadingFooter } from "./law-viewer/LawViewerReadingFooter.jsx";
+import { LawViewerContextRail } from "./law-viewer/LawViewerContextRail.jsx";
 import { LawOverviewPage } from "./law-viewer/LawOverviewPage.jsx";
 
 export function LawViewer() {
@@ -51,16 +51,12 @@ export function LawViewer() {
   const location = useLocation();
   const { locale, setLocale, localizePath, t } = useI18n();
   const [searchParams, setSearchParams] = useSearchParams();
+  // Parallel-language reading collapses the chapter rail to buy column width;
+  // this lets the reader pull the titled rail back without leaving the mode.
+  const [isRailExpanded, setIsRailExpanded] = React.useState(false);
   const importCelex = searchParams.get("celex");
   const sourceUrl = searchParams.get("sourceUrl");
   const { allLaws, libraryVersion } = useLandingLibrary();
-  const [isArticleNavigationHintDismissed, setIsArticleNavigationHintDismissed] = useState(() => {
-    try {
-      return localStorage.getItem(ARTICLE_NAVIGATION_HINT_DISMISSED_KEY) === "true";
-    } catch {
-      return false;
-    }
-  });
 
   const preferences = useLawViewerPreferences({
     locale,
@@ -123,11 +119,6 @@ export function LawViewer() {
     data: primaryDocument.data,
     selected: selection.selected,
     selectedEntry: primarySelectedEntry,
-  });
-  const showArticleNavigationHint = shouldShowArticleNavigationHint({
-    selected: selection.selected,
-    articleCount: primaryDocument.data.articles?.length || 0,
-    isDismissed: isArticleNavigationHintDismissed,
   });
   const secondarySelectedEntry = useMemo(
     () => getSelectedEntry(secondaryDocument.data, selection.selected),
@@ -207,22 +198,81 @@ export function LawViewer() {
     source.effectiveCelex,
   ]);
 
-  useEffect(() => {
-    if (!isArticleNavigationHintDismissed) return;
-    try {
-      localStorage.setItem(ARTICLE_NAVIGATION_HINT_DISMISSED_KEY, "true");
-    } catch {
-      // ignore localStorage failures
+  // Route back to the law's overview (position-zero of the contents).
+  const overviewRoute = useMemo(
+    () => getCanonicalLawRoute(
+      source.currentLaw || (source.effectiveCelex ? { celex: source.effectiveCelex } : null),
+      "overview",
+      null,
+      locale
+    ),
+    [source.currentLaw, source.effectiveCelex, locale]
+  );
+  const goToOverview = useMemo(() => () => navigate(overviewRoute), [navigate, overviewRoute]);
+
+  // The chapter that owns the selected article, independent of the TOC's
+  // open/closed state, so the eyebrow/breadcrumb stay stable.
+  const currentChapterLabel = useMemo(() => {
+    if (selection.selected.kind !== "article") return null;
+    const id = selection.selected.id;
+    const chapter = selection.toc.find((entry) => (
+      entry.items?.some((article) => article.article_number === id)
+      || entry.sections?.some((section) => section.items?.some((article) => article.article_number === id))
+    ));
+    const label = chapter?.label;
+    if (!label || label === "(Untitled Chapter)") return null;
+    return label;
+  }, [selection.selected, selection.toc]);
+  const chapterEyebrow = useMemo(
+    () => (currentChapterLabel ? buildChapterEyebrow(currentChapterLabel, { chapterWord: t("lawViewer.chapter") }) : null),
+    [currentChapterLabel, t]
+  );
+
+  const isOverview = selection.selected.kind === "overview";
+  const breadcrumb = (derived.hasLoadedContent && derived.currentLawLabel)
+    ? {
+      lawLabel: derived.currentLawLabel,
+      lawRoute: overviewRoute,
+      sectionLabel: isOverview ? undefined : (chapterEyebrow || undefined),
     }
-  }, [isArticleNavigationHintDismissed]);
+    : null;
+
+  // Resume tracking: persist the reader position once per selection change so
+  // the library can offer a "Resume at Art. N" deep-link.
+  const { articles, recitals, annexes } = primaryDocument.data;
+  useEffect(() => {
+    if (!source.effectiveCelex || !derived.hasLoadedContent) return;
+    if (primaryDocument.data.celex !== source.effectiveCelex) return;
+    const { kind, id } = selection.selected;
+    if (kind !== "article" && kind !== "recital" && kind !== "annex") return;
+    if (id == null) return;
+    const total = kind === "article"
+      ? articles?.length || 0
+      : kind === "recital"
+        ? recitals?.length || 0
+        : annexes?.length || 0;
+    const title = kind === "article"
+      ? articles?.find((article) => article.article_number === String(id))?.article_title || null
+      : null;
+    markLawOpened(source.effectiveCelex, { kind, id: String(id), total, title });
+  }, [
+    annexes?.length,
+    articles,
+    derived.hasLoadedContent,
+    primaryDocument.data.celex,
+    recitals?.length,
+    selection.selected,
+    source.effectiveCelex,
+  ]);
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white transition-colors duration-500 print:bg-white dark:from-gray-950 dark:to-gray-900">
+    <div className="min-h-screen bg-gradient-to-b from-paper to-white transition-colors duration-500 print:bg-white dark:from-gray-950 dark:to-gray-900">
       <SEO title={derived.seoData.title} description={derived.seoData.description} type="article" />
       <div className="print:hidden">
         <TopBar
           lawKey={source.currentLaw?.slug || slug || key || "import"}
           title={derived.currentLawLabel}
+          breadcrumb={breadcrumb}
           lists={{ articles: primaryDocument.data.articles, recitals: primaryDocument.data.recitals, annexes: primaryDocument.data.annexes }}
           globalLists={allLawsData}
           eurlexUrl={derived.eurlexUrl}
@@ -252,8 +302,8 @@ export function LawViewer() {
           persistenceKey="legalviz-law-reader-search"
         />
 
-        <main className="mx-auto flex w-full max-w-[1600px] flex-col justify-center gap-4 px-4 py-4 md:flex-row md:gap-6 md:px-6 md:py-6">
-          <div className="order-2 w-full min-w-0 max-w-4xl md:order-1 transition-all duration-300">
+        <main className="mx-auto flex w-full max-w-[1600px] flex-col gap-4 px-4 py-4 md:flex-row md:gap-6 md:px-6 md:py-6">
+          <div className="order-2 mx-auto w-full min-w-0 max-w-4xl flex-1 transition-all duration-300">
             <section className="min-h-[50vh] rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900 md:p-12">
               {derived.activeLoading ? (
                 <LawViewerLoadingState message={derived.loadingMessage} t={t} />
@@ -276,10 +326,20 @@ export function LawViewer() {
                     else if (primaryDocument.data.recitals?.[0]) selection.selectRecitalIdx(0);
                     else if (primaryDocument.data.annexes?.[0]) selection.selectAnnexIdx(0);
                   }}
+                  onPrint={() => printState.setPrintModalOpen(true)}
+                  externalLawOverview={derived.externalLawOverview}
+                  onOpenExternalLaw={interactions.handleOpenExternalLaw}
+                  isExternalReferencePending={interactions.isExternalReferencePending}
+                  locale={locale}
                   t={t}
                 />
               ) : (
                 <>
+                  {chapterEyebrow ? (
+                    <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-eu-gold-deep dark:text-eu-gold-bright">
+                      {chapterEyebrow}
+                    </p>
+                  ) : null}
                   <div className="mb-4 flex items-center justify-between gap-4">
                     <h2 className="min-w-0 truncate font-serif text-2xl font-bold tracking-tight text-gray-900 dark:text-gray-100">
                       {getSelectionTitle(selection.selected, t)}
@@ -328,30 +388,19 @@ export function LawViewer() {
                     t={t}
                   />
 
-                  {showArticleNavigationHint ? (
-                    <div className="mt-4 hidden items-start justify-between gap-4 rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900 dark:border-sky-900/60 dark:bg-sky-950/30 dark:text-sky-200 md:flex">
-                      <div className="flex items-start gap-3">
-                        <div className="mt-0.5 flex items-center gap-1">
-                          <span className="inline-flex h-7 min-w-7 items-center justify-center rounded-md border border-sky-200 bg-white/90 px-1.5 text-xs font-semibold text-sky-900 dark:border-sky-800 dark:bg-sky-950/60 dark:text-sky-100">←</span>
-                          <span className="inline-flex h-7 min-w-7 items-center justify-center rounded-md border border-sky-200 bg-white/90 px-1.5 text-xs font-semibold text-sky-900 dark:border-sky-800 dark:bg-sky-950/60 dark:text-sky-100">→</span>
-                        </div>
-                        <p className="leading-6">{t("lawViewer.articleNavigationHint")}</p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setIsArticleNavigationHintDismissed(true)}
-                        className="shrink-0 rounded-lg px-2 py-1 text-xs font-medium text-sky-700 transition hover:bg-sky-100 hover:text-sky-900 dark:text-sky-300 dark:hover:bg-sky-900/40 dark:hover:text-sky-100"
-                      >
-                        {t("common.dismiss")}
-                      </button>
-                    </div>
-                  ) : null}
+                  <LawViewerReadingFooter
+                    selected={selection.selected}
+                    lists={{ articles: primaryDocument.data.articles, recitals: primaryDocument.data.recitals, annexes: primaryDocument.data.annexes }}
+                    onPrevNext={selection.onPrevNext}
+                    onGoOverview={goToOverview}
+                    t={t}
+                  />
                 </>
               )}
             </section>
 
             {selection.selected.kind === "article" ? (
-              <>
+              <div className="xl:hidden">
                 <RelatedRecitals
                   recitals={recitalMap.get(selection.selected.id) || []}
                   allRecitals={primaryDocument.data.recitals}
@@ -384,7 +433,7 @@ export function LawViewer() {
                   currentLang={displayedFormexLang}
                   onOpenLaw={interactions.handleOpenLawByCelex}
                 />
-              </>
+              </div>
             ) : null}
 
             {selection.selected.kind === "annex" ? (
@@ -428,13 +477,37 @@ export function LawViewer() {
             loading={derived.activeLoading}
             loadError={activeLoadError}
             hasLoadedContent={derived.hasLoadedContent}
-            externalLawOverview={derived.externalLawOverview}
-            handleOpenExternalLaw={interactions.handleOpenExternalLaw}
-            isExternalReferencePending={interactions.isExternalReferencePending}
-            effectiveCelex={source.effectiveCelex}
-            formexLang={displayedFormexLang}
+            isOverview={isOverview}
+            onGoOverview={goToOverview}
+            collapsed={derived.isSideBySide && !isRailExpanded}
+            onExpand={() => setIsRailExpanded(true)}
+            onCollapse={derived.isSideBySide ? () => setIsRailExpanded(false) : undefined}
             t={t}
           />
+
+          {selection.selected.kind === "article" && derived.hasLoadedContent ? (
+            <aside className="order-3 hidden xl:block xl:w-80 xl:shrink-0">
+              <div className="xl:sticky xl:top-20">
+                <LawViewerContextRail
+                  relatedRecitals={recitalMap.get(selection.selected.id) || []}
+                  orphanRecitalNumbers={recitalMap.orphanRecitalNumbers || []}
+                  allRecitals={primaryDocument.data.recitals}
+                  recitalTitlesLoading={primaryDocument.recitalTitlesLoading}
+                  onSelectRecital={selection.onClickRecital}
+                  celex={source.effectiveCelex}
+                  articleNumber={selection.selected.id}
+                  currentLang={displayedFormexLang}
+                  crossReferences={primaryDocument.data.crossReferences}
+                  articles={primaryDocument.data.articles}
+                  onSelectArticle={interactions.onCrossRefArticle}
+                  onOpenExternalReference={interactions.handleOpenExternalLaw}
+                  isExternalReferencePending={interactions.isExternalReferencePending}
+                  onOpenLaw={interactions.handleOpenLawByCelex}
+                  t={t}
+                />
+              </div>
+            </aside>
+          ) : null}
         </main>
       </div>
 

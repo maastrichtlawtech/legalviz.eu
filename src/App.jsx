@@ -43,7 +43,7 @@ function RouteErrorScreen() {
       : t("error.unexpectedProblem");
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white px-6 py-12 dark:from-gray-950 dark:to-gray-900">
+    <div className="min-h-screen bg-gradient-to-b from-paper to-white px-6 py-12 dark:from-gray-950 dark:to-gray-900">
       <div className="mx-auto flex min-h-[70vh] max-w-2xl items-center justify-center">
         <div className="w-full rounded-3xl border border-gray-200 bg-white p-8 text-center shadow-sm dark:border-gray-800 dark:bg-gray-900">
           <Link

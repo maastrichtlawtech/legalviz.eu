@@ -40,8 +40,8 @@ export function useLandingLibrary() {
     };
   }, [refreshLibrary]);
 
-  const markLawOpened = useCallback(async (celex) => {
-    await persistLawOpened(celex);
+  const markLawOpened = useCallback(async (celex, position) => {
+    await persistLawOpened(celex, position);
   }, []);
 
   return {

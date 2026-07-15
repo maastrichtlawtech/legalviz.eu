@@ -1,9 +1,89 @@
-import { Loader2, Menu, X } from "lucide-react";
+import { Home, Menu, PanelLeftClose, PanelLeftOpen, X } from "lucide-react";
 import { NavigationControls } from "../NavigationControls.jsx";
-import { Accordion } from "../Accordion.jsx";
-import { MetadataPanel, CaseLawButton } from "../MetadataPanel.jsx";
 import { LawViewerQuickNavigation } from "./LawViewerQuickNavigation.jsx";
 import { LawViewerToc } from "./LawViewerToc.jsx";
+import {
+  getChapterMarker,
+  sentenceCaseTitle,
+  splitChapterLabel,
+} from "../../utils/law-viewer/tocFormat.js";
+
+function chapterContainsSelection(chapter, selected) {
+  if (selected.kind !== "article") return false;
+  const matches = (article) => article.article_number === selected.id;
+  if ((chapter.items || []).some(matches)) return true;
+  return (chapter.sections || []).some((section) => (section.items || []).some(matches));
+}
+
+// Slim chapter strip shown instead of the full rail while parallel-language
+// reading is active on xl screens: home + one marker per chapter, the active
+// chapter in gold. Clicking a marker jumps to the chapter's first article.
+// A marker alone ("III") does not say which chapter it is, so the strip leads
+// with an expand control back to the titled rail — without it the collapse
+// reads as breakage rather than a mode.
+function CollapsedRail({
+  selection,
+  selected,
+  isOverview,
+  onGoOverview,
+  onExpand,
+  t,
+}) {
+  return (
+    <aside className="order-1 hidden w-14 shrink-0 xl:sticky xl:top-20 xl:block xl:max-h-[calc(100vh-6rem)] xl:overflow-y-auto">
+      <div className="flex flex-col items-center gap-1 rounded-2xl border border-gray-200 bg-white py-3 dark:border-gray-800 dark:bg-gray-900">
+        <button
+          type="button"
+          onClick={() => onExpand?.()}
+          title={t("lawViewer.expandContents")}
+          aria-label={t("lawViewer.expandContents")}
+          className="mb-1 flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-gray-50 hover:text-gray-700 dark:text-gray-500 dark:hover:bg-gray-800/60 dark:hover:text-gray-200"
+        >
+          <PanelLeftOpen size={15} />
+        </button>
+        <button
+          type="button"
+          onClick={() => onGoOverview?.()}
+          title={t("lawViewer.overviewRow")}
+          aria-label={t("lawViewer.overviewRow")}
+          className={`flex h-8 w-8 items-center justify-center rounded-lg transition-colors ${
+            isOverview
+              ? "bg-eu-blue-soft text-eu-blue dark:bg-eu-blue-soft-dark dark:text-eu-blue-bright"
+              : "text-gray-400 hover:bg-gray-50 hover:text-gray-700 dark:text-gray-500 dark:hover:bg-gray-800/60 dark:hover:text-gray-200"
+          }`}
+        >
+          <Home size={15} />
+        </button>
+        {(selection.toc || []).map((chapter) => {
+          const marker = getChapterMarker(chapter.label);
+          if (!marker) return null;
+          const isActive = chapterContainsSelection(chapter, selected);
+          const firstArticle =
+            chapter.items?.[0] || chapter.sections?.[0]?.items?.[0] || null;
+          const title = sentenceCaseTitle(splitChapterLabel(chapter.label).title);
+          return (
+            <button
+              key={chapter.label}
+              type="button"
+              onClick={() => {
+                if (firstArticle) selection.onClickArticle(firstArticle);
+              }}
+              title={title}
+              aria-label={title}
+              className={`flex h-8 w-8 items-center justify-center rounded-lg font-serif text-sm italic transition-colors ${
+                isActive
+                  ? "bg-eu-gold-soft font-semibold text-eu-gold-deep dark:bg-eu-gold-soft-dark dark:text-eu-gold-bright"
+                  : "text-gray-500 hover:bg-gray-50 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-gray-800/60 dark:hover:text-gray-200"
+              }`}
+            >
+              {marker}
+            </button>
+          );
+        })}
+      </div>
+    </aside>
+  );
+}
 
 export function LawViewerSidebar({
   isSidebarOpen,
@@ -15,15 +95,80 @@ export function LawViewerSidebar({
   loading,
   loadError,
   hasLoadedContent,
-  externalLawOverview,
-  handleOpenExternalLaw,
-  isExternalReferencePending,
-  effectiveCelex,
-  formexLang,
+  isOverview,
+  onGoOverview,
+  collapsed = false,
+  onExpand,
+  onCollapse,
+  t,
+}) {
+  if (collapsed) {
+    return (
+      <>
+        <CollapsedRail
+          selection={selection}
+          selected={selected}
+          isOverview={isOverview}
+          onGoOverview={onGoOverview}
+          onExpand={onExpand}
+          t={t}
+        />
+        <FullRail
+          isSidebarOpen={isSidebarOpen}
+          mobileMenuOpen={mobileMenuOpen}
+          selected={selected}
+          data={data}
+          onPrevNext={onPrevNext}
+          selection={selection}
+          loading={loading}
+          loadError={loadError}
+          hasLoadedContent={hasLoadedContent}
+          isOverview={isOverview}
+          onGoOverview={onGoOverview}
+          hiddenOnXl
+          t={t}
+        />
+      </>
+    );
+  }
+
+  return (
+    <FullRail
+      isSidebarOpen={isSidebarOpen}
+      mobileMenuOpen={mobileMenuOpen}
+      selected={selected}
+      data={data}
+      onPrevNext={onPrevNext}
+      selection={selection}
+      loading={loading}
+      loadError={loadError}
+      hasLoadedContent={hasLoadedContent}
+      isOverview={isOverview}
+      onGoOverview={onGoOverview}
+      onCollapse={onCollapse}
+      t={t}
+    />
+  );
+}
+
+function FullRail({
+  isSidebarOpen,
+  mobileMenuOpen,
+  selected,
+  data,
+  onPrevNext,
+  selection,
+  loading,
+  loadError,
+  hasLoadedContent,
+  isOverview,
+  onGoOverview,
+  onCollapse,
+  hiddenOnXl = false,
   t,
 }) {
   return (
-    <aside className={`order-1 w-full md:order-2 md:sticky md:top-20 md:max-h-[calc(100vh-6rem)] md:w-80 md:shrink-0 md:overflow-y-auto transition-all duration-300 ${!isSidebarOpen ? "md:hidden" : ""}`}>
+    <aside className={`order-1 w-full md:sticky md:top-20 md:max-h-[calc(100vh-6rem)] md:w-72 md:shrink-0 md:overflow-y-auto transition-all duration-300 ${!isSidebarOpen ? "md:hidden" : ""} ${hiddenOnXl ? "xl:hidden" : ""}`}>
       <div className="mb-4 flex gap-2 md:hidden">
         <button
           type="button"
@@ -57,11 +202,22 @@ export function LawViewerSidebar({
           t={t}
         />
 
-        <CaseLawButton celex={effectiveCelex} currentLang={formexLang} />
-
-        <div className="pt-2">
-          <div className="px-1 mb-2 text-sm font-semibold text-gray-900 dark:text-gray-100">
-            {t("lawViewer.tableOfContents")}
+        <div>
+          <div className="mb-2 flex items-center justify-between gap-2 px-1">
+            <span className="text-[10.5px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">
+              {t("lawViewer.tableOfContents")}
+            </span>
+            {onCollapse ? (
+              <button
+                type="button"
+                onClick={() => onCollapse()}
+                title={t("lawViewer.collapseContents")}
+                aria-label={t("lawViewer.collapseContents")}
+                className="hidden rounded-md p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 xl:block dark:text-gray-500 dark:hover:bg-gray-800 dark:hover:text-gray-200"
+              >
+                <PanelLeftClose size={14} />
+              </button>
+            ) : null}
           </div>
           <LawViewerToc
             loading={loading}
@@ -80,46 +236,11 @@ export function LawViewerSidebar({
               if (index !== -1) selection.selectAnnexIdx(index);
             }}
             closeMobileMenu={selection.closeMobileMenu}
+            isOverview={isOverview}
+            onGoOverview={onGoOverview}
             t={t}
           />
         </div>
-
-        {externalLawOverview.length > 0 ? (
-          <div className="pt-4">
-            <Accordion title={`Linked Legislation (${externalLawOverview.length})`} defaultOpen={false}>
-              <div className="flex flex-wrap gap-2">
-                {externalLawOverview.map((item) => (
-                  (() => {
-                    const pending = typeof isExternalReferencePending === "function"
-                      ? isExternalReferencePending(item.ref)
-                      : false;
-                    return (
-                  <button
-                    key={item.key}
-                    type="button"
-                    disabled={pending}
-                    onClick={() => handleOpenExternalLaw(item.ref)}
-                    className={`inline-flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-medium text-blue-900 transition dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-100 ${
-                      pending
-                        ? "cursor-progress border-blue-400 bg-blue-100 dark:border-blue-700 dark:bg-blue-950/70"
-                        : "hover:border-blue-400 hover:bg-blue-100 dark:hover:border-blue-700 dark:hover:bg-blue-950/70"
-                    }`}
-                  >
-                    {pending ? <Loader2 size={12} className="animate-spin" /> : null}
-                    <span className="max-w-[220px] truncate">{item.label}</span>
-                    <span className="rounded-full bg-white/80 px-2 py-0.5 text-[10px] text-blue-700 dark:bg-blue-900/70 dark:text-blue-200">
-                      {item.count}
-                    </span>
-                  </button>
-                    );
-                  })()
-                ))}
-              </div>
-            </Accordion>
-          </div>
-        ) : null}
-
-        <MetadataPanel celex={effectiveCelex} currentLang={formexLang} />
       </div>
     </aside>
   );

@@ -95,7 +95,7 @@ function LawLibraryCard({ law, onOpen, locale, t }) {
       whileHover={{ y: -2 }}
       whileTap={{ scale: 0.99 }}
       onClick={() => onOpen(law)}
-      className="group relative flex cursor-pointer flex-col rounded-2xl border border-eu-blue-soft-dark/40 bg-paper p-4 text-left shadow-sm transition hover:border-eu-blue/40 hover:shadow-md dark:border-panel-dark dark:bg-panel-dark dark:hover:border-eu-blue/50"
+      className="group relative flex cursor-pointer flex-col rounded-2xl border border-gray-200 bg-white p-4 text-left shadow-sm transition hover:border-eu-blue/40 hover:shadow-md dark:border-gray-800 dark:bg-panel-dark dark:hover:border-eu-blue/50"
       tabIndex={0}
       onKeyDown={(event) => {
         if (event.key === "Enter" || event.key === " ") {

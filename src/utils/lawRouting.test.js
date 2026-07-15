@@ -242,6 +242,15 @@ describe("parseCelexQuery", () => {
     expect(parseCelexQuery("32016 R 0679")).toBe("32016R0679");
   });
 
+  it("zero-pads an unpadded document number to the canonical form", () => {
+    expect(parseCelexQuery("32016R679")).toBe("32016R0679");
+    expect(parseCelexQuery("32020D12")).toBe("32020D0012");
+    // Ensures a typed shorthand de-dupes against a backend zero-padded hit.
+    expect(parseCelexQuery("celex:32016r679")).toBe("32016R0679");
+    expect(parseCelexQuery("https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32016R679"))
+      .toBe("32016R0679");
+  });
+
   it("strips a leading CELEX: prefix", () => {
     expect(parseCelexQuery("celex:32016R0679")).toBe("32016R0679");
     expect(parseCelexQuery("CELEX 32016R0679")).toBe("32016R0679");

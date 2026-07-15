@@ -166,12 +166,21 @@ export function getActTypeChoices() {
 
 // Sector-3 CELEX shape: "3" + 4-digit year + act-type letter + 1-4 digit
 // number, with an optional "(NN)" disambiguation suffix (e.g. "32016R0679").
-const SECTOR3_CELEX = /^3\d{4}[RLD]\d{1,4}(?:\(\d+\))?$/;
+const SECTOR3_CELEX = /^3(\d{4})([RLD])(\d{1,4})(\(\d+\))?$/;
 const ELI_TYPE_TO_CELEX_LETTER = { reg: "R", dir: "L", dec: "D" };
+
+// Canonicalize to the compact upper-case form EUR-Lex/the backend index use:
+// the document number is always zero-padded to 4 digits, so a user-typed
+// "32016R679" and the canonical "32016R0679" de-dupe against each other.
+function normalizeSector3Celex(value) {
+  const match = String(value).toUpperCase().match(SECTOR3_CELEX);
+  if (!match) return null;
+  return `3${match[1]}${match[2]}${match[3].padStart(4, "0")}${match[4] || ""}`;
+}
 
 function extractSector3CelexFromText(text) {
   const match = String(text).match(/CELEX(?::|%3A)(3\d{4}[RLD]\d{1,4}(?:\(\d+\))?)/i);
-  return match ? match[1].toUpperCase() : null;
+  return match ? normalizeSector3Celex(match[1]) : null;
 }
 
 // An ELI path (/eli/reg/2016/679/oj) maps deterministically onto a sector-3
@@ -215,7 +224,7 @@ export function parseCelexQuery(input) {
   }
 
   const compact = raw.replace(/^celex\s*[:.-]?\s*/i, "").toUpperCase().replace(/\s+/g, "");
-  return SECTOR3_CELEX.test(compact) ? compact : null;
+  return normalizeSector3Celex(compact);
 }
 
 export function parseOfficialReferenceSlug(slug) {

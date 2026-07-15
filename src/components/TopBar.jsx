@@ -247,9 +247,15 @@ export function SearchBox({
     // A typed CELEX can be opened directly regardless of the search index, so
     // surface it as a result even when the backend finds no (or no exact) match.
     const celexQuery = parseCelexQuery(trimmedQuery);
+    // Derive a stable title from the CELEX (e.g. "Regulation (EU) 2016/679") so
+    // the result — and the library label saved on navigation — is meaningful
+    // rather than empty when no backend record supplies a real title.
+    const celexTitle = celexQuery
+      ? formatOfficialReference(inferOfficialReferenceFromCelex(celexQuery)) || ""
+      : "";
     const buildCelexResult = () => ({
       celex: celexQuery,
-      title: "",
+      title: celexTitle,
       search_kind: "law",
       id: celexQuery,
       directCelex: true,

@@ -93,6 +93,46 @@ async function readGzippedXml(filePath, fsApi = fs) {
   return (await gunzip(await fsApi.readFile(filePath))).toString("utf8");
 }
 
+// A legalCache-shaped resolver over the plain index from
+// JsonLegalCacheStore.exportReferenceIndex(). Same lookups, none of the search
+// machinery — cheap enough to hand to every worker.
+function createReferenceResolver(index) {
+  const { normalizeCelexLookupKey, normalizeOfficialReferenceLookupKey } = require("./legal-cache-store");
+  const officialRef = index?.officialRef || {};
+  const celexTitle = index?.celexTitle || {};
+  return {
+    isReady: () => Object.keys(officialRef).length > 0,
+    getStatus: () => ({ ready: Object.keys(officialRef).length > 0 }),
+    getByOfficialReference(reference) {
+      const key = normalizeOfficialReferenceLookupKey(reference);
+      const celex = key ? officialRef[key] : null;
+      return celex ? { celex } : null;
+    },
+    getByCelex(celex) {
+      const key = normalizeCelexLookupKey(celex);
+      if (!key || !(key in celexTitle)) return null;
+      return { celex: key, title: celexTitle[key] };
+    },
+  };
+}
+
+// Load the search cache once and reduce it to a resolver index. Without this each
+// worker would re-read the (hundreds of MB) cache and rebuild a MiniSearch index it
+// never queries — at the default batch size that is ~800 reloads for a full corpus.
+function loadReferenceIndex(options = {}) {
+  if (options.resolverIndex) return options.resolverIndex;
+  if (options.legalCache?.exportReferenceIndex) return options.legalCache.exportReferenceIndex();
+  const { JsonLegalCacheStore } = require("./legal-cache-store");
+  const cache = new JsonLegalCacheStore(options.searchCachePath);
+  cache.load();
+  if (!cache.isReady()) {
+    throw new Error(`Legal search cache is unavailable: ${cache.getStatus?.().error || "not loaded"}`);
+  }
+  const index = cache.exportReferenceIndex();
+  cache.close?.();
+  return index;
+}
+
 function resolveExternalReference(ref, legalCache) {
   if (!ref || ref.type !== "external") return null;
   if (ref.targetCelex || ref.actCelex) return normalizeCelex(ref.targetCelex || ref.actCelex);
@@ -431,7 +471,9 @@ function runCitationGraphWorker(files, options = {}) {
       workerData: {
         files,
         maxXmlBytes: options.maxXmlBytes,
+        maxHtmlBytes: options.maxHtmlBytes,
         searchCachePath: options.searchCachePath,
+        resolverIndex: options.resolverIndex,
       },
       resourceLimits: { maxOldGenerationSizeMb: options.workerHeapMb || DEFAULT_WORKER_HEAP_MB },
     });
@@ -492,6 +534,8 @@ async function buildCitationGraphBatched(options = {}) {
   const maxHtmlBytes = options.maxHtmlBytes ?? DEFAULT_MAX_HTML_BYTES;
   const batchSize = options.batchSize || DEFAULT_BATCH_SIZE;
   const workerRunner = options.workerRunner || runCitationGraphWorker;
+  // Resolve the search cache once here, not once per worker.
+  const resolverIndex = loadReferenceIndex(options);
   const shards = [];
   let processed = 0;
   const progressLog = options.progress ? (options.log || console.log) : null;
@@ -500,7 +544,7 @@ async function buildCitationGraphBatched(options = {}) {
     try {
       const shard = await workerRunner(batch, {
         maxXmlBytes, maxHtmlBytes, searchCachePath: options.searchCachePath,
-        workerHeapMb: options.workerHeapMb,
+        resolverIndex, workerHeapMb: options.workerHeapMb,
       });
       shards.push(shard);
       processed += batch.length;
@@ -601,6 +645,7 @@ if (require.main === module) {
 
 module.exports = { DEFAULT_BATCH_SIZE, DEFAULT_CITATION_GRAPH_PATH, DEFAULT_CORPUS_DIR, DEFAULT_MAX_XML_BYTES,
   DEFAULT_MAX_HTML_BYTES, GRAPH_VERSION, buildCitationGraph, buildCitationGraphBatched, celexForCorpusFile,
+  createReferenceResolver, loadReferenceIndex,
   countHtmlTreeSkipped, filterCorpusFiles, htmlCorpusDirFor, isHtmlCorpusFile,
   caseLawEdges, edgeKey, formatSummaryReport, legislationEdgesForLaw, listAllCorpusFiles, listCorpusFiles,
   listHtmlCorpusFiles, listTreeFiles,

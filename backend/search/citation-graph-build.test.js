@@ -5,7 +5,7 @@ const os = require("node:os");
 const path = require("node:path");
 const test = require("node:test");
 
-const { buildCitationGraph, buildCitationGraphBatched, DEFAULT_MAX_XML_BYTES, GRAPH_VERSION, formatSummaryReport, listCorpusFiles, parseCliArgs, sourceUnitTypeFor, stripCompleteUppercaseAnnexes } = require("./citation-graph-build");
+const { buildCitationGraph, buildCitationGraphBatched, createReferenceResolver, DEFAULT_MAX_XML_BYTES, GRAPH_VERSION, formatSummaryReport, listCorpusFiles, parseCliArgs, sourceUnitTypeFor, stripCompleteUppercaseAnnexes } = require("./citation-graph-build");
 
 test("CLI options and source unit types are normalized", () => {
   assert.equal(DEFAULT_MAX_XML_BYTES, 1024 * 1024);
@@ -276,6 +276,9 @@ test("batched builder recursively isolates a failing law and merges case law onc
   };
   const artifact = await buildCitationGraphBatched({
     files, batchSize: 4, outputPath: null, workerRunner, htmlTreeSkipped: 9,
+    // Supplied so the parent does not go looking for a real search cache; the
+    // fake workerRunner above never resolves anything with it.
+    resolverIndex: { officialRef: {}, celexTitle: {} },
     caseLawData: { "62020CJ0001": { name: "Case", articleRefs: [{ actCelex: "32016R0679", article: "6" }] } },
     now: () => new Date("2026-01-01T00:00:00.000Z"),
   });
@@ -288,4 +291,45 @@ test("batched builder recursively isolates a failing law and merges case law onc
   assert.equal(artifact.coverage.legislation.htmlTreeSkipped, 9);
   assert.deepEqual(artifact.failures, [{ celex: "32020R0002", type: "worker_failure", error: "worker OOM" }]);
   assert.deepEqual(artifact.edges.map((edge) => edge.sourceCelex), ["62020CJ0001", "32020R0001", "32020R0003", "32020R0004"]);
+});
+
+// Regression guard for the build's dominant cost: each worker used to construct its
+// own JsonLegalCacheStore, re-reading the cache and rebuilding a MiniSearch index it
+// never queries — ~800 reloads over a full corpus. The parent must resolve once and
+// hand every batch the same index.
+test("batched builder resolves the search cache once and shares it with every worker", async () => {
+  let exports = 0;
+  const legalCache = {
+    isReady: () => true,
+    exportReferenceIndex: () => { exports += 1; return { officialRef: { "regulation|2016|679": "32016R0679" }, celexTitle: {} }; },
+  };
+  const seen = [];
+  const workerRunner = async (batch, options) => {
+    seen.push(options.resolverIndex);
+    return { parserVersion: 4, stats: { corpusFiles: batch.length, parsedLaws: batch.length }, failures: [], edges: [] };
+  };
+  await buildCitationGraphBatched({
+    files: ["/fake/32020R0001.xml.gz", "/fake/32020R0002.xml.gz", "/fake/32020R0003.xml.gz"],
+    batchSize: 1, outputPath: null, workerRunner, legalCache, caseLawData: null,
+  });
+  assert.equal(exports, 1, "search cache must be reduced to an index exactly once");
+  assert.equal(seen.length, 3);
+  assert.ok(seen.every((index) => index === seen[0]), "every worker gets the same index instance");
+  assert.equal(seen[0].officialRef["regulation|2016|679"], "32016R0679");
+});
+
+test("createReferenceResolver resolves exactly like the cache it was exported from", () => {
+  const resolver = createReferenceResolver({
+    officialRef: { "regulation|2016|679": "32016R0679" },
+    celexTitle: { "32020R0001": "Widgets", "32020R0002": null },
+  });
+  assert.equal(resolver.isReady(), true);
+  assert.deepEqual(resolver.getByOfficialReference({ actType: "regulation", year: "2016", number: "679" }), { celex: "32016R0679" });
+  // padded/odd-cased input must normalise the same way the store does
+  assert.deepEqual(resolver.getByOfficialReference({ actType: "Regulation", year: "2016", number: "0679" }), { celex: "32016R0679" });
+  assert.equal(resolver.getByOfficialReference({ actType: "directive", year: "2016", number: "679" }), null);
+  assert.equal(resolver.getByCelex("32020r0001").title, "Widgets");
+  assert.equal(resolver.getByCelex("32020R0002").title, null);
+  assert.equal(resolver.getByCelex("39999R9999"), null);
+  assert.equal(createReferenceResolver({ officialRef: {}, celexTitle: {} }).isReady(), false);
 });

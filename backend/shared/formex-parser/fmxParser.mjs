@@ -582,22 +582,25 @@ function parseExternalLawMeta(raw, target, { ecscAuthority = false, institutiona
   const actType = inferExternalActType(raw);
   const hasNo = /\bN(?:o)?\.?\s/i.test(raw);
   const allowHistoricalNoLabel = /\(\s*(?:EEC|EC|CEE)\s*\)/i.test(raw);
-  const actCelex = resolveInstrumentCelex({
+  // A three-digit tail on a number-first historical instrument is commonly a
+  // footnote digit flattened into its two-digit year. Do not let the generic
+  // resolver silently reinterpret it as a different year; a later document
+  // corroboration pass may repair it when there is exact local evidence.
+  const malformedHistoricalYear = /^\d{3,4}\/\d{3}$/.test(String(target || ""))
+    && !/^(?:19|20)\d{2}\//.test(String(target || ""));
+  const resolverInput = {
     actType,
     identifier: target,
     hasNo,
     allowHistoricalNoLabel,
     ecscAuthority,
     institutionalIssuer,
-  });
-  const { year, number, suffix } = parseInstrumentIdentifier({
-    actType,
-    identifier: target,
-    hasNo,
-    allowHistoricalNoLabel,
-    ecscAuthority,
-    institutionalIssuer,
-  });
+  };
+  const actCelex = malformedHistoricalYear ? null : resolveInstrumentCelex(resolverInput);
+  const parsed = malformedHistoricalYear
+    ? { year: null, number: null, suffix: null }
+    : parseInstrumentIdentifier(resolverInput);
+  const { year, number, suffix } = parsed;
 
   return {
     actType,
@@ -642,6 +645,39 @@ export function repairCorroboratedTruncatedInstrumentIdentifiers(refs) {
     if (candidates.length !== 1) continue;
     const candidate = candidates[0];
     Object.assign(ref, {
+      actCelex: candidate.actCelex,
+      identifier: candidate.identifier,
+      year: candidate.year,
+      number: candidate.number,
+      suffix: candidate.suffix,
+    });
+  }
+
+  // A superscript footnote may be flattened into a two-digit historical year
+  // at an arbitrary position ("4136/896" instead of "4136/86"). It would be
+  // unsafe to decide which digit is the footnote from that token alone. Repair
+  // only when deleting one digit yields a uniquely corroborated, resolved
+  // same-type citation elsewhere in this document.
+  for (const ref of refs) {
+    if (ref.type !== "external" || ref.actCelex || !ref.actType) continue;
+    const match = String(ref.target || "").match(/^(\d{3,4})\/(\d{3})$/);
+    if (!match) continue;
+    const [number, yearWithFootnote] = match.slice(1);
+    const possibleTargets = new Set([...yearWithFootnote].map((_, index) => (
+      `${number}/${yearWithFootnote.slice(0, index)}${yearWithFootnote.slice(index + 1)}`
+    )));
+    const candidates = [...new Map(refs
+      .filter((candidate) => (
+        candidate.type === "external"
+        && candidate.actType === ref.actType
+        && possibleTargets.has(candidate.target)
+        && candidate.actCelex
+      ))
+      .map((candidate) => [candidate.actCelex, candidate])).values()];
+    if (candidates.length !== 1) continue;
+    const candidate = candidates[0];
+    Object.assign(ref, {
+      target: candidate.target,
       actCelex: candidate.actCelex,
       identifier: candidate.identifier,
       year: candidate.year,

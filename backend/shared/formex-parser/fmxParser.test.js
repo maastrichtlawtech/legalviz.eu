@@ -536,6 +536,17 @@ describe("extractCrossRefsFromText — multilingual instruments", () => {
     }));
   });
 
+  it("repairs a footnote digit flattened onto a two-digit historical year", () => {
+    const refs = extractCrossRefsFromText(
+      "Regulation (EEC) No 4136/896; Regulation (EEC) No 4136/86",
+      getLangConfig("EN"),
+    );
+    expect(refs).toContainEqual(expect.objectContaining({
+      target: "4136/86",
+      actCelex: "31986R4136",
+    }));
+  });
+
   it("repairs a two-digit year split across adjacent old HTML fragments", () => {
     const refs = extractCrossRefsFromText("Council Regulation (EEC) No 2894/7 // 9 ,", getLangConfig("EN"));
     expect(refs).toContainEqual(expect.objectContaining({

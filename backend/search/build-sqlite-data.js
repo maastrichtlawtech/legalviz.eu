@@ -98,6 +98,11 @@ function buildSqliteData({
         celex TEXT NOT NULL,
         ordinal INTEGER NOT NULL
       ) STRICT;
+      -- detail=full is FTS5's default; stated explicitly so phrase/NEAR recall
+      -- stays available and a later reviewer does not "simplify" it to a
+      -- narrower detail mode. Because it matches the default, the on-disk
+      -- format is unchanged and SQLITE_SCHEMA_VERSION does not need a bump;
+      -- moving to detail=column/none would change the schema and require one.
       CREATE VIRTUAL TABLE law_excerpts USING fts5(
         excerpt,
         content='',

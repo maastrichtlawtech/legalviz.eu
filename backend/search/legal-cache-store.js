@@ -572,6 +572,7 @@ module.exports = {
   DEFAULT_SQLITE_DATA_PATH,
   JsonLegalCacheStore,
   SQLITE_SCHEMA_VERSION,
+  containedAliasKeys,
   normalizeCelexLookupKey,
   normalizeEliLookupKey,
   normalizeOfficialReferenceLookupKey,

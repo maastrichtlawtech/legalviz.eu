@@ -6,6 +6,7 @@ const path = require("node:path");
 
 const {
   JsonLegalCacheStore,
+  containedAliasKeys,
 } = require("./legal-cache-store");
 const { buildSqliteData } = require("./build-sqlite-data");
 
@@ -472,4 +473,52 @@ test("JSON and SQLite both preserve ambiguous lookups", () => {
     assert.equal(store.getByEli("http://data.europa.eu/eli/reg/2020/123/oj"), null);
     store.close();
   }
+});
+
+test("containedAliasKeys yields contiguous multi-word phrases, longest first", () => {
+  const keys = containedAliasKeys("digital services act obligations");
+
+  // Both the spaced and compact form of each sub-phrase are produced so a query
+  // can hit either alias variant stored in byAlias.
+  assert.ok(keys.includes("digital services act"));
+  assert.ok(keys.includes("digitalservicesact"));
+
+  // Longest sub-phrases come first so a more specific alias outranks a shorter
+  // one when several are added before the MiniSearch stage.
+  assert.equal(keys[0], "digital services act");
+
+  // The full query is handled by the exact-alias lookup, and single words are
+  // deliberately excluded to avoid broad, low-precision matches.
+  assert.ok(!keys.includes("digital services act obligations"));
+  assert.ok(!keys.includes("digital"));
+});
+
+test("containedAliasKeys stays bounded and deduplicated", () => {
+  // Fewer than three words cannot contain a shorter contiguous sub-phrase, so
+  // nothing is generated (the exact-alias path covers the whole query itself).
+  assert.deepEqual(containedAliasKeys(""), []);
+  assert.deepEqual(containedAliasKeys("oneword"), []);
+  assert.deepEqual(containedAliasKeys("two words"), []);
+
+  // Repeated phrases collapse to a single spaced/compact pair.
+  assert.deepEqual(containedAliasKeys("act act act"), ["act act", "actact"]);
+});
+
+test("searchLaws recovers a known alias embedded in a modifier-heavy query", () => {
+  const store = new JsonLegalCacheStore(fixturePath, { preferJson: true });
+  assert.equal(store.load(), true);
+
+  // Each query carries an extra modifier token that is absent from the target
+  // law's title, so the exact-alias and strict AND paths cannot surface it; the
+  // contiguous-alias recovery keeps the known law at rank one.
+  const expectations = [
+    ["digital services act obligations", "32022R2065"],
+    ["digital markets act rules", "32022R1925"],
+    ["data governance act scope", "32022R0868"],
+  ];
+  for (const [query, expectedCelex] of expectations) {
+    const results = store.searchLaws(query, { limit: 5 }).map((result) => result.celex);
+    assert.equal(results[0], expectedCelex, `${query} should surface ${expectedCelex} first`);
+  }
+  store.close();
 });

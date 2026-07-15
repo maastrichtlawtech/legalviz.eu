@@ -98,12 +98,20 @@ export function LawOverviewPage({
   const meta = useLawMetadata(effectiveCelex);
   const { metadata, status } = meta;
 
-  const title = data.title || currentLaw?.label || "";
+  const rawTitle = data.title || currentLaw?.label || "";
+  // Labels often read "Common name — Regulation (EU) YYYY/N"; the reference
+  // half is already carried by the pills and lede, so the H1 keeps only the
+  // common name and the remainder falls back into the lede.
+  const titleParts = rawTitle.split(" — ").map((part) => part.trim()).filter(Boolean);
+  const title = titleParts[0] || rawTitle;
+  const titleRemainder = titleParts.length > 1 ? titleParts.slice(1).join(" — ") : null;
   const officialReference = currentLaw?.officialReference;
   const actTypeLabel = officialReference?.actType && ACT_TYPE_KEY[officialReference.actType]
     ? t(ACT_TYPE_KEY[officialReference.actType])
     : null;
-  const lede = officialReference?.raw && officialReference.raw !== title ? officialReference.raw : null;
+  const lede = officialReference?.raw && officialReference.raw !== rawTitle
+    ? officialReference.raw
+    : titleRemainder;
 
   const articleCount = data.articles?.length || 0;
   const recitalCount = data.recitals?.length || 0;

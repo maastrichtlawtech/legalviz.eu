@@ -1222,7 +1222,7 @@ export function TopBar({
                 {breadcrumb.lawLabel}
               </Link>
               {breadcrumb.sectionLabel ? (
-                <span className="truncate text-gray-400 dark:text-gray-500" title={breadcrumb.sectionLabel}>
+                <span className="hidden truncate text-gray-400 md:inline dark:text-gray-500" title={breadcrumb.sectionLabel}>
                   {" / "}
                   {breadcrumb.sectionLabel}
                 </span>

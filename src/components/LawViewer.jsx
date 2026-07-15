@@ -467,6 +467,7 @@ export function LawViewer() {
             hasLoadedContent={derived.hasLoadedContent}
             isOverview={isOverview}
             onGoOverview={goToOverview}
+            collapsed={derived.isSideBySide}
             t={t}
           />
 

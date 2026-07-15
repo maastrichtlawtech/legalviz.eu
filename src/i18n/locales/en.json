@@ -299,6 +299,7 @@
     "legacyHtmlFallbackMessage": "This law is being shown from an older EUR-Lex HTML format rather than structured Formex data. The layout may be rough, and LegalViz has switched the document language back to English for reliability.",
     "languageItemUnavailable": "{label} {id} is not available in {lang}.",
     "sideBySideDesktopOnly": "Side-by-side reading is available on larger screens. This device keeps showing the main language only.",
+    "alignedByParagraph": "Aligned by paragraph",
     "textOnly": "Text only"
   },
   "printView": {

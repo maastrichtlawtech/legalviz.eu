@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
-import { useLocation, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { ChevronLeft, Search, X, ExternalLink, Printer, Loader2, PanelLeftClose, PanelLeftOpen, Minus, Plus, MoreVertical, RotateCcw, FilePlus2 } from "lucide-react";
 import { Button } from "./Button.jsx";
 import { ThemeToggle } from "./ThemeToggle.jsx";
@@ -537,7 +537,7 @@ export function SearchBox({
   // Auto-scroll to selected item
   useEffect(() => {
     if (selectedIndex >= 0 && resultsRef.current) {
-      const selectedEl = resultsRef.current.children[selectedIndex];
+      const selectedEl = resultsRef.current.querySelector(`[data-result-index="${selectedIndex}"]`);
       if (selectedEl) {
         selectedEl.scrollIntoView({ block: "nearest", behavior: "smooth" });
       }
@@ -633,6 +633,57 @@ export function SearchBox({
         lawWord: searchableLawCount === 1 ? t("search.law") : t("search.laws"),
         language: activeLanguage,
       });
+
+  // Short muted scope sentence shown beneath the mode segmented control. For
+  // laws mode the secondary-acts caveat lives in the footer instead, so the
+  // scope line stays terse.
+  const scopeSentence = isCurrentMode
+    ? t("search.searchingCurrentLaw", { law: currentLawLabel || t("search.currentLawFallback") })
+    : isLawMode
+      ? t("search.scopeLaws")
+      : t("search.searchingMatches", {
+        count: searchableLawCount,
+        lawWord: searchableLawCount === 1 ? t("search.law") : t("search.laws"),
+        language: activeLanguage,
+      });
+
+  const modeLabel = (mode) => (
+    mode === "current"
+      ? t("search.segCurrent")
+      : mode === "laws"
+        ? t("search.segLaws")
+        : t("search.segMatches")
+  );
+
+  // Cycle the active mode with Tab / Shift+Tab while the dialog is open.
+  const cycleMode = useCallback((direction) => {
+    if (availableModes.length < 2) return;
+    const currentIdx = availableModes.indexOf(searchMode);
+    const nextIdx = (currentIdx + direction + availableModes.length) % availableModes.length;
+    setSearchMode(availableModes[nextIdx]);
+    setSelectedIndex(-1);
+    setLawSearchError("");
+    focusModalInput();
+  }, [availableModes, focusModalInput, searchMode]);
+
+  // Split laws-mode results into a "Best match" group (the synthetic
+  // direct-open CELEX result, when present, plus the top backend hit) and an
+  // "All results" group for the remainder. The concatenated render order is
+  // identical to `results`, so keyboard selectedIndex still maps 1:1.
+  const resultGroups = useMemo(() => {
+    if (!isLawMode || results.length === 0) {
+      return [{ label: null, items: results }];
+    }
+    const directResults = results.filter((r) => r.directCelex);
+    const nonDirect = results.filter((r) => !r.directCelex);
+    const bestItems = [...directResults, ...nonDirect.slice(0, 1)];
+    const restItems = nonDirect.slice(1);
+    const groups = [{ label: t("search.groupBestMatch"), items: bestItems }];
+    if (restItems.length > 0) {
+      groups.push({ label: t("search.groupAllResults"), items: restItems });
+    }
+    return groups;
+  }, [isLawMode, results, t]);
 
   const inputPlaceholder = isBusy
     ? t("search.initializing")
@@ -741,6 +792,11 @@ export function SearchBox({
                       value={query}
                       onChange={handleSearch}
                       onKeyDown={(e) => {
+                        if (e.key === "Tab" && availableModes.length > 1) {
+                          e.preventDefault();
+                          cycleMode(e.shiftKey ? -1 : 1);
+                          return;
+                        }
                         if (isLawMode && e.key === "Enter" && selectedIndex < 0) {
                           e.preventDefault();
                           runLawSearch(query);
@@ -765,12 +821,13 @@ export function SearchBox({
                     )}
                   </div>
                 </div>
-                <div className="hidden shrink-0 items-center border-l border-gray-200 pl-3 md:flex dark:border-gray-700">
+                <div className="hidden shrink-0 items-center md:flex">
                   <button
                     onClick={() => setIsOpen(false)}
-                    className="h-10 rounded-lg px-4 text-sm font-medium text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-white"
+                    title={t("common.close")}
+                    className="rounded-md border border-gray-200 bg-gray-50 px-2 py-1 font-mono text-[10px] text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-500 dark:hover:text-gray-300"
                   >
-                    {t("common.close")}
+                    esc
                   </button>
                 </div>
               </div>
@@ -778,41 +835,40 @@ export function SearchBox({
 
             {hasGlobalSearch && availableModes.length > 1 && (
               <div className="flex-none border-b border-gray-100 bg-gray-50/80 px-4 py-2.5 dark:border-gray-800 dark:bg-gray-950/60">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-[11px] font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                    {t("search.modeLabel")}
-                  </span>
-                  <div className="inline-flex rounded-full border border-gray-200 bg-white p-0.5 dark:border-gray-700 dark:bg-gray-900">
+                <div className="flex flex-wrap items-center gap-3">
+                  <div
+                    role="tablist"
+                    aria-label={t("search.modeLabel")}
+                    className="inline-flex rounded-lg border border-gray-200 bg-gray-100 p-0.5 dark:border-gray-700 dark:bg-gray-950"
+                  >
                     {availableModes.map((mode) => {
                       const active = searchMode === mode;
                       return (
                         <button
                           key={mode}
                           type="button"
+                          role="tab"
+                          aria-selected={active}
                           onClick={() => {
                             setSearchMode(mode);
                             setSelectedIndex(-1);
                             setLawSearchError("");
                             focusModalInput();
                           }}
-                          className={`rounded-full px-3 py-1 text-xs font-medium transition ${
+                          className={`rounded-md px-3 py-1 text-xs font-medium transition ${
                             active
-                              ? "bg-gray-900 text-white dark:bg-white dark:text-gray-900"
-                              : "text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white"
+                              ? "bg-white text-gray-900 shadow-sm dark:bg-gray-800 dark:text-white"
+                              : "text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white"
                           }`}
                         >
-                          {mode === "current"
-                            ? t("search.modeCurrentLaw")
-                            : mode === "laws"
-                              ? t("search.modeLaws")
-                              : t("search.modeMatches")}
+                          {modeLabel(mode)}
                         </button>
                       );
                     })}
                   </div>
-                </div>
-                <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">
-                  {modeSummary}
+                  <span className="min-w-0 flex-1 truncate text-[11.5px] text-gray-500 dark:text-gray-400">
+                    {scopeSentence}
+                  </span>
                 </div>
               </div>
             )}
@@ -829,86 +885,113 @@ export function SearchBox({
                   <p className="text-sm text-center max-w-sm">{modeSummary}</p>
                 </div>
               ) : results.length > 0 ? (
-                <div className="flex flex-col gap-2 p-2 w-full" ref={resultsRef}>
-                  {results.map((item, idx) => (
-                    (() => {
-                      const lawDisplay = item.search_kind === "law" ? getLawResultDisplay(item) : null;
-                      return (
-                        <button
-                          type="button"
-                          key={`${item.search_kind || item.type}-${item.id}-${idx}`}
-                          onClick={() => handleSelect(item)}
-                          className={`group flex flex-col gap-1 p-3 text-left rounded-xl transition-all w-full ${idx === selectedIndex
-                            ? "bg-blue-50 ring-1 ring-blue-200 shadow-sm dark:bg-blue-950/70 dark:ring-blue-500"
-                            : "hover:bg-blue-50/50 hover:ring-1 hover:ring-blue-200 bg-white md:bg-transparent dark:bg-gray-800 md:dark:bg-transparent dark:hover:ring-blue-800 dark:hover:bg-blue-950/50"
-                            }`}
-                        >
-                          <div className="flex items-center gap-2.5 w-full min-w-0">
-                            <span className={`flex-shrink-0 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md border ${item.search_kind === "law"
-                              ? "bg-emerald-50 text-emerald-700 border-emerald-100 dark:bg-emerald-900/40 dark:text-emerald-200 dark:border-emerald-800"
-                              : item.type === "article"
-                                ? "bg-blue-50 text-blue-700 border-blue-100 dark:bg-blue-900/40 dark:text-blue-200 dark:border-blue-800"
-                                : item.type === "recital"
-                                  ? "bg-purple-50 text-purple-700 border-purple-100 dark:bg-purple-900/40 dark:text-purple-200 dark:border-purple-800"
-                                  : "bg-orange-50 text-orange-700 border-orange-100 dark:bg-orange-900/40 dark:text-orange-200 dark:border-orange-800"
-                              }`}>
-                              {item.search_kind === "law" ? t("search.lawResultType") : item.type}
-                            </span>
-                            <span className={`font-semibold text-base truncate flex-1 min-w-0 ${
-                              idx === selectedIndex
-                                ? "text-gray-900 group-hover:text-blue-700 dark:text-blue-100 dark:group-hover:text-blue-100"
-                                : "text-gray-900 group-hover:text-blue-700 dark:text-gray-100 dark:group-hover:text-blue-200"
-                            }`}>
-                              {lawDisplay?.primaryTitle || item.title}
-                            </span>
-                            {item.search_kind !== "law" && item.score > 100 && (
-                              <span className="flex-shrink-0 text-[10px] bg-green-100 text-green-700 px-1.5 rounded-full font-medium dark:bg-green-900/50 dark:text-green-200">{t("search.bestMatch")}</span>
-                            )}
-                            {item.directCelex && (
-                              <span className="flex-shrink-0 text-[10px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-medium dark:bg-emerald-900/50 dark:text-emerald-200">{t("search.openDirectly")}</span>
-                            )}
-                            {item.law_label && (
-                              <span className="flex-shrink-0 text-[10px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full font-medium dark:bg-gray-800 dark:text-gray-400">
-                                {item.law_label}
-                              </span>
-                            )}
+                <div className="flex flex-col p-2 w-full" ref={resultsRef}>
+                  {(() => {
+                    let flatIndex = -1;
+                    return resultGroups.map((group, gi) => (
+                      <div key={group.label || `group-${gi}`} className="flex flex-col">
+                        {group.label ? (
+                          <div className="px-3 pb-1 pt-2 text-[10.5px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">
+                            {group.label}
                           </div>
-                          {item.search_kind === "law" ? (
-                            <>
-                              {lawDisplay?.secondaryTitle ? (
-                                <p className="pl-1 text-sm leading-relaxed text-gray-500 line-clamp-2 dark:text-gray-300">
-                                  {lawDisplay.secondaryTitle}
-                                </p>
-                              ) : null}
-                              {lawDisplay?.metaLine ? (
-                                <p className="pl-1 text-sm leading-relaxed text-gray-500 dark:text-gray-400">
-                                  {lawDisplay.metaLine}
-                                </p>
-                              ) : null}
-                              {Array.isArray(item.topics) && item.topics.length > 0 ? (
-                                <div className="flex flex-wrap gap-1 pl-1">
-                                  {item.topics.slice(0, 3).map((topic) => (
-                                    <span
-                                      key={topic}
-                                      className="flex-shrink-0 text-[10px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full font-medium truncate max-w-[10rem] dark:bg-gray-800 dark:text-gray-400"
-                                    >
-                                      {topic}
-                                    </span>
-                                  ))}
-                                </div>
-                              ) : null}
-                            </>
-                          ) : (
-                            <p className="text-sm text-gray-500 line-clamp-2 pl-1 leading-relaxed dark:text-gray-300">
-                              <span className="opacity-70">...</span>
-                              {item.preview}
-                              <span className="opacity-70">...</span>
-                            </p>
-                          )}
-                        </button>
-                      );
-                    })()
-                  ))}
+                        ) : null}
+                        <div className="flex flex-col gap-1">
+                          {group.items.map((item) => {
+                            flatIndex += 1;
+                            const idx = flatIndex;
+                            const isSelected = idx === selectedIndex;
+                            const dense = gi > 0;
+                            const lawDisplay = item.search_kind === "law" ? getLawResultDisplay(item) : null;
+                            return (
+                              <button
+                                type="button"
+                                key={`${item.search_kind || item.type}-${item.id}-${idx}`}
+                                data-result-index={idx}
+                                onClick={() => handleSelect(item)}
+                                className={`group flex w-full flex-col gap-1 rounded-xl px-3 text-left transition-colors ${dense ? "py-2" : "py-2.5"} ${
+                                  isSelected
+                                    ? "bg-eu-blue-soft dark:bg-eu-blue-soft-dark"
+                                    : "hover:bg-eu-blue-soft/60 dark:hover:bg-eu-blue-soft-dark/60"
+                                }`}
+                              >
+                                {item.search_kind === "law" ? (
+                                  <>
+                                    <div className="flex w-full min-w-0 items-baseline gap-2">
+                                      <span className={`min-w-0 flex-1 truncate font-display font-bold text-eu-navy dark:text-white ${dense ? "text-[14px]" : "text-[15px]"}`}>
+                                        {lawDisplay?.primaryTitle || item.title}
+                                      </span>
+                                      {item.directCelex && (
+                                        <span className="flex-shrink-0 rounded-full bg-eu-gold-soft px-2 py-0.5 text-[10px] font-medium text-eu-gold-deep dark:bg-eu-gold-soft-dark dark:text-eu-gold-bright">
+                                          {t("search.openDirectly")}
+                                        </span>
+                                      )}
+                                      {item.law_label && (
+                                        <span className="flex-shrink-0 rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-400">
+                                          {item.law_label}
+                                        </span>
+                                      )}
+                                    </div>
+                                    {lawDisplay?.secondaryTitle ? (
+                                      <p className="text-xs leading-relaxed text-gray-500 line-clamp-2 dark:text-gray-400">
+                                        {lawDisplay.secondaryTitle}
+                                      </p>
+                                    ) : null}
+                                    {lawDisplay?.metaLine ? (
+                                      <p className="font-mono text-[11px] text-gray-400 dark:text-gray-500">
+                                        {lawDisplay.metaLine}
+                                      </p>
+                                    ) : null}
+                                    {Array.isArray(item.topics) && item.topics.length > 0 ? (
+                                      <div className="flex flex-wrap gap-1">
+                                        {item.topics.slice(0, 3).map((topic) => (
+                                          <span
+                                            key={topic}
+                                            className="max-w-[10rem] flex-shrink-0 truncate rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-500 dark:bg-gray-800 dark:text-gray-400"
+                                          >
+                                            {topic}
+                                          </span>
+                                        ))}
+                                      </div>
+                                    ) : null}
+                                  </>
+                                ) : (
+                                  <>
+                                    <div className="flex w-full min-w-0 items-center gap-2.5">
+                                      <span className={`flex-shrink-0 rounded-md border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
+                                        item.type === "article"
+                                          ? "border-blue-100 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-900/40 dark:text-blue-200"
+                                          : item.type === "recital"
+                                            ? "border-purple-100 bg-purple-50 text-purple-700 dark:border-purple-800 dark:bg-purple-900/40 dark:text-purple-200"
+                                            : "border-orange-100 bg-orange-50 text-orange-700 dark:border-orange-800 dark:bg-orange-900/40 dark:text-orange-200"
+                                      }`}>
+                                        {item.type}
+                                      </span>
+                                      <span className="min-w-0 flex-1 truncate font-semibold text-base text-gray-900 group-hover:text-eu-blue dark:text-gray-100 dark:group-hover:text-eu-blue-bright">
+                                        {item.title}
+                                      </span>
+                                      {item.score > 100 && (
+                                        <span className="flex-shrink-0 rounded-full bg-green-100 px-1.5 text-[10px] font-medium text-green-700 dark:bg-green-900/50 dark:text-green-200">{t("search.bestMatch")}</span>
+                                      )}
+                                      {item.law_label && (
+                                        <span className="flex-shrink-0 rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-400">
+                                          {item.law_label}
+                                        </span>
+                                      )}
+                                    </div>
+                                    <p className="pl-1 text-sm leading-relaxed text-gray-500 line-clamp-2 dark:text-gray-300">
+                                      <span className="opacity-70">...</span>
+                                      {item.preview}
+                                      <span className="opacity-70">...</span>
+                                    </p>
+                                  </>
+                                )}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ));
+                  })()}
                 </div>
               ) : (
                 <div className="flex flex-col items-center justify-center py-16 text-gray-400">
@@ -985,9 +1068,28 @@ export function SearchBox({
               )}
             </div>
 
-            <div className="hidden md:flex flex-none border-t border-gray-100 px-4 py-2 bg-gray-50 text-[10px] text-gray-400 justify-between dark:bg-gray-900 dark:border-gray-800 dark:text-gray-500">
-              <span>{t("search.selectToNavigate")}</span>
-              <span>{t("search.escToClose")}</span>
+            <div className="hidden md:flex flex-none items-center gap-4 border-t border-gray-100 bg-gray-50 px-4 py-2 text-[10px] text-gray-400 dark:bg-gray-900 dark:border-gray-800 dark:text-gray-500">
+              <span className="flex items-center gap-1.5">
+                <kbd className="rounded border border-gray-200 bg-white px-1 font-mono dark:border-gray-700 dark:bg-gray-800">↑↓</kbd>
+                {t("search.footNavigate")}
+              </span>
+              <span className="flex items-center gap-1.5">
+                <kbd className="rounded border border-gray-200 bg-white px-1 font-mono dark:border-gray-700 dark:bg-gray-800">↵</kbd>
+                {t("search.footOpen")}
+              </span>
+              {availableModes.length > 1 && (
+                <span className="flex items-center gap-1.5">
+                  <kbd className="rounded border border-gray-200 bg-white px-1 font-mono dark:border-gray-700 dark:bg-gray-800">⇥</kbd>
+                  {t("search.footMode")}
+                </span>
+              )}
+              <span className="flex items-center gap-1.5">
+                <kbd className="rounded border border-gray-200 bg-white px-1 font-mono dark:border-gray-700 dark:bg-gray-800">esc</kbd>
+                {t("search.footClose")}
+              </span>
+              {isLawMode && (
+                <span className="ml-auto text-gray-400 dark:text-gray-500">{t("search.secondaryNotIndexed")}</span>
+              )}
             </div>
           </div>
         </div>,
@@ -1000,6 +1102,7 @@ export function SearchBox({
 export function TopBar({
   lawKey,
   title,
+  breadcrumb = null,
   lists,
   globalLists = null,
   eurlexUrl,
@@ -1080,7 +1183,7 @@ export function TopBar({
           <div className="hidden md:flex flex-col">
             <button
               onClick={() => navigate(localizePath("/", locale))}
-              className="text-left text-lg font-bold tracking-tight text-gray-900 leading-none transition-opacity hover:opacity-80 dark:text-white"
+              className="text-left font-display text-lg font-bold tracking-tight text-eu-navy leading-none transition-opacity hover:opacity-80 dark:text-white"
             >
               {t("app.name")}
             </button>
@@ -1107,9 +1210,25 @@ export function TopBar({
           </div>
         </div>
 
-        {/* Center: Title */}
+        {/* Center: Title or breadcrumb */}
         <div className="flex-1 min-w-0 flex items-center justify-center">
-          {title && (
+          {breadcrumb ? (
+            <div className="flex items-center gap-1.5 min-w-0 max-w-full truncate text-sm">
+              <Link
+                to={breadcrumb.lawRoute}
+                className="truncate font-medium text-eu-blue transition-opacity hover:opacity-80 dark:text-eu-blue-bright"
+                title={breadcrumb.lawLabel}
+              >
+                {breadcrumb.lawLabel}
+              </Link>
+              {breadcrumb.sectionLabel ? (
+                <span className="truncate text-gray-400 dark:text-gray-500" title={breadcrumb.sectionLabel}>
+                  {" / "}
+                  {breadcrumb.sectionLabel}
+                </span>
+              ) : null}
+            </div>
+          ) : title ? (
             <div className="flex items-center gap-2 min-w-0 max-w-full">
               <span
                 className="line-clamp-2 text-sm font-medium text-gray-700 dark:text-gray-300 text-center"
@@ -1117,9 +1236,8 @@ export function TopBar({
               >
                 {title}
               </span>
-
             </div>
-          )}
+          ) : null}
         </div>
 
         {/* Right: Navigation Controls */}

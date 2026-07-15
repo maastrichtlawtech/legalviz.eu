@@ -8,8 +8,9 @@
  */
 
 // Bump whenever citation extraction changes so cached judgments are reparsed.
-// v13 disambiguates unlabelled historical regulation number/year forms.
-const CITATION_PARSER_VERSION = 13;
+// v14 marks citations to non-EU conventions (e.g. ECHR) explicitly rather
+// than making their lack of a CELEX identifier look like a failed resolution.
+const CITATION_PARSER_VERSION = 14;
 const {
   ACT_CELEX_MAP,
   dedupeReferences,
@@ -89,6 +90,7 @@ function parseActAfterEnumeration(text, end) {
       actType: null,
       actCelex: ACT_CELEX_MAP[canonical] || null,
       contextual: canonical === 'Treaty',
+      externalConvention: canonical === 'ECHR',
       end: end + offset + shorthand[0].length,
     };
   }
@@ -205,6 +207,7 @@ function extractArticleCitationsFromText(input) {
       actType: act.actType,
       actCelex: act.actCelex,
       contextual: act.contextual,
+      externalConvention: Boolean(act.externalConvention),
       article: item.article,
       paragraph: item.paragraph,
       point: item.point,

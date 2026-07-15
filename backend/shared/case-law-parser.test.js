@@ -15,7 +15,14 @@ function refsFromHtml(html) {
 }
 
 test('case-law citation parser has an explicit cache-invalidating version', () => {
-  assert.equal(CITATION_PARSER_VERSION, 13);
+  assert.equal(CITATION_PARSER_VERSION, 14);
+});
+
+test('keeps ECHR citations explicit without treating them as unresolved EU acts', () => {
+  const parsed = extractArticleCitationsFromText('Article 10 of the ECHR.');
+  assert.deepEqual(parsed.articleRefs.map(({ article, act, actCelex, externalConvention }) => ({
+    article, act, actCelex, externalConvention,
+  })), [{ article: '10', act: 'ECHR', actCelex: null, externalConvention: true }]);
 });
 
 test('parses coordinated articles and a trailing named point from modern judgment HTML', () => {

@@ -1,7 +1,0 @@
-# Exclude unnecessary files from Firefox extension package
-Archive.zip
-README.md
-generate-icons.html
-*.md
-
-

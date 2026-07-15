@@ -224,7 +224,6 @@ export function LawViewer() {
           title={derived.currentLawLabel}
           lists={{ articles: primaryDocument.data.articles, recitals: primaryDocument.data.recitals, annexes: primaryDocument.data.annexes }}
           globalLists={allLawsData}
-          isExtensionMode={false}
           eurlexUrl={derived.eurlexUrl}
           onPrint={() => printState.setPrintModalOpen(true)}
           showPrint={!derived.isSideBySide}

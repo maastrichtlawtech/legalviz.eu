@@ -45,8 +45,6 @@ Subtree-specific guidance lives in nested memory files that Claude Code loads on
 
 **Routing/state**: the current reader position (law, article, recital, language) is synced to the URL (`src/utils/lawRouting.js`, `src/utils/url.js`) so every view is bookmarkable/shareable — treat URL state as the source of truth for navigation, not component state.
 
-**`extension/`** is a separate Chrome/Firefox browser extension package, not built by the root `npm run build`.
-
 **`scripts/`** contains build-time Node scripts (prerendering law pages, sitemap generation, 404 copy, `dev.js` which runs frontend + backend concurrently) — not application code.
 
 ## Cache & version invalidation

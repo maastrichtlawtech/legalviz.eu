@@ -30,7 +30,6 @@ export default defineConfig([
     'dist/**',
     '.claude/**',
     'eur-lex-api/**',
-    'extension/**',
     '**/*.html',
     '**/*_files/**',
     'backend/search/data/**',

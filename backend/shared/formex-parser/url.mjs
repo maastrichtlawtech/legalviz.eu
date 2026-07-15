@@ -5,7 +5,7 @@
 export const getLawSlugFromPath = (pathname) => {
   const basePath = "";
   const pathWithoutBase = pathname.replace(basePath, "");
-  const match = pathWithoutBase.match(/^\/(?!law\/|import(?:\/|$)|extension(?:\/|$))([^/]+)/);
+  const match = pathWithoutBase.match(/^\/(?!law\/|import(?:\/|$))([^/]+)/);
   return match ? match[1] : null;
 };
 

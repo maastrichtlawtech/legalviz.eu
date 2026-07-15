@@ -60,7 +60,7 @@ if (!fs.existsSync(CACHE_DIR)) {
 }
 
 legalCacheStore.load();
-const analytics = createAnalytics({ cacheDir: CACHE_DIR });
+const analytics = createAnalytics({ cacheDir: CACHE_DIR, dataStore: legalCacheStore });
 
 // Middleware
 app.use(cors());
@@ -233,7 +233,7 @@ const server = app.listen(PORT, () => {
   console.log(`MCP endpoint: POST /mcp (Streamable HTTP)`);
   console.log(`Cache directory: ${CACHE_DIR} (FMX: ${STORAGE_LIMIT_MB} MB, HTML: ${HTML_CACHE_LIMIT_MB} MB)`);
   console.log(`Rate limit: ${RATE_LIMIT_MAX} req/15min per IP`);
-  console.log(`Search cache: ${legalCacheStore.getStatus().ready ? 'loaded' : 'not loaded'} (${legalCacheStore.cachePath})`);
+  console.log(`Search cache: ${legalCacheStore.getStatus().ready ? 'loaded' : 'not loaded'} (${legalCacheStore.activePath})`);
 });
 
 let shuttingDown = false;
@@ -250,6 +250,7 @@ async function gracefulShutdown(signal) {
   try {
     await new Promise((resolve) => server.close(resolve));
     analytics.shutdown();
+    legalCacheStore.close();
     await closeSharedPlaywrightBrowser();
     console.log('[shutdown] Clean exit');
     clearTimeout(forceExit);

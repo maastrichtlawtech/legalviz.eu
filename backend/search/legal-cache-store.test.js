@@ -7,6 +7,7 @@ const path = require("node:path");
 const {
   JsonLegalCacheStore,
 } = require("./legal-cache-store");
+const { buildSqliteData } = require("./build-sqlite-data");
 
 const fixturePath = path.join(__dirname, "__fixtures__", "search-fixture.json");
 
@@ -15,6 +16,49 @@ test("legal cache store loads fixture successfully", () => {
   assert.equal(store.load(), true);
   assert.equal(store.getStatus().ready, true);
   assert.equal(store.getStatus().count, 18);
+});
+
+test("legal cache store loads SQLite records without retaining excerpts", () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "legal-cache-store-sqlite-"));
+  const caseLawPath = path.join(tempDir, "case-law.json");
+  const sqlitePath = path.join(tempDir, "data.sqlite");
+  fs.writeFileSync(caseLawPath, "{}", "utf8");
+  buildSqliteData({ searchCachePath: fixturePath, caseLawCachePath: caseLawPath, outputPath: sqlitePath });
+
+  const store = new JsonLegalCacheStore(fixturePath, { sqlitePath, requireSqlite: true });
+  assert.equal(store.load(), true);
+  assert.equal(store.source, "sqlite");
+  assert.equal(store.getStatus().count, 18);
+  assert.equal(store.records.every((record) => !Object.hasOwn(record, "excerpt")), true);
+  assert.equal(store.getByCelex("32002L0058")?.celex, "32002L0058");
+  store.close();
+});
+
+test("an explicit missing SQLite path fails instead of silently loading JSON", () => {
+  const missing = path.join(os.tmpdir(), `missing-data-${Date.now()}.sqlite`);
+  const store = new JsonLegalCacheStore(fixturePath, { sqlitePath: missing, requireSqlite: true });
+  assert.equal(store.load(), false);
+  assert.match(store.loadError, /SQLite data store not found/);
+});
+
+test("preferJson ignores DATA_SQLITE_PATH for JSON authoring tools", () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "legal-cache-store-prefer-json-"));
+  const caseLawPath = path.join(tempDir, "case-law.json");
+  const sqlitePath = path.join(tempDir, "data.sqlite");
+  fs.writeFileSync(caseLawPath, "{}", "utf8");
+  buildSqliteData({ searchCachePath: fixturePath, caseLawCachePath: caseLawPath, outputPath: sqlitePath });
+
+  const previousSqlitePath = process.env.DATA_SQLITE_PATH;
+  process.env.DATA_SQLITE_PATH = sqlitePath;
+  try {
+    const store = new JsonLegalCacheStore(fixturePath, { preferJson: true });
+    assert.equal(store.load(), true);
+    assert.equal(store.source, "json");
+    assert.equal(Array.isArray(store.payload?.records), true);
+  } finally {
+    if (previousSqlitePath === undefined) delete process.env.DATA_SQLITE_PATH;
+    else process.env.DATA_SQLITE_PATH = previousSqlitePath;
+  }
 });
 
 test("legal cache store reports missing file", () => {
@@ -268,6 +312,39 @@ test("legal cache store searchLaws matches a law via excerpt text alone (title/a
   const celexes = results.map((entry) => entry.celex);
   assert.ok(celexes.includes("32024R9001"), `expected excerpt-only match, got: ${celexes.join(", ")}`);
   assert.ok(!celexes.includes("32024R9002"), `unrelated excerpt should not match, got: ${celexes.join(", ")}`);
+});
+
+test("SQLite excerpt search handles punctuation and reads case-law details", () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "legal-cache-store-fts-"));
+  const searchPath = path.join(tempDir, "search.json");
+  const caseLawPath = path.join(tempDir, "case-law.json");
+  const sqlitePath = path.join(tempDir, "data.sqlite");
+  fs.writeFileSync(searchPath, JSON.stringify({ records: [{
+    celex: "32024R9001",
+    title: "Regulation on widget market surveillance",
+    type: "regulation",
+    eli: "http://data.europa.eu/eli/reg/2024/9001/oj",
+    excerpt: "Harmonised rules on automated decision-making systems and Article 22 safeguards.",
+  }] }), "utf8");
+  fs.writeFileSync(caseLawPath, JSON.stringify({
+    "62020CJ0001": {
+      name: "Example judgment",
+      declarations: [{ number: 1, text: "The Court rules." }],
+      articlesCited: ["Art. 22 GDPR"],
+      articleRefs: [],
+    },
+    "62020CJ0002": { name: null, declarations: [], articlesCited: [], articleRefs: [] },
+  }), "utf8");
+  buildSqliteData({ searchCachePath: searchPath, caseLawCachePath: caseLawPath, outputPath: sqlitePath });
+
+  const store = new JsonLegalCacheStore(searchPath, { sqlitePath, requireSqlite: true });
+  assert.equal(store.load(), true);
+  assert.equal(store.searchLaws("automated decision-making")[0]?.celex, "32024R9001");
+  assert.doesNotThrow(() => store.searchLaws("regulation 2016/679"));
+  assert.doesNotThrow(() => store.searchLaws("Article 22(1)"));
+  assert.equal(store.getCaseLawDetails(["62020cj0001"]).get("62020CJ0001")?.name, "Example judgment");
+  assert.deepEqual(store.getCaseLawCacheStats(), { total: 2, partial: 1, failedRecently: 0 });
+  store.close();
 });
 
 test("legal cache store searchLaws keeps a title match ahead of an excerpt-only match for the same term", () => {

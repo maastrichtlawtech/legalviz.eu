@@ -1,7 +1,6 @@
 // Warm EUR-Lex WAF/Cloudflare session cookies once with a headless browser, then
-// reuse them for cheap plain-`fetch` requests. This mirrors what the server's
-// case-law path (law-queries.js `warmEurlexCookies`) does, so bulk downloading
-// does NOT open every page in Chromium — the browser is used only to solve the
+// reuse them for cheap plain-`fetch` requests. Bulk downloading does NOT open
+// every page in Chromium — the browser is used only to solve the
 // challenge and hand back the `cookie` + `user-agent`, and again only when the
 // cookies expire (a 202 challenge reappears).
 

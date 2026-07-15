@@ -60,7 +60,9 @@ function writeCache(store) {
 async function main() {
   const options = parseArgs(process.argv.slice(2));
 
-  const store = new JsonLegalCacheStore();
+  // This is a JSON cache authoring tool. Never auto-select the runtime SQLite
+  // artifact, whose records intentionally omit excerpts and are read-only.
+  const store = new JsonLegalCacheStore(undefined, { preferJson: true });
   if (!store.load()) {
     throw new Error(`Failed to load search cache: ${store.loadError}`);
   }

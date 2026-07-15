@@ -80,6 +80,7 @@ function bootServices() {
     get findDownloadUrls() { return getFmxService().findDownloadUrls; },
     get sendLawResponse() { return getFmxService().sendLawResponse; },
     ...refResolver,
+    legalCacheStore,
     parseReferenceText,
     parseStructuredReference,
     validateCelex,
@@ -325,7 +326,10 @@ COMMANDS['case-law'] = {
     if (!svc.validateCelex(flags.celex)) die(`Invalid CELEX: ${flags.celex}`);
 
     const { fetchCaseLaw } = require('../shared/law-queries');
-    const payload = await fetchCaseLaw(flags.celex, svc.runSparqlQuery, { cacheDir: DEFAULT_FMX_DIR });
+    const payload = await fetchCaseLaw(flags.celex, svc.runSparqlQuery, {
+      cacheDir: DEFAULT_FMX_DIR,
+      dataStore: svc.legalCacheStore,
+    });
     jsonOut(payload, flags.o || flags.output);
   },
 };

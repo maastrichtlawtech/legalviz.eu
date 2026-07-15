@@ -1,45 +1,36 @@
-# Official Playwright image: bundles Node.js (22 LTS), the browser binaries,
-# and all of Chromium's system dependencies, so the build needs neither an
-# apt-get step nor a browser download from cdn.playwright.dev.
-#
-# The image tag MUST match the playwright-core version pinned in
-# package-lock.json (1.58.2). The baked-in browser revision (chromium v1208)
-# then matches exactly what playwright-core looks for at runtime.
-FROM mcr.microsoft.com/playwright:v1.58.2-noble
+# Keep the Playwright image and playwright-core package on the same version so
+# Chromium's baked-in revision matches what the runtime expects.
+FROM mcr.microsoft.com/playwright:v1.58.2-noble AS runtime
 
-# The official image installs its browsers here; point playwright-core at them.
+RUN command -v curl >/dev/null 2>&1 \
+    || (apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*)
+
 ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+
+FROM runtime AS dependencies
 
 WORKDIR /app
 
 COPY package.json package-lock.json* ./
 RUN npm ci --omit=dev
 
-# Safety net: confirm the browsers our exact playwright-core version needs are
-# present. With the matching base image this is a fast no-op ("is already
-# installed"); if anything were missing it would be fetched, so the files are
-# guaranteed to exist at runtime. Uses the local playwright-core CLI (the
-# version pinned in node_modules) rather than `npx playwright`, which would
-# fetch the latest playwright package from the registry on every build.
-RUN PW_VERSION=$(node -p "require('playwright-core/package.json').version") \
+# Verify the native SQLite binding, FTS5, and the exact Playwright browser
+# revision before either the data build or final image proceeds.
+RUN node -e "const Database = require('better-sqlite3'); const db = new Database(':memory:'); db.exec('CREATE VIRTUAL TABLE test_fts USING fts5(value)'); db.close();" \
+    && PW_VERSION=$(node -p "require('playwright-core/package.json').version") \
     && echo "Verifying Playwright browsers for version $PW_VERSION" \
-    && node node_modules/playwright-core/cli.js install chromium chromium-headless-shell
+    && node node_modules/playwright-core/cli.js install chromium chromium-headless-shell \
+    && ls -1 /ms-playwright/
 
-# Surface what actually landed in the browser cache so build logs reveal any
-# path/variant changes without failing the build.
-RUN ls -1 /ms-playwright/ || true
+FROM dependencies AS data-builder
 
-# Precomputed data caches are NOT committed to git — a ~48 MB blob would bloat
-# history permanently. They ship as GitHub Release assets (public repo, no auth)
-# and are fetched here into the exact paths the server reads at startup:
-#   search/data/search-cache.json.gz      -> gunzipped by legal-cache-store.js
-#   search/data/case-law-cache-v5.json.gz -> materialized by law-queries.js
-# Placed before `COPY . .` so this (large) layer stays cached across code
-# changes and only re-runs when DATA_RELEASE_TAG is bumped for a new data build.
+# Only these converter sources participate in the expensive data layer's cache
+# key. Normal application changes do not force the release assets to be fetched
+# and converted again.
+COPY search/build-sqlite-data.js search/search-ranking.js ./search/
+
 ARG DATA_RELEASE_REPO=maastrichtlawtech/legalviz.eu
 ARG DATA_RELEASE_TAG=data-v6
-RUN command -v curl >/dev/null 2>&1 \
-    || (apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*)
 RUN mkdir -p search/data \
     && for asset in search-cache.json.gz case-law-cache-v5.json.gz; do \
          echo "Fetching data asset: $asset ($DATA_RELEASE_TAG)" \
@@ -47,11 +38,14 @@ RUN mkdir -p search/data \
               -o "search/data/$asset" \
               "https://github.com/${DATA_RELEASE_REPO}/releases/download/${DATA_RELEASE_TAG}/$asset"; \
        done \
-    && ls -lh search/data/*.gz
+    && node search/build-sqlite-data.js \
+    && ls -lh search/data/data.sqlite
+
+FROM dependencies AS final
 
 COPY . .
+COPY --from=data-builder /app/search/data/data.sqlite ./search/data/data.sqlite
 
-# Ensure cache directory exists (can be overridden with Railway volume mount via CACHE_DIR)
 RUN mkdir -p law-cache
 
 ENV NODE_ENV=production

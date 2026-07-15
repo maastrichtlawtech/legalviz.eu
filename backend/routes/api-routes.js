@@ -333,7 +333,7 @@ function registerApiRoutes(app, deps) {
         return res.json(cached);
       }
 
-      const payload = await fetchCaseLaw(celex, runSparqlQuery, { cacheDir: FMX_DIR });
+      const payload = await fetchCaseLaw(celex, runSparqlQuery, { cacheDir: FMX_DIR, dataStore: legalCacheStore });
       cacheSet(resolutionCache, cacheKey, payload, Math.min(RESOLUTION_CACHE_MS, CASE_LAW_ROUTE_CACHE_MS));
       res.json(payload);
     } catch (err) {
@@ -483,7 +483,7 @@ function registerApiRoutes(app, deps) {
       }
 
       const parsed = await resolveParsedLaw(celex, lang, { skipFmxProbe: req.query.skipFmxProbe === '1' });
-      const caseLawPayload = await fetchCaseLaw(celex, runSparqlQuery, { cacheDir: FMX_DIR });
+      const caseLawPayload = await fetchCaseLaw(celex, runSparqlQuery, { cacheDir: FMX_DIR, dataStore: legalCacheStore });
       const result = await ensureArticleDigest({
         celex,
         articleNumber,
@@ -536,7 +536,7 @@ function registerApiRoutes(app, deps) {
       }
 
       const parsed = await resolveParsedLaw(celex, lang, { skipFmxProbe: req.query.skipFmxProbe === '1' });
-      const caseLawPayload = await fetchCaseLaw(celex, runSparqlQuery, { cacheDir: FMX_DIR });
+      const caseLawPayload = await fetchCaseLaw(celex, runSparqlQuery, { cacheDir: FMX_DIR, dataStore: legalCacheStore });
       const result = await ensureCaseLawDigest({
         celex,
         lang,

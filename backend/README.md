@@ -42,6 +42,13 @@ npm run build:search-cache
 npm start
 ```
 
+Production uses one precomputed SQLite store for law metadata, excerpt search,
+and case-law details. Build it from the two release-format JSON inputs with
+`npm run build:sqlite-data`. The server automatically uses
+`search/data/data.sqlite` when present; an explicit `DATA_SQLITE_PATH` is
+strict. Without SQLite, the existing JSON files remain the local-development
+fallback.
+
 ## CLI
 
 The `eurlex` command exposes the same functionality as the API server so you can work with EU legislation locally without running the server.
@@ -249,6 +256,12 @@ claude mcp add --transport http eurlex-local http://localhost:3000/mcp
 ```
 
 The parser handles post-2004 EUR-Lex Formex, pre-2004 OJ HTML, and older Curia HTML shapes.
+
+Judgment discovery remains live through SPARQL, but names, operative rulings,
+and article references are read only from precomputed data. Refresh them by
+running the case-law harvest/parser pipeline, publishing updated release
+assets, and rebuilding the image; API requests never scrape or rewrite this
+cache.
 
 ### Recital titles endpoint
 
@@ -485,6 +498,20 @@ Default files:
 
 Important: restart the API server after rebuilding the cache, because the cache is loaded on startup.
 
+### Precomputed runtime store
+
+`npm run build:sqlite-data` converts `search-cache.json(.gz)` and
+`case-law-cache-v5.json(.gz)` into `search/data/data.sqlite`. It writes a
+temporary database, validates its schema, row counts, and integrity, then
+renames it atomically. Runtime opens the result read-only through
+`better-sqlite3`; the serving path does not depend on Node's experimental
+`node:sqlite` API.
+
+The in-memory MiniSearch index contains titles and aliases only. Excerpts live
+in a contentless FTS5 index and are consulted after deterministic and title
+matches, so excerpt-only recall cannot outrank a title/alias hit. The JSON path
+keeps the original combined MiniSearch index for fixture and local compatibility.
+
 ### Metadata that isn't in the corpus (dates + EuroVoc topics)
 
 `date` and `eurovoc` are SPARQL metadata that the gzipped source on disk doesn't
@@ -525,9 +552,10 @@ node --max-old-space-size=8192 search/fetch-eurovoc.js
 ```
 
 Publish `search-cache.json.gz` as the next `data-vN` release asset and bump
-`DATA_RELEASE_TAG` in `backend/Dockerfile`. Note that the Dockerfile fetches
-**both** `search-cache.json.gz` and `case-law-cache-v5.json.gz` from that one
-tag, so a new release must carry both assets even when only one changed.
+`DATA_RELEASE_TAG` in `backend/Dockerfile`. Docker fetches both JSON assets and
+converts them into one runtime SQLite file, so a release must carry both assets
+even when only one changed. A future release may ship SQLite directly and
+remove this transitional conversion stage.
 
 ## Project Layout
 
@@ -543,6 +571,7 @@ backend/
 │  └─ api-routes.js
 ├─ search/
 │  ├─ search-build.js
+│  ├─ build-sqlite-data.js
 │  ├─ search-index.js
 │  ├─ search-ranking.js
 │  ├─ search-route.js
@@ -607,7 +636,8 @@ Current test coverage includes:
 | `HTML_CACHE_LIMIT_MB` | Max size of the legacy-HTML fallback cache. Default `200`. |
 | `RATE_LIMIT_MAX` | Per-IP request cap for the 15-minute window. |
 | `TIMEOUT_MS` | HTTP request timeout in ms. Default `30000`. |
-| `SEARCH_CACHE_PATH` | Optional override for the search cache JSON path. |
+| `DATA_SQLITE_PATH` | Optional strict path to the precomputed SQLite store. Missing or incompatible files do not fall back to JSON. |
+| `SEARCH_CACHE_PATH` | Optional override for the legacy/local search cache JSON path. An explicit non-default path forces JSON unless `DATA_SQLITE_PATH` is set. |
 | `ANALYTICS_TOKEN` | Token required by the `/api/_stats` endpoint; also used as the analytics sketch key unless `ANALYTICS_HASH_KEY` is set. |
 | `ANALYTICS_HASH_KEY` | Optional stable secret used to key privacy-preserving daily unique-user estimates. Set this separately to allow analytics-token rotation without resetting deduplication. |
 | `OPENROUTER_API_KEY` | Fallback OpenRouter key used by static summaries and recital titles when the feature-specific key is not set. |
@@ -620,7 +650,6 @@ Current test coverage includes:
 | `ARTICLE_QA_MODEL` / `ARTICLE_QA_ANSWER_MODEL` | Legacy model fallbacks still accepted for static summary generation. |
 | `ARTICLE_QA_PLANNER_MODEL` | Legacy model fallback used only by recital-title defaults. |
 | `RECITAL_TITLE_MODEL` | Model for cached AI-generated recital titles. Default `google/gemini-2.5-pro`. |
-| `EURLEX_COOKIE_MAX_AGE_MS` | How long to reuse an EUR-Lex session cookie. |
 | `PLAYWRIGHT_HEADLESS` / `PLAYWRIGHT_BROWSERS_PATH` / `PLAYWRIGHT_MODULE_PATH` / `LEGALVIZ_PLAYWRIGHT_MODULE_PATH` | Playwright configuration for fetching laws that require rendering. |
 
 ## Notes

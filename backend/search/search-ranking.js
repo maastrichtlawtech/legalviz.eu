@@ -209,7 +209,6 @@ function buildAliases(record) {
   aliases.push(`${record.type} ${celex}`);
 
   if (record.title && record.title !== GENERIC_OJ_TITLE) {
-    aliases.push(record.title);
     aliases.push(...buildAcronymVariants(record.title));
   }
 
@@ -263,16 +262,20 @@ function enrichSearchRecord(record) {
 function determineMatchReason(law, parsed) {
   if (parsed.celex && law.celex === parsed.celex) return "celex_exact";
   if (law.aliases.includes(parsed.normalized) || law.aliases.includes(parsed.compact)) return "alias_exact";
+  // Full titles used to be duplicated into aliases, so an exact-title query
+  // historically reported alias_exact. Preserve that response contract without
+  // indexing every long title two extra times.
+  const normalizedTitle = normalizeText(law.title);
+  if (normalizedTitle === parsed.normalized || compactText(law.title) === parsed.compact) {
+    return "alias_exact";
+  }
   if (parsed.type && parsed.year && parsed.number &&
       parsed.type === law.type &&
       parsed.year === law.celexYear &&
       parsed.number === law.celexNumber) {
     return "reference_exact";
   }
-  if (law.normalizedTitle === parsed.normalized || compactText(law.title) === parsed.compact) {
-    return "title_exact";
-  }
-  if (law.normalizedTitle.includes(parsed.normalized) || compactText(law.title).includes(parsed.compact)) {
+  if (normalizedTitle.includes(parsed.normalized) || compactText(law.title).includes(parsed.compact)) {
     return "title_phrase";
   }
   return "token_match";

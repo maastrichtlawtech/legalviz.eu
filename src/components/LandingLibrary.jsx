@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { motion as Motion } from "framer-motion";
-import { FilePlus2 } from "lucide-react";
 import { Button } from "./Button.jsx";
 import { getBundledLaws, getCanonicalLawRoute } from "../utils/lawRouting.js";
 
@@ -202,7 +201,6 @@ function EssentialsShelf({ locale, t, excludeCelexes }) {
 
 export function LandingLibrary({
   laws,
-  onManualAddLaw,
   onOpenLaw,
   locale,
   t,
@@ -249,7 +247,7 @@ export function LandingLibrary({
         transition={{ delay: 0.1 }}
         className="w-full"
       >
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div className="flex flex-col gap-3">
           <div>
             <h2 className="font-display text-lg font-bold text-eu-navy dark:text-paper">
               {t("landing.continueTitle")}
@@ -258,18 +256,6 @@ export function LandingLibrary({
               {t("landing.continueSubtitle")}
             </p>
           </div>
-          {onManualAddLaw ? (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="w-fit rounded-full text-gray-600 dark:text-gray-300"
-              onClick={onManualAddLaw}
-            >
-              <FilePlus2 className="mr-1.5 h-3.5 w-3.5" />
-              {t("landing.addLawButton")}
-            </Button>
-          ) : null}
         </div>
       </Motion.div>
 

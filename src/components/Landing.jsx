@@ -1,15 +1,13 @@
 import { Link, useNavigate } from "react-router-dom";
 import { useCallback, useEffect, useMemo } from "react";
-import { motion as Motion, AnimatePresence } from "framer-motion";
+import { motion as Motion } from "framer-motion";
 import { Github } from "lucide-react";
 import { TopBar, SearchBox } from "./TopBar.jsx";
 import { SEO } from "./SEO.jsx";
-import { AddLawDialog } from "./AddLawDialog.jsx";
 import { LandingLibrary } from "./LandingLibrary.jsx";
 import { useI18n } from "../i18n/useI18n.js";
 import { lawLangFromUiLocale, uiLocaleFromLawLang } from "../i18n/localeMeta.js";
 import { resetWholeApp } from "../utils/resetApp.js";
-import { useAddLawImport } from "../hooks/useAddLawImport.js";
 import { useLandingLibrary } from "../hooks/useLandingLibrary.js";
 import { useLandingSearchIndex } from "../hooks/useLandingSearchIndex.js";
 import { buildImportedLawCandidate, getCanonicalLawRoute, getBundledLaws } from "../utils/lawRouting.js";
@@ -62,25 +60,6 @@ export function Landing({ forcedLocale = null }) {
     laws: allLaws,
     libraryVersion,
   });
-  const {
-    closeAddLawDialog,
-    eurlexError,
-    eurlexUrl,
-    handleEurlexUrlImport,
-    handleReferenceImport,
-    importError,
-    isAddLawDialogOpen,
-    isImporting,
-    isResolvingUrl,
-    openAddLawDialog,
-    referenceNumber,
-    referenceType,
-    referenceYear,
-    setEurlexUrl,
-    setReferenceNumber,
-    setReferenceType,
-    setReferenceYear,
-  } = useAddLawImport({ locale, navigate, t });
   const activeLocale = forcedLocale || locale;
 
   const tryChips = useMemo(() => {
@@ -211,7 +190,6 @@ export function Landing({ forcedLocale = null }) {
         <div className="mt-14 w-full max-w-5xl">
           <LandingLibrary
             laws={allLaws}
-            onManualAddLaw={openAddLawDialog}
             onOpenLaw={handleOpenLaw}
             locale={activeLocale}
             t={t}
@@ -236,29 +214,6 @@ export function Landing({ forcedLocale = null }) {
           </a>
         </Motion.div>
       </div>
-      <AnimatePresence>
-        {isAddLawDialogOpen ? (
-          <AddLawDialog
-            isOpen={isAddLawDialogOpen}
-            onClose={closeAddLawDialog}
-            referenceType={referenceType}
-            setReferenceType={setReferenceType}
-            referenceYear={referenceYear}
-            setReferenceYear={setReferenceYear}
-            referenceNumber={referenceNumber}
-            setReferenceNumber={setReferenceNumber}
-            handleReferenceImport={handleReferenceImport}
-            isImporting={isImporting}
-            importError={importError}
-            eurlexUrl={eurlexUrl}
-            setEurlexUrl={setEurlexUrl}
-            handleEurlexUrlImport={handleEurlexUrlImport}
-            isResolvingUrl={isResolvingUrl}
-            eurlexError={eurlexError}
-            t={t}
-          />
-        ) : null}
-      </AnimatePresence>
     </div>
   );
 }

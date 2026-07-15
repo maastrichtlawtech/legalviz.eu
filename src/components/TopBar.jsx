@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { ChevronLeft, Search, X, ExternalLink, Printer, Loader2, PanelLeftClose, PanelLeftOpen, Minus, Plus, MoreVertical, RotateCcw, FilePlus2 } from "lucide-react";
+import { ChevronLeft, Search, X, ExternalLink, Printer, Loader2, PanelLeftClose, PanelLeftOpen, Minus, Plus, MoreVertical, RotateCcw } from "lucide-react";
 import { Button } from "./Button.jsx";
 import { ThemeToggle } from "./ThemeToggle.jsx";
 import { LanguageSelector } from "./LanguageSelector.jsx";
@@ -1133,7 +1133,6 @@ export function TopBar({
   onToggleSecondLanguage,
   isSideBySide = false,
   onResetApp,
-  onManualAddLaw,
   showSearch = true,
   searchModes = null,
   defaultSearchMode = null,
@@ -1271,7 +1270,6 @@ export function TopBar({
               onToggleSecondLanguage={onToggleSecondLanguage}
               isSideBySide={isSideBySide}
               onResetApp={onResetApp}
-              onManualAddLaw={onManualAddLaw}
             />
           </div>
 
@@ -1309,7 +1307,6 @@ function ToolsMenu({
   onToggleSecondLanguage,
   isSideBySide,
   onResetApp,
-  onManualAddLaw,
 }) {
   const { t } = useI18n();
   const [isOpen, setIsOpen] = useState(false);
@@ -1389,20 +1386,6 @@ function ToolsMenu({
               <ExternalLink size={18} />
               <span>{t("topBar.viewOnEurlex")}</span>
             </a>
-          )}
-
-          {onManualAddLaw && (
-            <button
-              type="button"
-              onClick={() => {
-                onManualAddLaw();
-                setIsOpen(false);
-              }}
-              className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-800"
-            >
-              <FilePlus2 size={18} />
-              <span className="min-w-0 flex-1 text-left">{t("landing.manualAddLaw")}</span>
-            </button>
           )}
 
           {onResetApp && (

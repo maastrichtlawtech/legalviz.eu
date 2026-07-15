@@ -247,10 +247,13 @@ export function LawViewer() {
       : kind === "recital"
         ? recitals?.length || 0
         : annexes?.length || 0;
-    markLawOpened(source.effectiveCelex, { kind, id: String(id), total });
+    const title = kind === "article"
+      ? articles?.find((article) => article.article_number === String(id))?.article_title || null
+      : null;
+    markLawOpened(source.effectiveCelex, { kind, id: String(id), total, title });
   }, [
     annexes?.length,
-    articles?.length,
+    articles,
     derived.hasLoadedContent,
     primaryDocument.data.celex,
     recitals?.length,

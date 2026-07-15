@@ -123,7 +123,9 @@ export function LawOverviewPage({
   ].filter(Boolean);
 
   const entryDates = (metadata?.entryIntoForce || []).map((d) => formatMetaDate(d, locale)).filter(Boolean);
-  const documentDate = formatMetaDate(metadata?.dateDocument, locale);
+  // When EUR-Lex reports several dates (entry into force, then start of
+  // application), the practitioner's question is the latest one.
+  const appliesFrom = entryDates.length ? entryDates[entryDates.length - 1] : null;
   const eliShort = metadata?.eli ? metadata.eli.replace("http://data.europa.eu/eli/", "") : null;
 
   return (
@@ -157,12 +159,9 @@ export function LawOverviewPage({
       ) : null}
 
       {/* Meta row */}
-      <div className="mb-6 flex flex-wrap gap-x-5 gap-y-1 text-xs text-gray-500 dark:text-gray-400">
-        {entryDates.length ? (
-          <span>{t("metadata.entryIntoForce")} <b className="font-semibold text-gray-800 dark:text-gray-200">{entryDates.join(", ")}</b></span>
-        ) : null}
-        {documentDate ? (
-          <span>{t("metadata.dateOfDocument")} <b className="font-semibold text-gray-800 dark:text-gray-200">{documentDate}</b></span>
+      <div className="mb-6 flex flex-wrap items-baseline gap-x-5 gap-y-1 text-xs text-gray-500 dark:text-gray-400">
+        {appliesFrom ? (
+          <span>{t("lawOverview.appliesFrom")} <b className="font-semibold text-gray-800 dark:text-gray-200">{appliesFrom}</b></span>
         ) : null}
         {countParts.length ? <span>{countParts.join(" · ")}</span> : null}
         {metadata?.eea ? <span>{t("metadata.eea")}</span> : null}

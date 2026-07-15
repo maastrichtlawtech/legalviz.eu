@@ -60,10 +60,12 @@ function formatRelativeTime(timestamp, locale) {
 
 function getResumeLabel(lastPosition, t) {
   if (!lastPosition?.kind || !lastPosition?.id) return null;
-  if (lastPosition.kind === "article") return t("landing.resumeArticle", { id: lastPosition.id });
-  if (lastPosition.kind === "recital") return t("landing.resumeRecital", { id: lastPosition.id });
-  if (lastPosition.kind === "annex") return t("landing.resumeAnnex", { id: lastPosition.id });
-  return null;
+  let label = null;
+  if (lastPosition.kind === "article") label = t("landing.resumeArticle", { id: lastPosition.id });
+  if (lastPosition.kind === "recital") label = t("landing.resumeRecital", { id: lastPosition.id });
+  if (lastPosition.kind === "annex") label = t("landing.resumeAnnex", { id: lastPosition.id });
+  if (!label) return null;
+  return lastPosition.title ? `${label} — ${lastPosition.title}` : label;
 }
 
 function getProgressPercent(lastPosition) {
@@ -136,7 +138,7 @@ function LawLibraryCard({ law, onOpen, locale, t }) {
         <Link
           to={resumeRoute}
           onClick={(event) => event.stopPropagation()}
-          className="mt-2.5 inline-flex w-fit text-xs font-medium text-eu-blue transition hover:underline dark:text-eu-blue-bright"
+          className="mt-2.5 line-clamp-1 w-fit text-xs font-medium text-eu-blue transition hover:underline dark:text-eu-blue-bright"
         >
           {resumeLabel}
         </Link>

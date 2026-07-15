@@ -47,18 +47,20 @@ function ActRow({ act, currentLang, locale, variant, pillLabel }) {
       href={eurlexUrl}
       target="_blank"
       rel="noopener noreferrer"
-      className="group flex items-baseline gap-2 border-t border-gray-100 py-2 text-xs dark:border-gray-800"
+      className="group block border-t border-gray-100 py-2 text-xs dark:border-gray-800"
     >
-      <Pill variant={variant} className="shrink-0">{pillLabel}</Pill>
-      <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-gray-700 dark:text-gray-300">
-        {act.celex}
+      <span className="flex items-center gap-2">
+        <Pill variant={variant} className="shrink-0">{pillLabel}</Pill>
+        <span className="whitespace-nowrap font-mono text-[11px] text-gray-700 dark:text-gray-300">
+          {act.celex}
+        </span>
+        <ExternalLink size={11} className="ml-auto shrink-0 text-gray-300 transition group-hover:text-gray-500 dark:text-gray-600 dark:group-hover:text-gray-400" />
       </span>
       {dateLabel ? (
-        <span className="shrink-0 whitespace-nowrap text-[11px] tabular-nums text-gray-400 dark:text-gray-500">
+        <span className="mt-0.5 block text-[11px] tabular-nums text-gray-400 dark:text-gray-500">
           {dateLabel}
         </span>
       ) : null}
-      <ExternalLink size={11} className="shrink-0 text-gray-300 transition group-hover:text-gray-500 dark:text-gray-600 dark:group-hover:text-gray-400" />
     </a>
   );
 }
@@ -115,7 +117,7 @@ export function MetadataPanel({
         }`}
       >
         {pending ? <Loader2 size={12} className="shrink-0 animate-spin text-gray-400" /> : null}
-        <span className="min-w-0 flex-1 truncate text-gray-700 dark:text-gray-300">{item.label}</span>
+        <span className="min-w-0 flex-1 leading-snug text-gray-700 dark:text-gray-300">{item.label}</span>
         <span className="shrink-0 whitespace-nowrap text-[11px] text-gray-400 dark:text-gray-500">
           {t("lawOverview.citedTimes", { count: item.count })}
         </span>

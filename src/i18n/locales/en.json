@@ -300,6 +300,7 @@
     "languageItemUnavailable": "{label} {id} is not available in {lang}.",
     "sideBySideDesktopOnly": "Side-by-side reading is available on larger screens. This device keeps showing the main language only.",
     "alignedByParagraph": "Aligned by paragraph",
+    "railRecitalsHint": "Matches computed on your device",
     "textOnly": "Text only"
   },
   "printView": {
@@ -336,6 +337,7 @@
     "actTypeDirective": "Directive",
     "actTypeDecision": "Decision",
     "celexLabel": "CELEX {celex}",
+    "appliesFrom": "Applies from",
     "print": "Print / PDF",
     "linkedLegislation": "Linked legislation",
     "corrShort": "Corr.",

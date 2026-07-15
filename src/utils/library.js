@@ -52,6 +52,23 @@ export function doesCelexMatchOfficialReference(celex, reference) {
   return sameOfficialReference(inferred, reference);
 }
 
+// upsertLawMeta is a get→merge→put; two concurrent calls for the same law
+// (e.g. saveLawMeta's markLawOpened chain racing the reader's resume-position
+// write) can clobber each other's fields via a stale read. Serialize them.
+const pendingUpserts = new Map();
+
+function enqueueLawMetaUpsert(celex, updates) {
+  const previous = pendingUpserts.get(celex) || Promise.resolve();
+  const next = previous
+    .catch(() => {})
+    .then(() => upsertLawMeta(celex, updates));
+  pendingUpserts.set(celex, next);
+  next.finally(() => {
+    if (pendingUpserts.get(celex) === next) pendingUpserts.delete(celex);
+  });
+  return next;
+}
+
 function dispatchLibraryUpdate() {
   if (typeof window === "undefined") return;
   try {
@@ -111,7 +128,7 @@ export async function saveLawMeta(entry) {
     updates.topics = normalized.topics;
   }
 
-  const saved = await upsertLawMeta(normalized.celex, updates);
+  const saved = await enqueueLawMetaUpsert(normalized.celex, updates);
   dispatchLibraryUpdate();
   return saved;
 }
@@ -131,6 +148,10 @@ function normalizeLastPosition(position) {
   if (Number.isFinite(position.total) && position.total > 0) {
     normalized.total = position.total;
   }
+  const title = String(position.title || "").trim();
+  if (title) {
+    normalized.title = title.length > 120 ? `${title.slice(0, 119)}…` : title;
+  }
   return normalized;
 }
 
@@ -146,7 +167,7 @@ export async function markLawOpened(celex, position = null) {
   if (normalizedPosition) {
     updates.lastPosition = normalizedPosition;
   }
-  const saved = await upsertLawMeta(celex, updates);
+  const saved = await enqueueLawMetaUpsert(celex, updates);
   dispatchLibraryUpdate();
   return saved;
 }

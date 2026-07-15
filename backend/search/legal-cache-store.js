@@ -2,6 +2,7 @@ const fs = require("fs");
 const path = require("path");
 const zlib = require("zlib");
 const MiniSearch = require("minisearch");
+const { DatabaseSync } = require("node:sqlite");
 
 const {
   determineMatchReason,
@@ -9,8 +10,10 @@ const {
   parseStructuredQuery,
 } = require("./search-ranking");
 
-const DEFAULT_SEARCH_CACHE_PATH = process.env.SEARCH_CACHE_PATH ||
-  path.join(__dirname, "data", "search-cache.json");
+const BUILTIN_SEARCH_CACHE_PATH = path.join(__dirname, "data", "search-cache.json");
+const DEFAULT_SEARCH_CACHE_PATH = process.env.SEARCH_CACHE_PATH || BUILTIN_SEARCH_CACHE_PATH;
+const DEFAULT_SQLITE_DATA_PATH = path.join(__dirname, "data", "data.sqlite");
+const SQLITE_SCHEMA_VERSION = 1;
 
 const SUPPLEMENTAL_RECORDS = [
   {
@@ -123,13 +126,17 @@ function dedupeByCelex(records) {
 // enough for body-text noise to outrank a genuine title/alias match.
 const EXCERPT_BOOST = 0.3;
 
-function buildMiniSearch(records) {
+function buildMiniSearch(records, { includeExcerpt = true } = {}) {
+  const fields = includeExcerpt ? ["title", "aliases", "excerpt"] : ["title", "aliases"];
+  const boost = includeExcerpt
+    ? { aliases: 3, title: 1, excerpt: EXCERPT_BOOST }
+    : { aliases: 3, title: 1 };
   const miniSearch = new MiniSearch({
     idField: "celex",
-    fields: ["title", "aliases", "excerpt"],
+    fields,
     storeFields: ["type"],
     searchOptions: {
-      boost: { aliases: 3, title: 1, excerpt: EXCERPT_BOOST },
+      boost,
       fuzzy: 0.2,
       prefix: true,
       combineWith: "AND",
@@ -138,13 +145,55 @@ function buildMiniSearch(records) {
 
   miniSearch.addAll(dedupeByCelex(records).map((record) => ({
     celex: record.celex,
-    title: record.normalizedTitle || record.title || "",
-    aliases: Array.isArray(record.aliases) ? record.aliases.join(" ") : "",
+    title: record.title || "",
+    // Exact CELEX/type aliases are handled by deterministic maps before
+    // MiniSearch. Excluding them here avoids ~80k unique CELEX terms and huge
+    // low-value postings for the three act-type words, while retaining named
+    // aliases/acronyms for fuzzy and prefix matching.
+    aliases: searchableAliases(record).join(" "),
     excerpt: record.excerpt || "",
     type: record.type,
   })));
 
   return miniSearch;
+}
+
+function searchableAliases(record) {
+  const celex = normalizeCelexLookupKey(record.celex)?.toLowerCase() || "";
+  const type = String(record.type || "").toLowerCase();
+  const structural = new Set([
+    celex,
+    type,
+    `${type} ${celex}`.trim(),
+    `${type}${celex}`,
+  ]);
+  return (record.aliases || []).filter((alias) => !structural.has(alias));
+}
+
+function compactSqliteRecord(record) {
+  const enriched = enrichSearchRecord(record);
+  if (!enriched.isPrimaryAct) return null;
+  return {
+    celex: enriched.celex,
+    title: enriched.title,
+    date: enriched.date || null,
+    eli: enriched.eli || null,
+    type: enriched.type,
+    fmxAvailable: enriched.fmxAvailable,
+    fmxUnavailable: enriched.fmxUnavailable,
+    enrichError: enriched.enrichError,
+    eurovoc: Array.isArray(enriched.eurovoc) ? enriched.eurovoc : [],
+    celexYear: enriched.celexYear,
+    celexNumber: enriched.celexNumber,
+    aliases: enriched.aliases,
+  };
+}
+
+function buildFtsExpression(terms, operator) {
+  return terms
+    .filter((term) => /^[a-z0-9]+$/i.test(term))
+    .map((term) => `"${term}"*`)
+    .join(` ${operator} `);
 }
 
 // Re-encodes the act-type priors that the retired scoreLaw ranking applied,
@@ -171,8 +220,15 @@ function buildDocumentBoost(parsed) {
 }
 
 class JsonLegalCacheStore {
-  constructor(cachePath = DEFAULT_SEARCH_CACHE_PATH) {
+  constructor(cachePath = DEFAULT_SEARCH_CACHE_PATH, options = {}) {
     this.cachePath = cachePath;
+    const explicitSqlitePath = options.sqlitePath || process.env.DATA_SQLITE_PATH || null;
+    const hasJsonOverride = Boolean(process.env.SEARCH_CACHE_PATH);
+    this.sqlitePath = explicitSqlitePath ||
+      (!options.preferJson && !hasJsonOverride && cachePath === BUILTIN_SEARCH_CACHE_PATH
+        ? DEFAULT_SQLITE_DATA_PATH
+        : null);
+    this.requireSqlite = options.requireSqlite ?? Boolean(explicitSqlitePath);
     this.payload = null;
     this.records = [];
     this.loadedAt = null;
@@ -182,9 +238,128 @@ class JsonLegalCacheStore {
     this.byOfficialReference = new Map();
     this.byAlias = new Map();
     this.miniSearch = null;
+    this.database = null;
+    this.excerptSearchStatement = null;
+    this.source = null;
   }
 
   load() {
+    this.close();
+    if (this.sqlitePath && fs.existsSync(this.sqlitePath)) {
+      return this.loadFromSqlite();
+    }
+    if (this.requireSqlite) {
+      return this.failLoad(`SQLite data store not found at ${this.sqlitePath}`);
+    }
+    return this.loadFromJson();
+  }
+
+  resetIndexes() {
+    this.payload = null;
+    this.records = [];
+    this.loadedAt = null;
+    this.byCelex = new Map();
+    this.byEli = new Map();
+    this.byOfficialReference = new Map();
+    this.byAlias = new Map();
+    this.miniSearch = null;
+    this.source = null;
+  }
+
+  failLoad(message) {
+    this.resetIndexes();
+    this.loadError = message;
+    return false;
+  }
+
+  indexRecords(records, { includeExcerpt }) {
+    this.records = records;
+    this.byCelex = new Map();
+    this.byEli = new Map();
+    this.byOfficialReference = new Map();
+    this.byAlias = new Map();
+
+    for (const record of records) {
+      const celexKey = normalizeCelexLookupKey(record.celex);
+      if (celexKey) {
+        this.byCelex.set(celexKey, [record]);
+      }
+
+      const eliKey = normalizeEliLookupKey(record.eli);
+      if (eliKey) {
+        const matches = this.byEli.get(eliKey) || [];
+        matches.push(record);
+        this.byEli.set(eliKey, matches);
+      }
+
+      const referenceKey = normalizeOfficialReferenceLookupKey({
+        actType: record.type,
+        year: record.celexYear,
+        number: record.celexNumber,
+      });
+      if (referenceKey) {
+        const matches = this.byOfficialReference.get(referenceKey) || [];
+        matches.push(record);
+        this.byOfficialReference.set(referenceKey, matches);
+      }
+
+      for (const alias of record.aliases || []) {
+        const matches = this.byAlias.get(alias) || [];
+        matches.push(record);
+        this.byAlias.set(alias, matches);
+      }
+    }
+
+    this.miniSearch = buildMiniSearch(records, { includeExcerpt });
+    this.loadedAt = new Date().toISOString();
+    this.loadError = null;
+  }
+
+  loadFromSqlite() {
+    try {
+      const database = new DatabaseSync(this.sqlitePath, { readOnly: true });
+      const schemaVersion = database.prepare("PRAGMA user_version").get().user_version;
+      if (schemaVersion !== SQLITE_SCHEMA_VERSION) {
+        database.close();
+        return this.failLoad(
+          `Unsupported SQLite data schema ${schemaVersion}; expected ${SQLITE_SCHEMA_VERSION}`
+        );
+      }
+
+      const records = [];
+      const seen = new Set();
+      for (const row of database.prepare("SELECT record_json FROM laws ORDER BY ordinal").iterate()) {
+        const record = compactSqliteRecord(JSON.parse(row.record_json));
+        if (!record) continue;
+        records.push(record);
+        const key = normalizeCelexLookupKey(record.celex);
+        if (key) seen.add(key);
+      }
+      for (const supplemental of SUPPLEMENTAL_RECORDS) {
+        const key = normalizeCelexLookupKey(supplemental.celex);
+        if (key && !seen.has(key)) records.push(compactSqliteRecord(supplemental));
+      }
+
+      this.database = database;
+      this.excerptSearchStatement = database.prepare(`
+        SELECT mapping.celex
+        FROM law_excerpts
+        JOIN law_excerpt_map AS mapping ON mapping.rowid = law_excerpts.rowid
+        WHERE law_excerpts MATCH ?
+        ORDER BY bm25(law_excerpts), mapping.ordinal
+        LIMIT 200
+      `);
+      this.payload = null;
+      this.indexRecords(records, { includeExcerpt: false });
+      this.source = "sqlite";
+      return true;
+    } catch (error) {
+      this.close();
+      return this.failLoad(error.message);
+    }
+  }
+
+  loadFromJson() {
     try {
       // The full-corpus cache is far too large to commit, so a fresh deploy
       // fetches search-cache.json.gz as a GitHub Release asset at build time
@@ -193,16 +368,7 @@ class JsonLegalCacheStore {
       const gzPath = `${this.cachePath}.gz`;
       const useGz = !fs.existsSync(this.cachePath) && fs.existsSync(gzPath);
       if (!useGz && !fs.existsSync(this.cachePath)) {
-        this.payload = null;
-        this.records = [];
-        this.loadedAt = null;
-        this.loadError = `Search cache not found at ${this.cachePath} (or ${gzPath})`;
-        this.byCelex = new Map();
-        this.byEli = new Map();
-        this.byOfficialReference = new Map();
-        this.byAlias = new Map();
-        this.miniSearch = null;
-        return false;
+        return this.failLoad(`Search cache not found at ${this.cachePath} (or ${gzPath})`);
       }
 
       const raw = useGz
@@ -216,58 +382,11 @@ class JsonLegalCacheStore {
         : [];
 
       this.payload = parsed;
-      this.records = records;
-      this.byCelex = new Map();
-      this.byEli = new Map();
-      this.byOfficialReference = new Map();
-      this.byAlias = new Map();
-
-      for (const record of records) {
-        const celexKey = normalizeCelexLookupKey(record.celex);
-        if (celexKey) {
-          this.byCelex.set(celexKey, [record]);
-        }
-
-        const eliKey = normalizeEliLookupKey(record.eli);
-        if (eliKey) {
-          const matches = this.byEli.get(eliKey) || [];
-          matches.push(record);
-          this.byEli.set(eliKey, matches);
-        }
-
-        const referenceKey = normalizeOfficialReferenceLookupKey({
-          actType: record.type,
-          year: record.celexYear,
-          number: record.celexNumber,
-        });
-        if (referenceKey) {
-          const matches = this.byOfficialReference.get(referenceKey) || [];
-          matches.push(record);
-          this.byOfficialReference.set(referenceKey, matches);
-        }
-
-        for (const alias of record.aliases || []) {
-          const matches = this.byAlias.get(alias) || [];
-          matches.push(record);
-          this.byAlias.set(alias, matches);
-        }
-      }
-
-      this.miniSearch = buildMiniSearch(records);
-      this.loadedAt = new Date().toISOString();
-      this.loadError = null;
+      this.indexRecords(records, { includeExcerpt: true });
+      this.source = "json";
       return true;
     } catch (error) {
-      this.payload = null;
-      this.records = [];
-      this.loadedAt = null;
-      this.loadError = error.message;
-      this.byCelex = new Map();
-      this.byEli = new Map();
-      this.byOfficialReference = new Map();
-      this.byAlias = new Map();
-      this.miniSearch = null;
-      return false;
+      return this.failLoad(error.message);
     }
   }
 
@@ -287,6 +406,10 @@ class JsonLegalCacheStore {
       count: this.records.length,
       error: this.loadError,
     };
+  }
+
+  get activePath() {
+    return this.source === "sqlite" ? this.sqlitePath : this.cachePath;
   }
 
   searchLaws(query, options = {}) {
@@ -329,11 +452,27 @@ class JsonLegalCacheStore {
     if (this.miniSearch) {
       const boostDocument = buildDocumentBoost(parsed);
       let hits = this.miniSearch.search(parsed.rewrittenQuery, { combineWith: "AND", boostDocument });
-      if (hits.length === 0) {
+      // A broad OR over three or more terms can materialize tens of thousands
+      // of title hits (and keep V8's high-water heap resident) before the FTS
+      // recall stage gets a chance to answer the conceptual query. SQLite has
+      // the bounded FTS fallback for that case; retain the legacy OR behavior
+      // for JSON and short queries.
+      if (hits.length === 0 && (!this.database || parsed.terms.length < 3)) {
         hits = this.miniSearch.search(parsed.rewrittenQuery, { combineWith: "OR", boostDocument });
       }
       for (const hit of hits) {
         addMatch(getDeterministicMatch(this.byCelex, normalizeCelexLookupKey(hit.id)));
+      }
+    }
+
+    if (this.database) {
+      const terms = parsed.terms || [];
+      let hits = this.searchExcerpts(buildFtsExpression(terms, "AND"));
+      if (hits.length === 0) {
+        hits = this.searchExcerpts(buildFtsExpression(terms, "OR"));
+      }
+      for (const hit of hits) {
+        addMatch(getDeterministicMatch(this.byCelex, normalizeCelexLookupKey(hit.celex)));
       }
     }
 
@@ -362,12 +501,50 @@ class JsonLegalCacheStore {
   getByOfficialReference(reference) {
     return getDeterministicMatch(this.byOfficialReference, normalizeOfficialReferenceLookupKey(reference));
   }
+
+  searchExcerpts(expression) {
+    if (!this.excerptSearchStatement || !expression) return [];
+    return this.excerptSearchStatement.all(expression);
+  }
+
+  getCaseLawDetails(celexes) {
+    if (!this.database) return null;
+    const ids = [...new Set((celexes || []).map(normalizeCelexLookupKey).filter(Boolean))];
+    if (ids.length === 0) return new Map();
+    const placeholders = ids.map(() => "?").join(", ");
+    const rows = this.database.prepare(
+      `SELECT celex, details_json FROM case_law WHERE celex IN (${placeholders})`
+    ).all(...ids);
+    return new Map(rows.map((row) => [row.celex, JSON.parse(row.details_json)]));
+  }
+
+  getCaseLawCacheStats() {
+    if (!this.database) return null;
+    const stats = this.database.prepare(`
+      SELECT COUNT(*) AS total, COALESCE(SUM(is_partial), 0) AS partial
+      FROM case_law
+    `).get();
+    return { total: stats.total, partial: stats.partial, failedRecently: 0 };
+  }
+
+  close() {
+    if (!this.database) return;
+    try {
+      this.database.close();
+    } catch {
+      // Already closed or failed during initialization.
+    }
+    this.database = null;
+    this.excerptSearchStatement = null;
+  }
 }
 
 module.exports = {
   buildCanonicalEliFromReference,
   DEFAULT_SEARCH_CACHE_PATH,
+  DEFAULT_SQLITE_DATA_PATH,
   JsonLegalCacheStore,
+  SQLITE_SCHEMA_VERSION,
   normalizeCelexLookupKey,
   normalizeEliLookupKey,
   normalizeOfficialReferenceLookupKey,

@@ -13,6 +13,7 @@
     "stats": "node --env-file-if-exists=../.env --env-file-if-exists=.env bin/stats.js",
     "build:search-cache": "node search/search-build.js",
     "build:search-eurovoc": "node search/fetch-eurovoc.js",
+    "build:sqlite-data": "node search/build-sqlite-data.js",
     "test": "node --test search/*.test.js shared/*.test.js routes/*.test.js bin/*.test.js mcp/*.test.js",
     "test:search": "node --test search/*.test.js"
   },
@@ -37,6 +38,6 @@
     "adm-zip": "^0.5.16"
   },
   "engines": {
-    "node": ">=22"
+    "node": ">=24"
   }
 }

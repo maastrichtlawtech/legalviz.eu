@@ -37,9 +37,9 @@ Subtree-specific guidance lives in nested memory files that Claude Code loads on
 
 **Data flow**: given a CELEX id, the app fetches Formex XML from EUR-Lex (falling back to EUR-Lex HTML for laws without FMX), parses it into articles, chapters, recitals, definitions, annexes, and cross-references, then renders it. `src/utils/formexApi.js` is the frontend's client for the backend API (or direct EUR-Lex fetch, depending on mode). `src/utils/fmxParser.js` / `src/utils/parsers.js` wrap the shared parser for browser use.
 
-**Search** is two distinct systems that share nothing — don't conflate them: the frontend's client-side inverted index / TF-IDF (`src/utils/nlp.js`), built from the currently loaded law to link recitals to articles and power in-document search; and a separate backend MiniSearch lookup (`backend/search/`) over a cached metadata index of primary acts, exposed at `/api/search`. The backend cache must be built manually (steps and behavior in [backend/CLAUDE.md](backend/CLAUDE.md)).
+**Search** is two distinct systems that share nothing — don't conflate them: the frontend's client-side inverted index / TF-IDF (`src/utils/nlp.js`), built from the currently loaded law to link recitals to articles and power in-document search; and a separate backend title/alias MiniSearch plus SQLite FTS5 excerpt lookup (`backend/search/`) over primary acts, exposed at `/api/search`. The backend data must be built manually (steps and behavior in [backend/CLAUDE.md](backend/CLAUDE.md)).
 
-**CJEU case law**: judgments are fetched via SPARQL and parsed from three distinct historical HTML/XML shapes (post-2004 EUR-Lex Formex, pre-2004 OJ HTML, older Curia HTML) into structured `articleRefs` so the viewer can show cases citing a given article. This parsing lives in `backend/` and is one of the more fragile/format-sensitive parts of the codebase.
+**CJEU case law**: judgments are discovered live via SPARQL, while names, rulings, and structured `articleRefs` come from the read-only precomputed data store. The offline pipeline parses three historical HTML/XML shapes (post-2004 EUR-Lex Formex, pre-2004 OJ HTML, older Curia HTML). This parsing lives in `backend/` and is one of the more fragile/format-sensitive parts of the codebase.
 
 **Optional AI features** (recital titles, static law overviews, per-article and whole-law case-law digests) call OpenRouter only on cache misses, and every result is versioned (see [Cache & version invalidation](#cache--version-invalidation)). The web app mirrors recital titles into IndexedDB so a warm cache never hits the endpoint. Cache-write discipline, prompts, and API-key resolution live in [backend/CLAUDE.md](backend/CLAUDE.md).
 
@@ -58,12 +58,13 @@ Nearly every expensive operation — Formex parsing, TF‑IDF recital mapping, C
 | When you change… | Bump | In |
 |---|---|---|
 | Parser output (fields, shape, bug fix) | `PARSER_VERSION` | `backend/shared/formex-parser/fmxParser.mjs` |
-| CJEU enrichment shape (declarations, `articleRefs`) | `CASE_LAW_CACHE_FILE` → `case-law-cache-vN.json` (keep the legacy-migration path) | `backend/shared/law-queries.js` |
+| Offline CJEU detail shape (declarations, `articleRefs`) | `CASE_LAW_CACHE_FILE` → `case-law-cache-vN.json` (keep the offline legacy-migration path) | `backend/shared/law-queries.js` |
 | Recital-title prompt/output format | `CACHE_VERSION` | `backend/shared/recital-title-service.js` |
 | Law-summary JSON schema / prompt | `SCHEMA_VERSION` / `PROMPT_VERSION` | `backend/shared/law-summary-service.js` |
 | Article-digest JSON schema / prompt | `SCHEMA_VERSION` / `PROMPT_VERSION` | `backend/shared/article-digest-service.js` |
 | Whole-law digest JSON schema / prompt | `SCHEMA_VERSION` / `PROMPT_VERSION` | `backend/shared/case-law-digest-service.js` |
 | Persisted analytics shape (`analytics.json` fields) | `ANALYTICS_SCHEMA_VERSION` | `backend/shared/analytics.js` |
+| Runtime SQLite tables/indexes | `SQLITE_SCHEMA_VERSION` | `backend/search/legal-cache-store.js` and `backend/search/build-sqlite-data.js` |
 | Precomputed data republished as a new GitHub Release (`data-vN`) | `DATA_RELEASE_TAG` → `data-vN` | `backend/Dockerfile` |
 
 The data caches are the one entry above that isn't a code constant: they ship as **GitHub Release assets** (they're far too large to commit), so republishing them means creating a new `data-vN` release **and** bumping `DATA_RELEASE_TAG` in `backend/Dockerfile` in the same commit. Skip the bump and every deploy keeps fetching the old data no matter what you rebuilt. The Dockerfile fetches **every** asset from that one tag, so a new release must carry the full set — re-upload the unchanged ones alongside the changed one, or the Docker build 404s.

@@ -91,6 +91,20 @@ test('getStats reads case-law cache stats from the current cache filename', () =
   analytics.shutdown();
 });
 
+test('getStats preserves the case-law stats shape when backed by SQLite', () => {
+  const analytics = createAnalytics({
+    dataStore: {
+      getCaseLawCacheStats: () => ({ total: 12, partial: 3, failedRecently: 0 }),
+    },
+  });
+  assert.deepEqual(analytics.getStats().caseLawCache, {
+    total: 12,
+    partial: 3,
+    failedRecently: 0,
+  });
+  analytics.shutdown();
+});
+
 test('getClientIp prefers req.ip and falls back to the socket address', () => {
   const analytics = createAnalytics({});
   hit(analytics, baseReq({

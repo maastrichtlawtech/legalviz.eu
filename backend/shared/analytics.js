@@ -152,7 +152,7 @@ function estimateUniques(daily) {
   return Math.max(estimated, daily.uniqueUsersLegacy || 0);
 }
 
-function createAnalytics({ cacheDir, now = () => new Date(), hashKey } = {}) {
+function createAnalytics({ cacheDir, dataStore, now = () => new Date(), hashKey } = {}) {
   const startTime = Date.now();
   const analyticsFile = cacheDir ? path.join(cacheDir, 'analytics.json') : null;
   const uniqueHashKey = hashKey || process.env.ANALYTICS_HASH_KEY
@@ -342,6 +342,10 @@ function createAnalytics({ cacheDir, now = () => new Date(), hashKey } = {}) {
   }
 
   function getCaseLawCacheStats() {
+    if (typeof dataStore?.getCaseLawCacheStats === 'function') {
+      const sqliteStats = dataStore.getCaseLawCacheStats();
+      if (sqliteStats) return sqliteStats;
+    }
     if (!cacheDir) return null;
     try {
       const cache = JSON.parse(

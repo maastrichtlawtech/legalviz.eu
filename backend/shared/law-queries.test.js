@@ -5,15 +5,11 @@ const os = require("node:os");
 const path = require("node:path");
 
 const { fetchCaseLaw, parseCitationsToRefs } = require("./law-queries");
-const { CITATION_PARSER_VERSION } = require('./case-law-parser');
 
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-test("fetchCaseLaw returns quickly while warming uncached details in the background", async () => {
+test("fetchCaseLaw reads precomputed details from the data store and never writes", async () => {
   const cacheDir = fs.mkdtempSync(path.join(os.tmpdir(), "case-law-cache-"));
   const caseCelex = "61999CJ0465";
+  let requestedIds = [];
   const payload = await fetchCaseLaw("31995L0046", async () => ({
     results: {
       bindings: [
@@ -26,43 +22,25 @@ test("fetchCaseLaw returns quickly while warming uncached details in the backgro
     },
   }), {
     cacheDir,
-    enrichBudgetMs: 0,
-    detailsFetcher: async () => {
-      await sleep(80);
-      return {
+    dataStore: {
+      getCaseLawDetails(ids) {
+        requestedIds = ids;
+        return new Map([[caseCelex, {
         name: "Example v Example",
         declarations: [{ number: 1, text: "Example ruling." }],
         articlesCited: ["Art. 6 GDPR"],
-        citationParserVersion: CITATION_PARSER_VERSION,
-      };
+        articleRefs: parseCitationsToRefs(["Art. 6 GDPR"]),
+        }]]);
+      },
     },
   });
 
+  assert.deepEqual(requestedIds, [caseCelex]);
   assert.equal(payload.celex, "31995L0046");
   assert.equal(payload.cases.length, 1);
-  assert.equal(payload.cases[0].name, null);
-  assert.deepEqual(payload.cases[0].declarations, []);
-
-  await sleep(140);
-
-  const cachePath = path.join(cacheDir, "case-law-cache-v5.json");
-  const saved = JSON.parse(fs.readFileSync(cachePath, "utf8"));
-  assert.deepEqual(saved[caseCelex], {
-    name: "Example v Example",
-    declarations: [{ number: 1, text: "Example ruling." }],
-    articlesCited: ["Art. 6 GDPR"],
-    citationParserVersion: CITATION_PARSER_VERSION,
-    articleRefs: [
-      {
-        raw: "Art. 6 GDPR",
-        act: "GDPR",
-        actCelex: "32016R0679",
-        article: "6",
-        paragraph: null,
-        point: null,
-      },
-    ],
-  });
+  assert.equal(payload.cases[0].name, "Example v Example");
+  assert.deepEqual(payload.cases[0].declarations, [{ number: 1, text: "Example ruling." }]);
+  assert.deepEqual(fs.readdirSync(cacheDir), []);
 });
 
 test("parseCitationsToRefs handles plain, paragraph, point, and 95/46-style tokens", () => {
@@ -137,7 +115,7 @@ test("parseCitationsToRefs tolerates malformed strings without throwing", () => 
   assert.deepEqual(refs, []);
 });
 
-test("fetchCaseLaw migrates v4 cache and schedules it for citation re-parsing", async () => {
+test("fetchCaseLaw reads a legacy v4 cache without writing a migrated file", async () => {
   const cacheDir = fs.mkdtempSync(path.join(os.tmpdir(), "case-law-cache-"));
   const caseCelex = "62019CJ0439";
 
@@ -165,8 +143,6 @@ test("fetchCaseLaw migrates v4 cache and schedules it for citation re-parsing", 
     },
   }), {
     cacheDir,
-    enrichBudgetMs: 10,
-    detailsFetcher: async () => null,
   });
 
   const caseEntry = payload.cases[0];
@@ -176,12 +152,8 @@ test("fetchCaseLaw migrates v4 cache and schedules it for citation re-parsing", 
     ["5", "6", "10"]
   );
 
-  // A v5 file is written, but the old entry deliberately has no current parser
-  // marker and will therefore be retried rather than treated as permanently good.
   const v5Path = path.join(cacheDir, "case-law-cache-v5.json");
-  assert.ok(fs.existsSync(v5Path), "expected v5 cache file to be written");
-  const v5 = JSON.parse(fs.readFileSync(v5Path, "utf8"));
-  assert.equal(v5[caseCelex].citationParserVersion, undefined);
+  assert.equal(fs.existsSync(v5Path), false);
 });
 
 test('fetchCaseLaw includes and formats General Court judgments', async () => {
@@ -197,31 +169,8 @@ test('fetchCaseLaw includes and formats General Court judgments', async () => {
         }],
       },
     };
-  }, { enrichBudgetMs: 0, detailsFetcher: async () => null });
+  });
 
   assert.match(query, /\(CJ\|TJ\)/);
   assert.equal(payload.cases[0].caseNumber, 'T-123/25');
-});
-
-test('fetchCaseLaw keeps zero-ref parses retryable instead of silently accepting them', async () => {
-  const cacheDir = fs.mkdtempSync(path.join(os.tmpdir(), 'case-law-cache-'));
-  const caseCelex = '62020CJ0001';
-  await fetchCaseLaw('32004L0048', async () => ({
-    results: { bindings: [{ caseCelex: { value: caseCelex } }] },
-  }), {
-    cacheDir,
-    enrichBudgetMs: 100,
-    detailsFetcher: async () => ({
-      name: 'Example judgment',
-      declarations: [{ number: 1, text: 'The Court rules.' }],
-      articlesCited: [],
-      articleRefs: [],
-      citationParserVersion: CITATION_PARSER_VERSION,
-    }),
-  });
-
-  const saved = JSON.parse(fs.readFileSync(path.join(cacheDir, 'case-law-cache-v5.json'), 'utf8'));
-  assert.equal(saved[caseCelex].name, 'Example judgment');
-  assert.deepEqual(saved[caseCelex].articleRefs, []);
-  assert.equal(typeof saved[caseCelex].lastFailedAt, 'number');
 });

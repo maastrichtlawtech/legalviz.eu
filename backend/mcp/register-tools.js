@@ -374,7 +374,7 @@ function registerTools(server, deps) {
     makeHandler(async ({ celex }) => {
       requireCelex(celex);
       record('get_case_law', { celex });
-      const payload = await fetchCaseLaw(celex, runSparqlQuery, { cacheDir: FMX_DIR });
+      const payload = await fetchCaseLaw(celex, runSparqlQuery, { cacheDir: FMX_DIR, dataStore: legalCacheStore });
       return jsonResult(payload);
     })
   );

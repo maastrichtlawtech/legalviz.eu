@@ -9,7 +9,6 @@ const fs = require('fs');
 const path = require('path');
 const zlib = require('zlib');
 const { JSDOM } = require('jsdom');
-const { getSharedPlaywrightPage, loadPlaywrightModule } = require('./eurlex-html-parser');
 const {
   ACT_CELEX_MAP,
   CITATION_PARSER_VERSION,
@@ -17,18 +16,6 @@ const {
   hydrateContextualRefs,
   parseCitationsToRefs,
 } = require('./case-law-parser');
-
-const EURLEX_COOKIE_MAX_AGE_MS = parseInt(process.env.EURLEX_COOKIE_MAX_AGE_MS) || 12 * 60 * 60 * 1000; // 12h
-const PARTIAL_RETRY_COOLDOWN_MS = 6 * 60 * 60 * 1000; // 6h
-
-let warmCookieHeader = null;
-let warmUserAgent = null;
-let cookieWarmPromise = null;
-let warmFailedAt = 0;
-const WARM_FAILURE_COOLDOWN_MS = 5 * 60 * 1000; // don't retry Playwright more than once per 5 min
-
-// In-flight enrichment coalescing: celex -> Promise<void>
-const enrichInFlight = new Map();
 
 async function fetchMetadata(celex, runSparqlQuery) {
   const celexUri = `http://publications.europa.eu/resource/celex/${celex}`;
@@ -135,119 +122,10 @@ LIMIT 100`;
   return { celex, acts };
 }
 
-function loadCookiesFromDisk(cacheDir) {
-  if (!cacheDir) return;
-  try {
-    const filePath = path.join(cacheDir, 'eurlex-cookies.json');
-    if (!fs.existsSync(filePath)) return;
-    const { cookies, userAgent, fetchedAt } = JSON.parse(fs.readFileSync(filePath, 'utf8'));
-    if (Date.now() - fetchedAt > EURLEX_COOKIE_MAX_AGE_MS) return;
-    warmCookieHeader = cookies;
-    warmUserAgent = userAgent;
-  } catch {
-    // best-effort
-  }
-}
-
-function saveCookiesToDisk(cacheDir, cookies, userAgent) {
-  if (!cacheDir) return;
-  try {
-    const filePath = path.join(cacheDir, 'eurlex-cookies.json');
-    const tmp = filePath + '.tmp';
-    fs.writeFileSync(tmp, JSON.stringify({ cookies, userAgent, fetchedAt: Date.now() }), 'utf8');
-    fs.renameSync(tmp, filePath);
-  } catch {
-    // best-effort
-  }
-}
-
-function invalidateCookies(cacheDir) {
-  warmCookieHeader = null;
-  warmUserAgent = null;
-  if (cacheDir) {
-    try { fs.unlinkSync(path.join(cacheDir, 'eurlex-cookies.json')); } catch { /* ok */ }
-  }
-}
-
-async function warmEurlexCookies({ cacheDir } = {}) {
-  if (cookieWarmPromise) return cookieWarmPromise;
-  if (warmFailedAt && Date.now() - warmFailedAt < WARM_FAILURE_COOLDOWN_MS) return;
-
-  cookieWarmPromise = (async () => {
-    try {
-      const playwrightModulePath = process.env.PLAYWRIGHT_MODULE_PATH || null;
-      const playwright = await loadPlaywrightModule(playwrightModulePath);
-      const page = await getSharedPlaywrightPage(playwright, {
-        playwrightBrowsersPath: process.env.PLAYWRIGHT_BROWSERS_PATH || null,
-        headless: process.env.PLAYWRIGHT_HEADLESS !== 'false',
-      });
-      await page.goto('https://eur-lex.europa.eu/homepage.html', {
-        waitUntil: 'domcontentloaded',
-        timeout: 20_000,
-      });
-      try {
-        await page.waitForLoadState('networkidle', { timeout: 15_000 });
-      } catch {
-        // networkidle may time out on challenge pages — proceed anyway
-      }
-      const cookies = await page.context().cookies();
-      const cookieStr = cookies.map((c) => `${c.name}=${c.value}`).join('; ');
-      const ua = await page.evaluate(() => navigator.userAgent);
-
-      warmCookieHeader = cookieStr;
-      warmUserAgent = ua;
-      warmFailedAt = 0;
-      saveCookiesToDisk(cacheDir, cookieStr, ua);
-      console.log(`[case-law] EUR-Lex session cookies warmed (${cookies.length} cookies)`);
-    } catch (err) {
-      warmFailedAt = Date.now();
-      console.warn(`[case-law] Cookie warming failed: ${err.message} (cooling down ${WARM_FAILURE_COOLDOWN_MS / 1000}s)`);
-    }
-  })();
-
-  try {
-    await cookieWarmPromise;
-  } finally {
-    cookieWarmPromise = null;
-  }
-}
-
-const CASE_LAW_ENRICH_BUDGET_MS = 1_500;
-const DEFAULT_FETCH_TIMEOUT_MS = 30_000;
-
-function wait(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function isPartialEntry(entry) {
-  return !entry
-    || !entry.name
-    || !Array.isArray(entry.declarations)
-    || entry.declarations.length === 0
-    || entry.citationParserVersion !== CITATION_PARSER_VERSION
-    || !Array.isArray(entry.articleRefs)
-    || entry.articleRefs.length === 0;
-}
-
-function isStaleEntry(entry) {
-  if (!isPartialEntry(entry)) return false;
-  return !entry?.lastFailedAt || (Date.now() - entry.lastFailedAt) > PARTIAL_RETRY_COOLDOWN_MS;
-}
-
 async function fetchCaseLaw(celex, runSparqlQuery, {
   cacheDir,
-  detailsFetcher,
-  enrichBudgetMs = CASE_LAW_ENRICH_BUDGET_MS,
-  enrichConcurrency = 3,
-  fetchTimeoutMs = DEFAULT_FETCH_TIMEOUT_MS,
+  dataStore,
 } = {}) {
-  if (cacheDir && warmCookieHeader === null && cookieWarmPromise === null) {
-    loadCookiesFromDisk(cacheDir);
-  }
-  if (!detailsFetcher) {
-    detailsFetcher = (caseCelex, opts) => fetchCaseDetails(caseCelex, { ...opts, timeoutMs: fetchTimeoutMs });
-  }
-  const cache = cacheDir ? loadCaseLawCache(cacheDir) : {};
   const celexUri = `http://publications.europa.eu/resource/celex/${celex}`;
   const query = `
 PREFIX cdm: <http://publications.europa.eu/ontology/cdm#>
@@ -264,7 +142,15 @@ ORDER BY ?date
 LIMIT 200`;
 
   const data = await runSparqlQuery(query);
-  const cases = (data.results?.bindings || []).map((b) => {
+  const bindings = data.results?.bindings || [];
+  const caseCelexes = bindings.map((binding) => binding.caseCelex?.value).filter(Boolean);
+  const sqliteDetails = typeof dataStore?.getCaseLawDetails === 'function'
+    ? dataStore.getCaseLawDetails(caseCelexes)
+    : null;
+  const cache = sqliteDetails === null
+    ? (cacheDir ? loadCaseLawCache(cacheDir, { readOnly: true }) : {})
+    : Object.fromEntries(sqliteDetails);
+  const cases = bindings.map((b) => {
     const caseCelex = b.caseCelex?.value || null;
     let caseNumber = caseCelex;
     const m = caseCelex?.match(/^6(\d{4})(CJ|TJ)(\d{4})$/);
@@ -284,34 +170,6 @@ LIMIT 200`;
       articleRefs: hydrateContextualRefs(cached?.articleRefs || [], celex),
     };
   }).filter((c) => c.celex);
-
-  // Enrich uncached/stale cases with full details (name + decisions + articles)
-  const uncached = cases.filter((c) => isStaleEntry(cache[c.celex]));
-  if (uncached.length > 0) {
-    let enrichPromise = enrichInFlight.get(celex);
-    if (!enrichPromise) {
-      enrichPromise = enrichWithCaseDetails(uncached, cache, {
-        concurrency: enrichConcurrency,
-        detailsFetcher,
-        cacheDir,
-        logLabel: celex,
-      })
-        .then(() => {
-          if (cacheDir) saveCaseLawCache(cacheDir, cache);
-        })
-        .catch((err) => {
-          console.warn(`[case-law] Details enrichment failed for ${celex}: ${err.message}`);
-        })
-        .finally(() => {
-          enrichInFlight.delete(celex);
-        });
-      enrichInFlight.set(celex, enrichPromise);
-    }
-
-    if (enrichBudgetMs > 0) {
-      await Promise.race([enrichPromise, wait(enrichBudgetMs)]);
-    }
-  }
 
   return { celex, cases };
 }
@@ -351,7 +209,7 @@ function readCaseLawCacheFile(filePath) {
   return cache;
 }
 
-function loadCaseLawCache(cacheDir) {
+function loadCaseLawCache(cacheDir, { readOnly = false } = {}) {
   try {
     const filePath = path.join(cacheDir, CASE_LAW_CACHE_FILE);
     const memoized = readCaseLawCacheFile(filePath);
@@ -368,17 +226,21 @@ function loadCaseLawCache(cacheDir) {
           ? { ...v, articleRefs: v.articleRefs || parseCitationsToRefs(v.articlesCited) }
           : v;
       }
-      try {
-        fs.writeFileSync(filePath, JSON.stringify(migrated, null, 2), 'utf8');
-      } catch {
-        // best-effort; we'll re-migrate next load
+      if (!readOnly) {
+        try {
+          fs.writeFileSync(filePath, JSON.stringify(migrated, null, 2), 'utf8');
+        } catch {
+          // best-effort; we'll re-migrate next load
+        }
       }
       return migrated;
     }
     if (fs.existsSync(CASE_LAW_CACHE_SEED)) {
       try {
+        const seedBytes = zlib.gunzipSync(fs.readFileSync(CASE_LAW_CACHE_SEED));
+        if (readOnly) return JSON.parse(seedBytes.toString('utf8'));
         fs.mkdirSync(cacheDir, { recursive: true });
-        fs.writeFileSync(filePath, zlib.gunzipSync(fs.readFileSync(CASE_LAW_CACHE_SEED)));
+        fs.writeFileSync(filePath, seedBytes);
         const seeded = readCaseLawCacheFile(filePath);
         if (seeded) return seeded;
       } catch {
@@ -401,11 +263,6 @@ function saveCaseLawCache(cacheDir, cache) {
   } catch {
     // best-effort
   }
-}
-
-function isChallengeResponse(res) {
-  return res.status === 202
-    && String(res.headers.get('x-amzn-waf-action') || '').toLowerCase() === 'challenge';
 }
 
 function cleanText(text) {
@@ -667,8 +524,8 @@ function nameFromDescription(document) {
 
 /**
  * Parse a judgment's raw HTML into structured details (name + operative
- * declarations + article citations). Split out from fetchCaseDetails so the same
- * parse can run OFFLINE against the locally-harvested case-law corpus — the
+ * declarations + article citations). Kept separate so the parse runs OFFLINE
+ * against the locally-harvested case-law corpus — the
  * network fetch and the (JSDOM-based, format-fragile) parse are independent, and
  * decoupling them lets parser fixes reprocess the corpus with no re-scraping.
  * Returns null for empty/too-short HTML.
@@ -738,122 +595,6 @@ function parseCaseDetailsFromHtml(html) {
   };
 }
 
-/**
- * Fetch full HTML for a case and extract decision + article citations.
- * Uses warm EUR-Lex session cookies to bypass WAF challenge.
- */
-async function fetchCaseDetails(caseCelex, { cacheDir, stats, timeoutMs = DEFAULT_FETCH_TIMEOUT_MS } = {}) {
-  const url = `https://eur-lex.europa.eu/legal-content/EN/TXT/HTML/?uri=CELEX:${caseCelex}`;
-
-  if (warmCookieHeader === null && cookieWarmPromise === null) {
-    loadCookiesFromDisk(cacheDir);
-  }
-  if (warmCookieHeader === null) {
-    await warmEurlexCookies({ cacheDir });
-  }
-
-  for (let attempt = 0; attempt < 3; attempt++) {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), timeoutMs);
-
-    try {
-      const headers = {
-        'accept-language': 'en',
-      };
-      if (warmCookieHeader) {
-        headers['cookie'] = warmCookieHeader;
-        headers['user-agent'] = warmUserAgent || 'Mozilla/5.0';
-      }
-
-      const res = await fetch(url, { signal: controller.signal, headers });
-
-      if (isChallengeResponse(res)) {
-        clearTimeout(timeout);
-        if (stats) stats.challenges++;
-        invalidateCookies(cacheDir);
-        if (attempt === 0) {
-          await warmEurlexCookies({ cacheDir });
-        } else {
-          await new Promise((r) => setTimeout(r, 2000 * (2 ** attempt)));
-        }
-        continue;
-      }
-
-      if (!res.ok) return null;
-
-      const html = await res.text();
-      return parseCaseDetailsFromHtml(html);
-    } finally {
-      clearTimeout(timeout);
-    }
-  }
-
-  return null;
-}
-
-/**
- * Enrich cases with full details (decisions + articles). Lower concurrency
- * than party-name enrichment since we fetch full pages.
- */
-async function enrichWithCaseDetails(cases, detailsCache, {
-  concurrency = 3,
-  detailsFetcher = fetchCaseDetails,
-  cacheDir,
-  logLabel = '',
-} = {}) {
-  const stats = { enriched: 0, partial: 0, errors: 0, challenges: 0 };
-  let consecutiveFails = 0;
-  let blocked = false;
-  let i = 0;
-
-  async function next() {
-    while (i < cases.length && !blocked) {
-      const c = cases[i++];
-      try {
-        const details = await detailsFetcher(c.celex, { cacheDir, stats });
-        const articleRefs = details?.articleRefs || parseCitationsToRefs(details?.articlesCited);
-        const normalizedDetails = details ? { ...details, articleRefs } : null;
-        if (normalizedDetails && !isPartialEntry(normalizedDetails)) {
-          detailsCache[c.celex] = normalizedDetails;
-          c.declarations = normalizedDetails.declarations;
-          c.articlesCited = normalizedDetails.articlesCited;
-          c.articleRefs = hydrateContextualRefs(articleRefs, logLabel);
-          if (normalizedDetails.name && !c.name) c.name = normalizedDetails.name;
-          stats.enriched++;
-        } else {
-          const existing = detailsCache[c.celex] || {};
-          // Preserve whatever did parse (name/operative part) but keep the entry
-          // retryable: a zero-ref result for a judgment known to interpret this
-          // law is often a citation-grammar miss, not proof that no refs exist.
-          detailsCache[c.celex] = { ...existing, ...(normalizedDetails || {}), lastFailedAt: Date.now() };
-          if (normalizedDetails) {
-            c.declarations = normalizedDetails.declarations || c.declarations;
-            c.articlesCited = normalizedDetails.articlesCited || c.articlesCited;
-            c.articleRefs = hydrateContextualRefs(articleRefs, logLabel);
-            if (normalizedDetails.name && !c.name) c.name = normalizedDetails.name;
-          }
-          stats.partial++;
-        }
-        consecutiveFails = 0;
-      } catch (err) {
-        stats.errors++;
-        consecutiveFails++;
-        if (consecutiveFails >= 5) {
-          blocked = true;
-          console.warn(`[case-law] Stopping details enrichment after ${consecutiveFails} consecutive failures: ${err.message}`);
-        }
-      }
-    }
-  }
-  await Promise.all(Array.from({ length: Math.min(concurrency, cases.length) }, next));
-
-  const suffix = logLabel ? ` for ${logLabel}` : '';
-  console.log(
-    `[case-law] Enrichment${suffix} done: ${stats.enriched} enriched, ` +
-    `${stats.partial} partial, ${stats.errors} errors, ${stats.challenges} WAF challenges (of ${cases.length} cases)`
-  );
-}
-
 module.exports = {
   ACT_CELEX_MAP,
   fetchMetadata,
@@ -864,7 +605,6 @@ module.exports = {
   parseCaseDetailsFromHtml,
   loadCaseLawCache,
   saveCaseLawCache,
-  isPartialEntry,
   CITATION_PARSER_VERSION,
   CASE_LAW_CACHE_FILE,
 };

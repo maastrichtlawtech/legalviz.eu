@@ -32,6 +32,7 @@ backend/html-fallback-downloads/
 backend/search/data/search-cache.json
 backend/search/data/search-cache.json.gz
 backend/search/data/case-law-cache-v5.json.gz
+backend/search/data/data.sqlite
 backend/search/data/laws/
 backend/search/data/laws-html/
 backend/search/data/case-law/

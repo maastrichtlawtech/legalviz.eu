@@ -91,3 +91,21 @@ test("act query separates act-only references from article references", () => {
     totals: { provisions: 2, judgments: 1, total: 3 },
   });
 });
+
+test("act query dedups a provision citing both the act and an article across subsets", () => {
+  // 32024R0009 unit 3 cites the act generally (act-only) and Article 6. It must
+  // count once in actOnly, once in article, but only once in the deduplicated
+  // totals — so actOnly.total + article.total (2) intentionally exceeds
+  // totals.total (1). This pins the "totals is not the sum of the parts" contract.
+  const overlappingEdges = [
+    { kind: "legislation", sourceCelex: "32024R0009", sourceTitle: "Dual citer", sourceUnitType: "article", sourceUnit: "3", targetCelex: "32016R0679", targetArticle: null, targetParagraph: null, targetPoint: null },
+    { kind: "legislation", sourceCelex: "32024R0009", sourceTitle: "Dual citer", sourceUnitType: "article", sourceUnit: "3", targetCelex: "32016R0679", targetArticle: "6", targetParagraph: null, targetPoint: null },
+  ];
+  const store = new CitationGraphStore(writeGraph({ graphVersion: 1, edges: overlappingEdges }));
+  assert.equal(store.load(), true);
+  const result = store.getActCitations("32016R0679");
+  assert.deepEqual(result.actOnly, { provisions: 1, judgments: 0, total: 1 });
+  assert.deepEqual(result.article, { provisions: 1, judgments: 0, total: 1 });
+  assert.deepEqual(result.totals, { provisions: 1, judgments: 0, total: 1 });
+  assert.ok(result.actOnly.total + result.article.total > result.totals.total);
+});

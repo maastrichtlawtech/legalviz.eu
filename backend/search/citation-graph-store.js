@@ -171,6 +171,12 @@ class CitationGraphStore {
     const articles = [...byArticle.entries()]
       .sort(([a], [b]) => a.localeCompare(b, "en", { numeric: true }))
       .map(([citedArticle, articleEdges]) => ({ article: citedArticle, ...countsFor(articleEdges) }));
+    // `actOnly`, `article`, and `totals` each count *distinct source provisions*
+    // within their own edge subset, so they intentionally do NOT sum: a single
+    // provision that cites both the act generally and a specific article is
+    // counted once in `actOnly` and once in `article`, but only once in
+    // `totals` (which dedups across every edge). Treat `totals` as the
+    // authoritative distinct-source count; do not derive it from the parts.
     return { celex: targetCelex, actOnly: countsFor(actOnly), article: countsFor(article), articles, totals: countsFor(edges) };
   }
 }

@@ -1,39 +1,51 @@
 import { useState } from "react";
-import { ChevronDown, ChevronUp, Loader2, RefreshCw, Sparkles } from "lucide-react";
+import { ChevronDown, ChevronUp, Loader2, RefreshCw } from "lucide-react";
 import { useLawSummary } from "../hooks/law-viewer/useLawSummary.js";
 import { useI18n } from "../i18n/useI18n.js";
 import { Button } from "./Button.jsx";
+import { Chip } from "./ui/Chip.jsx";
 
-function CitationChips({ citations, onArticleClick }) {
-  if (!citations?.length) return null;
+function GoldSparkle({ size = 15 }) {
   return (
-    <span className="ml-2 inline-flex flex-wrap gap-1 align-middle">
-      {citations.map((article) => (
-        <button
-          key={article}
-          type="button"
-          onClick={() => onArticleClick?.(article)}
-          className="inline-flex items-center rounded border border-blue-200 bg-blue-50 px-1.5 py-0.5 font-mono text-[11px] font-medium text-blue-700 transition hover:border-blue-300 hover:bg-blue-100 dark:border-blue-800 dark:bg-blue-950/40 dark:text-blue-300 dark:hover:border-blue-700"
-        >
-          Art. {article}
-        </button>
-      ))}
-    </span>
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" className="shrink-0 text-eu-gold dark:text-eu-gold-bright">
+      <path d="M12 2l1.8 6.2L20 10l-6.2 1.8L12 18l-1.8-6.2L4 10l6.2-1.8z" />
+    </svg>
   );
 }
 
-function CitedText({ block, onArticleClick }) {
+function CitationChips({ citations, onArticleClick, t }) {
+  if (!citations?.length) return null;
+  return citations.map((article) => (
+    <Chip
+      key={article}
+      onClick={() => onArticleClick?.(article)}
+      className="ml-1 align-baseline"
+    >
+      {t("lawViewer.artShort")} {article}
+    </Chip>
+  ));
+}
+
+function CitedText({ block, onArticleClick, t }) {
   if (!block?.text) return null;
   return (
     <span>
       {block.text}
-      <CitationChips citations={block.citations} onArticleClick={onArticleClick} />
+      <CitationChips citations={block.citations} onArticleClick={onArticleClick} t={t} />
     </span>
   );
 }
 
-export function LawSummary({ celex, lang = "EN", onArticleClick, className = "mb-6 border-y border-blue-100 py-3 dark:border-blue-950/70" }) {
-  const { t } = useI18n();
+function SectionLabel({ children }) {
+  return (
+    <div className="mb-1 text-[10.5px] font-semibold uppercase tracking-[0.12em] text-eu-gold-deep dark:text-eu-gold-bright">
+      {children}
+    </div>
+  );
+}
+
+export function LawSummary({ celex, lang = "EN", onArticleClick, className = "rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900" }) {
+  const { t, locale } = useI18n();
   const [open, setOpen] = useState(true);
   const { summary, metadata, loading, loaded, error, retry } = useLawSummary(celex);
   const showEnglishOnlyNote = (lang || "EN").toUpperCase() !== "EN";
@@ -46,16 +58,17 @@ export function LawSummary({ celex, lang = "EN", onArticleClick, className = "mb
         type="button"
         onClick={() => setOpen((current) => !current)}
         aria-expanded={open}
-        className="flex w-full items-center justify-between gap-4 text-left"
+        className="flex w-full items-center gap-3 border-b border-gray-100 px-5 py-3 text-left dark:border-gray-800"
       >
-        <span className="flex min-w-0 items-center gap-2">
-          <Sparkles size={16} className="shrink-0 text-blue-700 dark:text-blue-300" />
-          <span className="font-semibold text-gray-900 dark:text-gray-100">AI Overview</span>
-          {showEnglishOnlyNote ? (
-            <span className="shrink-0 rounded border border-gray-200 px-1.5 py-0.5 text-[11px] font-medium text-gray-500 dark:border-gray-700 dark:text-gray-400">
-              English only
-            </span>
-          ) : null}
+        <GoldSparkle />
+        <span className="font-semibold text-gray-900 dark:text-gray-100">{t("lawSummary.title")}</span>
+        {showEnglishOnlyNote ? (
+          <span className="shrink-0 rounded border border-gray-200 px-1.5 py-0.5 text-[11px] font-medium text-gray-500 dark:border-gray-700 dark:text-gray-400">
+            {t("lawSummary.englishOnly")}
+          </span>
+        ) : null}
+        <span className="ml-auto hidden shrink-0 text-[11.5px] text-gray-400 dark:text-gray-500 sm:inline">
+          {t("lawSummary.verifyNote")}
         </span>
         <span className="shrink-0 text-gray-500 dark:text-gray-400">
           {open ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
@@ -63,17 +76,17 @@ export function LawSummary({ celex, lang = "EN", onArticleClick, className = "mb
       </button>
 
       {open ? (
-        <div className="mt-4 space-y-4 text-sm leading-6 text-gray-700 dark:text-gray-300">
+        <div className="space-y-4 px-5 py-4 text-sm leading-6 text-gray-700 dark:text-gray-300">
           {loading && !loaded ? (
             <div className="flex items-center gap-2 text-gray-500 dark:text-gray-400">
               <Loader2 size={14} className="animate-spin" />
-              Generating overview
+              {t("lawSummary.generating")}
             </div>
           ) : null}
 
           {error ? (
             <div className="flex flex-wrap items-center justify-between gap-3 border-l-2 border-amber-300 pl-3 text-amber-800 dark:border-amber-700 dark:text-amber-200">
-              <span>Overview is not available for this law yet.</span>
+              <span>{t("lawSummary.unavailable")}</span>
               <Button type="button" variant="outline" size="sm" onClick={retry}>
                 <RefreshCw size={14} />
                 {t("common.retry")}
@@ -84,23 +97,36 @@ export function LawSummary({ celex, lang = "EN", onArticleClick, className = "mb
           {summary ? (
             <>
               <div>
-                <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Purpose</div>
-                <p><CitedText block={summary.purpose} onArticleClick={onArticleClick} /></p>
+                <SectionLabel>{t("lawSummary.purpose")}</SectionLabel>
+                <p><CitedText block={summary.purpose} onArticleClick={onArticleClick} t={t} /></p>
               </div>
 
               <div>
-                <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Scope</div>
-                <p><CitedText block={summary.scope} onArticleClick={onArticleClick} /></p>
+                <SectionLabel>{t("lawSummary.scope")}</SectionLabel>
+                <p><CitedText block={summary.scope} onArticleClick={onArticleClick} t={t} /></p>
               </div>
 
               {summary.keyPoints?.length ? (
                 <div>
-                  <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Key Points</div>
-                  <ul className="space-y-1.5">
+                  <SectionLabel>{t("lawSummary.keyPoints")}</SectionLabel>
+                  <ul className="space-y-2">
                     {summary.keyPoints.map((item, index) => (
-                      <li key={`${item.text}-${index}`} className="flex gap-2">
-                        <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-blue-500 dark:bg-blue-400" />
-                        <span><CitedText block={item} onArticleClick={onArticleClick} /></span>
+                      <li key={`${item.text}-${index}`} className="flex items-baseline gap-2.5">
+                        <span className="h-1.5 w-1.5 shrink-0 translate-y-1 rounded-full bg-eu-gold dark:bg-eu-gold-bright" />
+                        <span className="min-w-0 flex-1">{item.text}</span>
+                        {item.citations?.length ? (
+                          <span className="ml-auto shrink-0 space-x-1 pl-3 text-right">
+                            {item.citations.map((article) => (
+                              <Chip
+                                key={article}
+                                onClick={() => onArticleClick?.(article)}
+                                className="align-baseline"
+                              >
+                                {t("lawViewer.artShort")} {article}
+                              </Chip>
+                            ))}
+                          </span>
+                        ) : null}
                       </li>
                     ))}
                   </ul>
@@ -109,14 +135,14 @@ export function LawSummary({ celex, lang = "EN", onArticleClick, className = "mb
 
               {summary.structure ? (
                 <div>
-                  <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Structure</div>
+                  <SectionLabel>{t("lawSummary.structure")}</SectionLabel>
                   <p>{summary.structure}</p>
                 </div>
               ) : null}
 
               {summary.relatedInstruments?.length ? (
                 <div>
-                  <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Related Instruments</div>
+                  <SectionLabel>{t("lawSummary.relatedInstruments")}</SectionLabel>
                   <ul className="space-y-1.5">
                     {summary.relatedInstruments.map((item, index) => (
                       <li key={`${item.label}-${index}`}>
@@ -131,7 +157,9 @@ export function LawSummary({ celex, lang = "EN", onArticleClick, className = "mb
 
               {metadata?.generatedAt ? (
                 <div className="pt-1 text-[11px] text-gray-400 dark:text-gray-500">
-                  Static summary generated {new Date(metadata.generatedAt).toLocaleDateString("en-GB")}
+                  {t("lawSummary.generatedOn", {
+                    date: new Date(metadata.generatedAt).toLocaleDateString(locale === "en" ? "en-GB" : locale),
+                  })}
                 </div>
               ) : null}
             </>

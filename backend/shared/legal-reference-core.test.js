@@ -8,7 +8,7 @@ const {
   parseInstrumentIdentifier,
   resolveInstrumentCelex,
   scanArticleEnumerations,
-} = require('./legal-reference-core.cjs');
+} = require('./legal-reference-core.mjs');
 
 test('shared scanner expands lists, bounded ranges, and abbreviated points', () => {
   const list = scanArticleEnumerations('Articles 12 to 15 and Article 18(2), point (g)');

@@ -15,20 +15,19 @@
 
 import { getLangConfig, buildMeansRegex, buildFallbackDefRegex } from "./languages.mjs";
 import { buildEurlexSearchUrl } from "./url.mjs";
-import legalReferenceCore from "../legal-reference-core.cjs";
-
-const {
+import {
   ACT_CELEX_MAP,
   MAX_ARTICLE_ACT_BRIDGE,
   bindArticleRefsToExternalRefs,
   bindThereofArticleRefs,
   enforceInternalReferenceIntegrity,
+  isArticleOfActBridge as coreIsArticleOfActBridge,
   parseInstrumentIdentifier,
   referenceDedupeKey,
   resolveInstrumentCelex,
-  scanArticleEnumerations: scanSharedArticleEnumerations,
+  scanArticleEnumerations as scanSharedArticleEnumerations,
   stripInvalidArticleLinks,
-} = legalReferenceCore;
+} from "../legal-reference-core.mjs";
 
 /**
  * Bump this whenever the parser output changes (new fields, bug fixes, etc.)
@@ -829,7 +828,7 @@ function getArticleGrammar(lang) {
 // point (g), of "). Capping the gap keeps the merge from doing expensive string
 // work on far-apart article/act pairs (which made it O(n²) on long article text).
 function isArticleOfActBridge(gap, langCode) {
-  return legalReferenceCore.isArticleOfActBridge(
+  return coreIsArticleOfActBridge(
     gap,
     getArticleExternalConnectorWord(langCode),
   );

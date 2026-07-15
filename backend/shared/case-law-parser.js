@@ -17,7 +17,7 @@ const {
   hydrateContextualRefs,
   resolveInstrumentCelex,
   scanArticleEnumerations: scanSharedArticleEnumerations,
-} = require('./legal-reference-core.cjs');
+} = require('./legal-reference-core.mjs');
 
 function cleanText(text) {
   return String(text || '').replace(/[\s\n\t]+/g, ' ').trim();

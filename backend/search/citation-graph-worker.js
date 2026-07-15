@@ -4,6 +4,7 @@ const { buildCitationGraph } = require("./citation-graph-build");
 buildCitationGraph({
   files: workerData.files,
   maxXmlBytes: workerData.maxXmlBytes,
+  maxHtmlBytes: workerData.maxHtmlBytes,
   searchCachePath: workerData.searchCachePath,
   outputPath: null,
   htmlTreeSkipped: 0,

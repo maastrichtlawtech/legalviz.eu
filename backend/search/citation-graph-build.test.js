@@ -5,16 +5,21 @@ const os = require("node:os");
 const path = require("node:path");
 const test = require("node:test");
 
-const { buildCitationGraph, buildCitationGraphBatched, DEFAULT_MAX_XML_BYTES, formatSummaryReport, listCorpusFiles, parseCliArgs, sourceUnitTypeFor, stripCompleteUppercaseAnnexes } = require("./citation-graph-build");
+const { buildCitationGraph, buildCitationGraphBatched, DEFAULT_MAX_XML_BYTES, GRAPH_VERSION, formatSummaryReport, listCorpusFiles, parseCliArgs, sourceUnitTypeFor, stripCompleteUppercaseAnnexes } = require("./citation-graph-build");
 
 test("CLI options and source unit types are normalized", () => {
   assert.equal(DEFAULT_MAX_XML_BYTES, 1024 * 1024);
   assert.deepEqual(parseCliArgs(["--corpusDir", "/corpus", "--out", "/graph.json", "--limit", "20", "--fromYear", "2010", "--toYear", "2020", "--maxXmlBytes", "1024", "--batchSize", "25"]), {
     corpusDir: "/corpus", outputPath: "/graph.json", limit: 20, fromYear: 2010, toYear: 2020, maxXmlBytes: 1024, batchSize: 25,
   });
+  assert.deepEqual(parseCliArgs(["--noHtml", "--htmlDir", "/html", "--maxHtmlBytes", "2048"]), {
+    includeHtml: false, htmlDir: "/html", maxHtmlBytes: 2048,
+  });
   assert.throws(() => parseCliArgs(["--limit", "0"]), /Invalid value/);
   assert.throws(() => parseCliArgs(["--maxXmlBytes", "0"]), /Invalid value/);
+  assert.throws(() => parseCliArgs(["--maxHtmlBytes", "0"]), /Invalid value/);
   assert.throws(() => parseCliArgs(["--batchSize", "0"]), /Invalid value/);
+  assert.throws(() => parseCliArgs(["--bogus", "1"]), /Unknown argument/);
   assert.equal(sourceUnitTypeFor("recital_12"), "recital");
   assert.equal(sourceUnitTypeFor("annex_1"), "annex");
   assert.equal(sourceUnitTypeFor("6"), "article");
@@ -38,7 +43,7 @@ test("listCorpusFiles walks shards deterministically and ignores non-FMX files",
   assert.deepEqual(files.map((file) => path.basename(file)), ["32019L0001.xml.gz", "32020R0002.xml.gz"]);
 });
 
-test("builder dynamically records the skipped sibling HTML corpus", async () => {
+async function writeBothCorpora() {
   const dataDir = await fsp.mkdtemp(path.join(os.tmpdir(), "citation-coverage-"));
   const laws = path.join(dataDir, "laws", "2020");
   const html = path.join(dataDir, "laws-html", "1999");
@@ -47,13 +52,56 @@ test("builder dynamically records the skipped sibling HTML corpus", async () => 
   await fsp.writeFile(path.join(laws, "32020R0001.xml.gz"), "unused");
   await fsp.writeFile(path.join(html, "31999L0001.html.gz"), "unused");
   await fsp.writeFile(path.join(html, "31999L0002.html.gz"), "unused");
+  return dataDir;
+}
+
+// The pre-2000 corpus only exists as HTML, and its citations live in prose rather
+// than <REF.DOC.OJ> markup — so walking it is the only way those acts contribute edges.
+test("builder walks the sibling HTML corpus and edges its prose references", async () => {
+  const dataDir = await writeBothCorpora();
   const artifact = await buildCitationGraph({
     corpusDir: path.join(dataDir, "laws"), outputPath: null,
     legalCache: { isReady: () => true, getByCelex: () => null },
     readXml: async () => "xml", wrapXml: (xml) => xml,
     parseXml: async () => ({ parserVersion: 4, crossReferences: {} }),
+    readHtml: async () => "<html/>",
+    parseHtml: async () => ({
+      parserVersion: 4,
+      crossReferences: { 1: [{ type: "external", targetCelex: "31968R1600", articleNumber: "3", raw: "Regulation (EEC) No 1600/68" }] },
+    }),
   });
+
+  assert.equal(artifact.coverage.legislation.corpusFiles, 3);   // 1 FMX + 2 HTML
+  assert.equal(artifact.coverage.legislation.htmlLaws, 2);
+  assert.equal(artifact.coverage.legislation.htmlTreeSkipped, 0); // walked, not skipped
+  assert.deepEqual(artifact.edges.map((edge) => edge.sourceCelex), ["31999L0001", "31999L0002"]);
+  assert.equal(artifact.edges[0].targetCelex, "31968R1600");
+});
+
+test("builder reports the HTML tree as skipped when --noHtml disables it", async () => {
+  const dataDir = await writeBothCorpora();
+  const artifact = await buildCitationGraph({
+    corpusDir: path.join(dataDir, "laws"), outputPath: null, includeHtml: false,
+    legalCache: { isReady: () => true, getByCelex: () => null },
+    readXml: async () => "xml", wrapXml: (xml) => xml,
+    parseXml: async () => ({ parserVersion: 4, crossReferences: {} }),
+    parseHtml: () => assert.fail("HTML must not be parsed when includeHtml is false"),
+  });
+  assert.equal(artifact.coverage.legislation.corpusFiles, 1);
+  assert.equal(artifact.coverage.legislation.htmlLaws, 0);
   assert.equal(artifact.coverage.legislation.htmlTreeSkipped, 2);
+});
+
+test("builder skips oversized HTML, which has no annex-stripping fallback", async () => {
+  const artifact = await buildCitationGraph({
+    files: ["/fake/31999L0001.html.gz"], outputPath: null, maxHtmlBytes: 8,
+    legalCache: { isReady: () => true, getByCelex: () => null },
+    readHtml: async () => "x".repeat(64),
+    parseHtml: () => assert.fail("oversized HTML must not reach the parser"),
+  });
+  assert.equal(artifact.coverage.legislation.oversizedHtmlSkipped, 1);
+  assert.equal(artifact.stats.parsedLaws, 0);
+  assert.equal(artifact.failures[0].type, "oversized-html");
 });
 
 test("builder skips oversized decompressed XML before parsing and reports progress only when enabled", async () => {
@@ -179,7 +227,7 @@ test("builder resolves, deduplicates, reports failures/unresolved refs, and mark
     now: () => new Date("2026-01-02T03:04:05.000Z"),
   });
 
-  assert.equal(artifact.graphVersion, 1);
+  assert.equal(artifact.graphVersion, GRAPH_VERSION);
   assert.equal(artifact.parserVersion, 4);
   assert.equal(artifact.coverage.caseLaw.status, "partial-cache");
   assert.equal(artifact.stats.parseFailures, 1);

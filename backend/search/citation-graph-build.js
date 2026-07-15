@@ -12,6 +12,10 @@ const { GRAPH_VERSION } = require("./citation-graph-store");
 // applied. At 1 MiB, annex stripping recovers most large acts while keeping
 // both full-DOM and operative-only parses within the empirically safe bound.
 const DEFAULT_MAX_XML_BYTES = 1 * 1024 * 1024;
+// EUR-Lex HTML renditions carry no annexes to strip, so an oversized one has no
+// operative-only fallback — it is simply skipped. The bound is looser than the FMX
+// one because the HTML parser builds a single DOM rather than a full Formex tree.
+const DEFAULT_MAX_HTML_BYTES = 4 * 1024 * 1024;
 const DEFAULT_PROGRESS_INTERVAL = 500;
 const DEFAULT_BATCH_SIZE = 100;
 const DEFAULT_WORKER_HEAP_MB = 768;
@@ -39,6 +43,35 @@ function compareEdges(a, b) {
 
 async function listCorpusFiles(corpusDir, fsApi = fs) {
   return listTreeFiles(corpusDir, ".xml.gz", fsApi);
+}
+
+// The HTML corpus lives beside the FMX one (data/laws -> data/laws-html) and holds
+// the acts EUR-Lex never published as Formex (overwhelmingly pre-2000).
+function htmlCorpusDirFor(corpusDir) {
+  return path.basename(corpusDir) === "laws"
+    ? path.join(path.dirname(corpusDir), "laws-html")
+    : null;
+}
+
+async function listHtmlCorpusFiles(htmlDir, fsApi = fs) {
+  return htmlDir ? listTreeFiles(htmlDir, ".html.gz", fsApi) : [];
+}
+
+// Both corpora are keyed by CELEX, so one combined, year-filterable list drives the
+// build; the per-file handler dispatches on the extension.
+async function listAllCorpusFiles(corpusDir, options = {}, fsApi = fs) {
+  const fmxFiles = await listCorpusFiles(corpusDir, fsApi);
+  if (options.includeHtml === false) return fmxFiles;
+  const htmlDir = options.htmlDir || htmlCorpusDirFor(corpusDir);
+  return [...fmxFiles, ...await listHtmlCorpusFiles(htmlDir, fsApi)];
+}
+
+function isHtmlCorpusFile(file) {
+  return /\.html\.gz$/i.test(String(file));
+}
+
+function celexForCorpusFile(file) {
+  return normalizeCelex(path.basename(file).replace(/\.(?:xml|html)\.gz$/i, ""));
 }
 
 async function listTreeFiles(rootDir, suffix, fsApi = fs) {
@@ -166,24 +199,32 @@ async function writeArtifactAtomic(outputPath, artifact, fsApi = fs) {
 
 function parseCliArgs(argv) {
   const options = {};
+  const valueFlags = ["--corpusDir", "--htmlDir", "--out", "--limit", "--fromYear", "--toYear",
+    "--maxXmlBytes", "--maxHtmlBytes", "--batchSize"];
   for (let index = 0; index < argv.length; index += 1) {
     const flag = argv[index];
-    if (!["--corpusDir", "--out", "--limit", "--fromYear", "--toYear", "--maxXmlBytes", "--batchSize"].includes(flag)) {
+    // --noHtml is the one boolean: it restores the FMX-only graph (and reports the
+    // HTML tree as skipped) for a faster build that ignores the pre-2000 corpus.
+    if (flag === "--noHtml") { options.includeHtml = false; continue; }
+    if (!valueFlags.includes(flag)) {
       throw new Error(`Unknown argument: ${flag}`);
     }
     const value = argv[index += 1];
     if (value == null) throw new Error(`Missing value for ${flag}`);
     if (flag === "--corpusDir") options.corpusDir = value;
+    else if (flag === "--htmlDir") options.htmlDir = value;
     else if (flag === "--out") options.outputPath = value;
     else {
       const number = Number.parseInt(value, 10);
-      if (!Number.isInteger(number) || number < 0 || (["--limit", "--maxXmlBytes", "--batchSize"].includes(flag) && number === 0)) {
+      if (!Number.isInteger(number) || number < 0
+        || (["--limit", "--maxXmlBytes", "--maxHtmlBytes", "--batchSize"].includes(flag) && number === 0)) {
         throw new Error(`Invalid value for ${flag}: ${value}`);
       }
       if (flag === "--limit") options.limit = number;
       if (flag === "--fromYear") options.fromYear = number;
       if (flag === "--toYear") options.toYear = number;
       if (flag === "--maxXmlBytes") options.maxXmlBytes = number;
+      if (flag === "--maxHtmlBytes") options.maxHtmlBytes = number;
       if (flag === "--batchSize") options.batchSize = number;
     }
   }
@@ -193,8 +234,14 @@ function parseCliArgs(argv) {
 async function buildCitationGraph(options = {}) {
   const fsApi = options.fsApi || fs;
   const corpusDir = options.corpusDir || DEFAULT_CORPUS_DIR;
-  const files = filterCorpusFiles(options.files || await listCorpusFiles(corpusDir, fsApi), options);
-  const htmlTreeSkipped = await countHtmlTreeSkipped(corpusDir, options);
+  const files = filterCorpusFiles(
+    options.files || await listAllCorpusFiles(corpusDir, options, fsApi), options);
+  // The HTML tree is only "skipped" when HTML parsing is disabled; otherwise its laws
+  // are in `files` above and counted like any other. An explicit htmlTreeSkipped stays
+  // authoritative either way — shard workers pass 0 and let the merge set the total.
+  const htmlTreeSkipped = options.includeHtml === false
+    ? await countHtmlTreeSkipped(corpusDir, options)
+    : (options.htmlTreeSkipped ?? 0);
   const legalCache = options.legalCache || (() => {
     const { JsonLegalCacheStore } = require("./legal-cache-store");
     return new JsonLegalCacheStore(options.searchCachePath);
@@ -206,19 +253,61 @@ async function buildCitationGraph(options = {}) {
   const parseXml = options.parseXml || require("../shared/fmx-parser-node").parseFmxXml;
   const wrapXml = options.wrapXml || require("./search-build").wrapForParsing;
   const readXml = options.readXml || ((file) => readGzippedXml(file, fsApi));
+  // Lazily required: pulling in the HTML parser (and jsdom) costs real startup time,
+  // so builds that never touch the HTML corpus shouldn't pay for it.
+  const parseHtml = options.parseHtml
+    || ((html) => require("../shared/eurlex-html-parser").parseEurlexHtmlToCombined(html, "ENG"));
+  const readHtml = options.readHtml || ((file) => readGzippedXml(file, fsApi));
   const maxXmlBytes = options.maxXmlBytes ?? DEFAULT_MAX_XML_BYTES;
+  const maxHtmlBytes = options.maxHtmlBytes ?? DEFAULT_MAX_HTML_BYTES;
   const progressInterval = options.progressInterval || DEFAULT_PROGRESS_INTERVAL;
   const progressLog = options.progress ? (options.log || console.log) : null;
   const counters = {
     corpusFiles: files.length, parsedLaws: 0, parseFailures: 0,
     oversizedLawsSkipped: 0, oversizedLawsOperativeOnly: 0, annexElementsOmitted: 0,
+    htmlLaws: 0, oversizedHtmlSkipped: 0,
     externalReferences: 0, unresolvedReferences: 0,
   };
   const failures = [], edges = [], parserVersions = new Set();
+
+  // The HTML renditions carry no <REF.DOC.OJ> markup, so their cross-references come
+  // from the parser's prose grammar instead; the resulting `parsed` shape is the same,
+  // which is why both corpora share legislationEdgesForLaw below.
+  async function collectHtmlLaw(file, sourceCelex) {
+    const html = await readHtml(file);
+    const htmlBytes = Buffer.byteLength(String(html), "utf8");
+    if (htmlBytes > maxHtmlBytes) {
+      counters.oversizedHtmlSkipped += 1;
+      failures.push({
+        celex: sourceCelex, type: "oversized-html", htmlBytes, maxHtmlBytes,
+        error: `Decompressed HTML exceeds ${maxHtmlBytes} bytes`,
+      });
+      return;
+    }
+    const parsed = await parseHtml(html);
+    if (!parsed) {
+      counters.parseFailures += 1;
+      failures.push({ celex: sourceCelex, type: "html", error: "HTML parser returned no document" });
+      return;
+    }
+    counters.parsedLaws += 1;
+    counters.htmlLaws += 1;
+    if (parsed?.parserVersion != null) parserVersions.add(parsed.parserVersion);
+    edges.push(...legislationEdgesForLaw(sourceCelex, parsed, legalCache, counters));
+  }
+
   for (let index = 0; index < files.length; index += 1) {
     const file = files[index];
-    const sourceCelex = normalizeCelex(path.basename(file).replace(/\.xml\.gz$/i, ""));
+    const sourceCelex = celexForCorpusFile(file);
     try {
+      if (isHtmlCorpusFile(file)) {
+        await collectHtmlLaw(file, sourceCelex);
+        const done = index + 1;
+        if (progressLog && (done % progressInterval === 0 || done === files.length)) {
+          progressLog(`[citation-graph] ${done}/${files.length} laws; current=${sourceCelex}; parsed=${counters.parsedLaws}; failed=${counters.parseFailures}; html=${counters.htmlLaws}; oversized-html-skipped=${counters.oversizedHtmlSkipped}`);
+        }
+        continue;
+      }
       const xml = await readXml(file);
       const xmlBytes = Buffer.byteLength(String(xml), "utf8");
       if (xmlBytes > maxXmlBytes) {
@@ -272,7 +361,8 @@ async function buildCitationGraph(options = {}) {
   const caseData = options.caseLawData !== undefined ? options.caseLawData
     : await readCaseLawCache(options.caseLawCachePath, fsApi);
   const artifact = assembleArtifact({
-    counters, failures, edges, parserVersions, htmlTreeSkipped, maxXmlBytes, caseData, now: options.now,
+    counters, failures, edges, parserVersions, htmlTreeSkipped, maxXmlBytes, maxHtmlBytes,
+    caseData, now: options.now,
   });
   const outputPath = options.outputPath === undefined ? DEFAULT_CITATION_GRAPH_PATH : options.outputPath;
   if (outputPath) await writeArtifactAtomic(outputPath, artifact, fsApi);
@@ -303,7 +393,7 @@ async function countHtmlTreeSkipped(corpusDir, options = {}) {
 // single-process builder and the batched shard merge so their output stays
 // byte-identical (JSON.stringify key order is asserted by the tests). Case-law
 // edges are folded in here (before dedup) so both callers get them once.
-function assembleArtifact({ counters, failures, edges, parserVersions, htmlTreeSkipped, maxXmlBytes, caseData, now }) {
+function assembleArtifact({ counters, failures, edges, parserVersions, htmlTreeSkipped, maxXmlBytes, maxHtmlBytes, caseData, now }) {
   const allEdges = [...edges, ...caseLawEdges(caseData)];
   const deduped = [...new Map(allEdges.map((edge) => [edgeKey(edge), edge])).values()].sort(compareEdges);
   const versions = [...parserVersions].sort();
@@ -318,6 +408,9 @@ function assembleArtifact({ counters, failures, edges, parserVersions, htmlTreeS
         oversizedLawsOperativeOnly: counters.oversizedLawsOperativeOnly,
         annexElementsOmitted: counters.annexElementsOmitted,
         annexCoverage: counters.oversizedLawsOperativeOnly > 0 ? "partial-operative-only" : "full-for-parsed-fmx",
+        htmlLaws: counters.htmlLaws || 0,
+        oversizedHtmlSkipped: counters.oversizedHtmlSkipped || 0,
+        maxHtmlBytes: maxHtmlBytes ?? DEFAULT_MAX_HTML_BYTES,
       },
       caseLaw: { status: caseData ? "partial-cache" : "not-included", judgments: caseData ? Object.keys(caseData).length : 0 },
     },
@@ -364,7 +457,8 @@ function runCitationGraphWorker(files, options = {}) {
 function mergeCitationGraphShards(shards, options = {}) {
   const counterNames = [
     "corpusFiles", "parsedLaws", "parseFailures", "oversizedLawsSkipped",
-    "oversizedLawsOperativeOnly", "annexElementsOmitted", "externalReferences", "unresolvedReferences",
+    "oversizedLawsOperativeOnly", "annexElementsOmitted", "htmlLaws", "oversizedHtmlSkipped",
+    "externalReferences", "unresolvedReferences",
   ];
   const counters = Object.fromEntries(counterNames.map((name) => [name, 0]));
   const failures = [];
@@ -381,6 +475,7 @@ function mergeCitationGraphShards(shards, options = {}) {
     counters, failures, edges, parserVersions,
     htmlTreeSkipped: options.htmlTreeSkipped || 0,
     maxXmlBytes: options.maxXmlBytes ?? DEFAULT_MAX_XML_BYTES,
+    maxHtmlBytes: options.maxHtmlBytes ?? DEFAULT_MAX_HTML_BYTES,
     caseData: options.caseLawData, now: options.now,
   });
 }
@@ -388,10 +483,13 @@ function mergeCitationGraphShards(shards, options = {}) {
 async function buildCitationGraphBatched(options = {}) {
   const fsApi = options.fsApi || fs;
   const corpusDir = options.corpusDir || DEFAULT_CORPUS_DIR;
-  const allFiles = options.files || await listCorpusFiles(corpusDir, fsApi);
+  const allFiles = options.files || await listAllCorpusFiles(corpusDir, options, fsApi);
   const files = filterCorpusFiles(allFiles, options);
-  const htmlTreeSkipped = await countHtmlTreeSkipped(corpusDir, options);
+  const htmlTreeSkipped = options.includeHtml === false
+    ? await countHtmlTreeSkipped(corpusDir, options)
+    : (options.htmlTreeSkipped ?? 0);
   const maxXmlBytes = options.maxXmlBytes ?? DEFAULT_MAX_XML_BYTES;
+  const maxHtmlBytes = options.maxHtmlBytes ?? DEFAULT_MAX_HTML_BYTES;
   const batchSize = options.batchSize || DEFAULT_BATCH_SIZE;
   const workerRunner = options.workerRunner || runCitationGraphWorker;
   const shards = [];
@@ -401,11 +499,12 @@ async function buildCitationGraphBatched(options = {}) {
   async function processBatch(batch) {
     try {
       const shard = await workerRunner(batch, {
-        maxXmlBytes, searchCachePath: options.searchCachePath, workerHeapMb: options.workerHeapMb,
+        maxXmlBytes, maxHtmlBytes, searchCachePath: options.searchCachePath,
+        workerHeapMb: options.workerHeapMb,
       });
       shards.push(shard);
       processed += batch.length;
-      if (progressLog) progressLog(`[citation-graph] ${processed}/${files.length} laws completed in isolated workers; last=${path.basename(batch[batch.length - 1]).replace(/\.xml\.gz$/i, "")}`);
+      if (progressLog) progressLog(`[citation-graph] ${processed}/${files.length} laws completed in isolated workers; last=${celexForCorpusFile(batch[batch.length - 1])}`);
     } catch (error) {
       if (batch.length > 1) {
         const middle = Math.floor(batch.length / 2);
@@ -413,7 +512,7 @@ async function buildCitationGraphBatched(options = {}) {
         await processBatch(batch.slice(middle));
         return;
       }
-      const celex = normalizeCelex(path.basename(batch[0]).replace(/\.xml\.gz$/i, ""));
+      const celex = celexForCorpusFile(batch[0]);
       shards.push({
         parserVersion: null,
         stats: { corpusFiles: 1, parseFailures: 1 },
@@ -431,7 +530,7 @@ async function buildCitationGraphBatched(options = {}) {
   const caseData = options.caseLawData !== undefined ? options.caseLawData
     : await readCaseLawCache(options.caseLawCachePath, fsApi);
   const artifact = mergeCitationGraphShards(shards, {
-    caseLawData: caseData, htmlTreeSkipped, maxXmlBytes, now: options.now,
+    caseLawData: caseData, htmlTreeSkipped, maxXmlBytes, maxHtmlBytes, now: options.now,
   });
   const outputPath = options.outputPath === undefined ? DEFAULT_CITATION_GRAPH_PATH : options.outputPath;
   if (outputPath) await writeArtifactAtomic(outputPath, artifact, fsApi);
@@ -473,6 +572,7 @@ function formatSummaryReport(artifact) {
   const lines = [
     `Citation graph: ${artifact.stats.edges} edges (${artifact.stats.legislationEdges} legislation, ${artifact.stats.judgmentEdges} judgments)`,
     `Corpus: ${artifact.stats.parsedLaws}/${artifact.stats.corpusFiles} laws parsed; ${artifact.stats.parseFailures} failed; ${artifact.stats.oversizedLawsSkipped} oversized skipped; ${artifact.stats.oversizedLawsOperativeOnly} operative-only (${artifact.stats.annexElementsOmitted} annexes omitted); ${artifact.coverage.legislation.htmlTreeSkipped} HTML laws skipped`,
+    `HTML corpus: ${artifact.coverage.legislation.htmlLaws} laws parsed from prose; ${artifact.coverage.legislation.oversizedHtmlSkipped} oversized skipped`,
     `References: ${artifact.stats.resolvedReferences} resolved; ${artifact.stats.unresolvedReferences} unresolved`,
     "Top cited articles:",
     ...summary.topArticles.map((entry, index) => `  ${index + 1}. ${entry.target} — ${entry.count}`),
@@ -500,8 +600,10 @@ if (require.main === module) {
 }
 
 module.exports = { DEFAULT_BATCH_SIZE, DEFAULT_CITATION_GRAPH_PATH, DEFAULT_CORPUS_DIR, DEFAULT_MAX_XML_BYTES,
-  GRAPH_VERSION, buildCitationGraph, buildCitationGraphBatched, countHtmlTreeSkipped, filterCorpusFiles,
-  caseLawEdges, edgeKey, formatSummaryReport, legislationEdgesForLaw, listCorpusFiles, listTreeFiles,
+  DEFAULT_MAX_HTML_BYTES, GRAPH_VERSION, buildCitationGraph, buildCitationGraphBatched, celexForCorpusFile,
+  countHtmlTreeSkipped, filterCorpusFiles, htmlCorpusDirFor, isHtmlCorpusFile,
+  caseLawEdges, edgeKey, formatSummaryReport, legislationEdgesForLaw, listAllCorpusFiles, listCorpusFiles,
+  listHtmlCorpusFiles, listTreeFiles,
   mergeCitationGraphShards, parseCliArgs, rankedTargets, resolveExternalReference, runCitationGraphWorker,
   sourceUnitTypeFor, stripCompleteUppercaseAnnexes,
   summarizeArtifact, writeArtifactAtomic };

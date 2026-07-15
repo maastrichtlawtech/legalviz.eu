@@ -5,7 +5,7 @@ const path = require("node:path");
 const zlib = require("node:zlib");
 const test = require("node:test");
 
-const { CitationGraphStore } = require("./citation-graph-store");
+const { CitationGraphStore, GRAPH_VERSION } = require("./citation-graph-store");
 
 function writeGraph(payload) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "citation-store-"));
@@ -37,19 +37,19 @@ test("store loads the gzipped artifact when the raw file is absent", () => {
   // JSON exists only after a local rebuild and must win when both are present.
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "citation-store-gz-"));
   const graphPath = path.join(dir, "citation-graph.json");
-  fs.writeFileSync(`${graphPath}.gz`, zlib.gzipSync(JSON.stringify({ graphVersion: 1, stats: { edges: 4 }, edges })));
+  fs.writeFileSync(`${graphPath}.gz`, zlib.gzipSync(JSON.stringify({ graphVersion: GRAPH_VERSION, stats: { edges: 4 }, edges })));
 
   const store = new CitationGraphStore(graphPath);
   assert.equal(store.load(), true);
   assert.deepEqual(store.getActCitations("32016R0679").totals, { provisions: 2, judgments: 1, total: 3 });
 
-  fs.writeFileSync(graphPath, JSON.stringify({ graphVersion: 1, stats: { edges: 0 }, edges: [] }));
+  fs.writeFileSync(graphPath, JSON.stringify({ graphVersion: GRAPH_VERSION, stats: { edges: 0 }, edges: [] }));
   assert.equal(store.load(), true);
   assert.equal(store.getStatus().edges, 0);
 });
 
 test("article queries count distinct sources and paginate the combined result", () => {
-  const store = new CitationGraphStore(writeGraph({ graphVersion: 1, parserVersion: 4, stats: { edges: 4 }, edges }));
+  const store = new CitationGraphStore(writeGraph({ graphVersion: GRAPH_VERSION, parserVersion: 4, stats: { edges: 4 }, edges }));
   assert.equal(store.load(), true);
   const first = store.getArticleCitations("32016r0679", "6", { limit: 1 });
   assert.deepEqual(first.counts, { provisions: 1, judgments: 1, total: 2 });
@@ -68,7 +68,7 @@ test("article query public units remove recital and annex storage prefixes only"
     { kind: "legislation", sourceCelex: "32024R0003", sourceTitle: "Annex source", sourceUnitType: "annex", sourceUnit: "annex_I", targetCelex: "32016R0679", targetArticle: "6" },
     { kind: "legislation", sourceCelex: "32024R0004", sourceTitle: "Malformed source", sourceUnitType: "recital", sourceUnit: "recital_", targetCelex: "32016R0679", targetArticle: "6" },
   ];
-  const store = new CitationGraphStore(writeGraph({ graphVersion: 1, edges: sourceEdges }));
+  const store = new CitationGraphStore(writeGraph({ graphVersion: GRAPH_VERSION, edges: sourceEdges }));
   assert.equal(store.load(), true);
 
   const result = store.getArticleCitations("32016R0679", "6", { limit: 10 });
@@ -81,7 +81,7 @@ test("article query public units remove recital and annex storage prefixes only"
 });
 
 test("act query separates act-only references from article references", () => {
-  const store = new CitationGraphStore(writeGraph({ graphVersion: 1, edges }));
+  const store = new CitationGraphStore(writeGraph({ graphVersion: GRAPH_VERSION, edges }));
   store.load();
   assert.deepEqual(store.getActCitations("32016R0679"), {
     celex: "32016R0679",
@@ -101,7 +101,7 @@ test("act query dedups a provision citing both the act and an article across sub
     { kind: "legislation", sourceCelex: "32024R0009", sourceTitle: "Dual citer", sourceUnitType: "article", sourceUnit: "3", targetCelex: "32016R0679", targetArticle: null, targetParagraph: null, targetPoint: null },
     { kind: "legislation", sourceCelex: "32024R0009", sourceTitle: "Dual citer", sourceUnitType: "article", sourceUnit: "3", targetCelex: "32016R0679", targetArticle: "6", targetParagraph: null, targetPoint: null },
   ];
-  const store = new CitationGraphStore(writeGraph({ graphVersion: 1, edges: overlappingEdges }));
+  const store = new CitationGraphStore(writeGraph({ graphVersion: GRAPH_VERSION, edges: overlappingEdges }));
   assert.equal(store.load(), true);
   const result = store.getActCitations("32016R0679");
   assert.deepEqual(result.actOnly, { provisions: 1, judgments: 0, total: 1 });

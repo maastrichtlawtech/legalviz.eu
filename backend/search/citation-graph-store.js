@@ -1,7 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const zlib = require("zlib");
-const GRAPH_VERSION = 1;
+const GRAPH_VERSION = 2;
 
 const DEFAULT_CITATION_GRAPH_PATH = path.join(__dirname, "data", "citation-graph.json");
 const normalize = (value) => String(value == null ? "" : value).trim().toUpperCase();

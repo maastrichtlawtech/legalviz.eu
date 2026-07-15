@@ -116,11 +116,37 @@ export async function saveLawMeta(entry) {
   return saved;
 }
 
-export async function markLawOpened(celex) {
+const VALID_POSITION_KINDS = new Set(["article", "recital", "annex"]);
+
+function normalizeLastPosition(position) {
+  if (!position || typeof position !== "object") return null;
+
+  const kind = String(position.kind || "").trim().toLowerCase();
+  if (!VALID_POSITION_KINDS.has(kind)) return null;
+
+  const id = position.id == null ? "" : String(position.id).trim();
+  if (!id) return null;
+
+  const normalized = { kind, id };
+  if (Number.isFinite(position.total) && position.total > 0) {
+    normalized.total = position.total;
+  }
+  return normalized;
+}
+
+// Records that a law was opened. `position` is optional; when supplied it is
+// persisted as an additive `lastPosition` field so the library can offer a
+// "Resume at Art. N" deep-link. When omitted, any previously stored
+// lastPosition is preserved (upsertLawMeta merges, so leaving it out of the
+// update never clobbers it).
+export async function markLawOpened(celex, position = null) {
   if (!celex) return null;
-  const saved = await upsertLawMeta(celex, {
-    lastOpened: Date.now(),
-  });
+  const updates = { lastOpened: Date.now() };
+  const normalizedPosition = normalizeLastPosition(position);
+  if (normalizedPosition) {
+    updates.lastPosition = normalizedPosition;
+  }
+  const saved = await upsertLawMeta(celex, updates);
   dispatchLibraryUpdate();
   return saved;
 }
@@ -168,6 +194,7 @@ export async function getLibraryLaws() {
       topics: Array.isArray(meta?.topics) ? meta.topics : null,
       addedAt: meta?.addedAt || 0,
       timestamp: meta?.lastOpened || null,
+      lastPosition: meta?.lastPosition || null,
       route: getCanonicalLawRoute(candidate),
     };
   });

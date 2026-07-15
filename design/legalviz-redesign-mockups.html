@@ -402,6 +402,83 @@ section.shot{margin-top:72px}
 .win p{margin:0;font-size:13.5px;color:var(--muted);line-height:1.55}
 .win code{font-family:var(--mono);font-size:12px;color:var(--gold-deep)}
 
+/* ============ metadata cards (mock-up 2) ============ */
+.meta-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:22px}
+.mcard{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:13px 16px 11px;box-shadow:var(--shadow);position:relative}
+.mcard .mh{display:flex;align-items:baseline;gap:8px;margin-bottom:6px}
+.mcard .mh b{font-size:13px}
+.mcard .mh .cnt{font-size:11px;color:var(--faint);font-family:var(--mono)}
+.mcard .row{display:flex;gap:8px;align-items:baseline;padding:7px 0;border-top:1px solid var(--line-soft);font-size:12px;color:var(--muted)}
+.mcard .row .id{font-family:var(--mono);font-size:11px;color:var(--ink)}
+.mcard .row .d{margin-left:auto;color:var(--faint);font-size:11px;white-space:nowrap}
+.mcard .empty{font-size:12px;color:var(--faint);font-style:italic;padding:8px 0 6px;border-top:1px solid var(--line-soft)}
+.mcard .more{font-size:11.5px;color:var(--link);padding:7px 0 0;border-top:1px solid var(--line-soft)}
+.pill.corr{background:var(--gold-soft);color:var(--gold-deep)}
+.pill.act{background:var(--blue-soft);color:var(--blue)}
+.pill.off{background:var(--line-soft);color:var(--faint)}
+
+/* ============ mock-up 4 : parallel languages ============ */
+.rail-mini{
+  width:54px;flex:none;border-right:1px solid var(--line);background:var(--panel);
+  min-height:700px;display:flex;flex-direction:column;align-items:center;gap:4px;padding:18px 0;
+}
+.rail-mini .ico{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;color:var(--faint);font-size:14px}
+.rail-mini .rn2{font-family:var(--serif);font-style:italic;font-size:13px;color:var(--faint);width:32px;height:28px;display:flex;align-items:center;justify-content:center;border-radius:7px}
+.rail-mini .rn2.on{background:var(--gold-soft);color:var(--gold-deep);font-weight:700}
+.bi-wrap{flex:1;min-width:0;padding:38px 46px 30px;position:relative}
+.bi-langbar{display:flex;align-items:center;gap:12px;margin:0 0 26px}
+.lang-seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;font-size:12.5px;background:var(--panel)}
+.lang-seg span{padding:6px 14px;color:var(--muted);border-left:1px solid var(--line)}
+.lang-seg span:first-child{border-left:0}
+.lang-seg .on{background:var(--blue-soft);color:var(--blue);font-weight:600}
+.bi-langbar .hint{font-size:11.5px;color:var(--faint)}
+.bi-row{display:grid;grid-template-columns:40px 1fr 1fr;gap:0 30px;align-items:baseline}
+.bi-row .pn2{color:var(--faint);font-family:var(--sans);font-weight:600;font-size:13.5px}
+.bi-row .cell{font-family:var(--serif);font-size:15.5px;line-height:1.72;color:var(--ink);padding-bottom:16px}
+.bi-row.head .cell{font-family:var(--serif);font-style:italic;font-size:18px;color:var(--muted);padding-bottom:18px}
+.ltag{font-size:10px;letter-spacing:.12em;font-weight:600;color:var(--faint);text-transform:uppercase;font-family:var(--sans);font-style:normal;display:block;margin-bottom:4px}
+
+/* case-law cards */
+.ai-btn{display:flex;align-items:center;gap:8px;border:1px dashed var(--gold);color:var(--gold-deep);border-radius:9px;padding:8px 12px;font-size:12px;margin-bottom:12px;background:var(--gold-soft)}
+.case{border:1px solid var(--line-soft);border-radius:9px;padding:11px 13px;margin-bottom:10px;background:var(--bg)}
+.case .ch2{display:flex;gap:8px;align-items:baseline}
+.case .ref2{font-family:var(--mono);font-size:11px;color:var(--blue);white-space:nowrap}
+.case b{font-size:12.5px}
+.case .d{margin-left:auto;font-size:10.5px;color:var(--faint);white-space:nowrap}
+.case p{margin:5px 0 0;font-size:12px;line-height:1.55;color:var(--muted)}
+.ctx-more{font-size:12px;color:var(--link);text-align:center;padding:4px 0 2px}
+
+/* ============ mock-up 5 : search palette ============ */
+.pal-back{min-height:620px;padding:64px 0;background:
+  linear-gradient(rgba(16,20,38,.42),rgba(16,20,38,.5)),var(--bg)}
+.pal{
+  width:660px;margin:0 auto;background:var(--panel);border:1px solid var(--line);
+  border-radius:14px;box-shadow:0 30px 90px -20px rgba(0,0,0,.5);overflow:visible;position:relative;
+}
+.pal-input{display:flex;align-items:center;gap:12px;padding:16px 20px;border-bottom:1px solid var(--line);font-size:16.5px}
+.pal-input .q{color:var(--ink)}
+.pal-input .caret{display:inline-block;width:1.5px;height:19px;background:var(--blue);transform:translateY(4px)}
+.pal-input .esc{margin-left:auto;font-family:var(--mono);font-size:10px;border:1px solid var(--line);border-radius:4px;padding:1px 6px;color:var(--faint)}
+.pal-modes{display:flex;align-items:center;gap:12px;padding:10px 20px;border-bottom:1px solid var(--line-soft);position:relative}
+.seg{display:inline-flex;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:2px}
+.seg span{padding:4px 13px;border-radius:6px;color:var(--muted);font-size:12px}
+.seg .on{background:var(--panel);color:var(--ink);font-weight:600;box-shadow:0 1px 2px rgba(0,0,0,.1)}
+.pal-modes .scope{font-size:11.5px;color:var(--faint)}
+.pal-group{padding:8px 10px 4px}
+.pal-glabel{font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--faint);padding:6px 12px 4px;font-weight:600}
+.hit{display:flex;gap:12px;padding:10px 12px;border-radius:9px;align-items:flex-start;position:relative}
+.hit.on{background:var(--blue-soft)}
+.hit .body{flex:1;min-width:0}
+.hit h5{font-family:var(--serif);font-size:15.5px;margin:0 0 1px;font-weight:700}
+.hit .sub{font-size:12px;color:var(--muted);line-height:1.45}
+.hit .meta2{font-size:10.5px;color:var(--faint);font-family:var(--mono);margin-top:3px}
+.hit .side{flex:none;padding-top:2px}
+.hit.dead h5{color:var(--faint);font-weight:600}
+.hit.dead .sub{color:var(--faint)}
+.pal-foot{display:flex;gap:16px;padding:9px 20px 10px;border-top:1px solid var(--line);font-size:11px;color:var(--faint);align-items:center}
+.pal-foot .r{margin-left:auto}
+.kk{font-family:var(--mono);font-size:10px;border:1px solid var(--line);border-radius:4px;padding:0 5px;background:var(--bg)}
+
 @media (prefers-reduced-motion: reduce){ *{transition:none!important;animation:none!important} }
 </style>
 </head>
@@ -411,7 +488,7 @@ section.shot{margin-top:72px}
   <header class="pitch-head">
     <p class="kicker">Design concepts · July 2026</p>
     <h1 class="title">Redesign mock-ups for LegalViz.EU</h1>
-    <p class="lede">Three annotated screens — <strong>home</strong>, <strong>law overview</strong>, and the <strong>article reader</strong> — keeping everything the tool already does, but giving it a visual identity rooted in EU law (Official-Journal navy &amp; gold, a proper serif for the law itself) and fixing the main way-finding friction: ambiguous weekday labels, shouting all-caps chapter boxes, and context that hides in the sidebar. Toggle your theme — every mock-up is designed for light and dark.</p>
+    <p class="lede">Five annotated screens — <strong>home</strong>, <strong>law overview</strong>, the <strong>article reader</strong>, <strong>parallel languages</strong>, and <strong>search</strong> — keeping everything the tool already does, but giving it a visual identity rooted in EU law (Official-Journal navy &amp; gold, a proper serif for the law itself) and fixing the main way-finding friction: ambiguous weekday labels, shouting all-caps chapter boxes, and context that hides in the sidebar. Toggle your theme — every mock-up is designed for light and dark.</p>
   </header>
 
   <div class="tokens">
@@ -615,6 +692,25 @@ section.shot{margin-top:72px}
                 </ul>
               </div>
             </div>
+
+            <div class="meta-grid">
+              <div class="mcard">
+                <span class="note" style="top:-11px;left:-11px">5</span>
+                <div class="mh"><b>Amendment history</b><span class="cnt">1</span></div>
+                <div class="row"><span class="pill corr">Corr.</span><span class="id">32023R2854R(01)</span><span class="d">25 Jan 2024</span></div>
+                <div class="more">Consolidated text on EUR-Lex →</div>
+              </div>
+              <div class="mcard">
+                <div class="mh"><b>Implementing &amp; delegated acts</b><span class="cnt">0</span></div>
+                <div class="empty">None adopted yet — model contractual terms are expected from the Commission.</div>
+              </div>
+              <div class="mcard">
+                <div class="mh"><b>Linked legislation</b><span class="cnt">28</span></div>
+                <div class="row"><span class="pill act">Reg.</span><span>GDPR — 2016/679</span><span class="d">cited 12×</span></div>
+                <div class="row"><span class="pill act">Reg.</span><span>Data Governance Act — 2022/868</span><span class="d">cited 9×</span></div>
+                <div class="more">Show all 28 →</div>
+              </div>
+            </div>
           </main>
         </div>
       </div></div>
@@ -625,6 +721,7 @@ section.shot{margin-top:72px}
       <li><span class="n">2</span><span><b>Legal status up front.</b> “In force” and “applies from” are the first things a practitioner checks; today they’re absent.</span></li>
       <li><span class="n">3</span><span><b>One jump box instead of two number inputs.</b> Accepts “23”, “art 23” or “rec 40”, with a keyboard shortcut — the paired Article/Recital fields with “Go” buttons become one affordance.</span></li>
       <li><span class="n">4</span><span><b>AI content is labelled as such.</b> A gold spark, an explicit “verify against the official text”, and article chips aligned in a consistent right column instead of floating mid-sentence.</span></li>
+      <li><span class="n">5</span><span><b>Metadata belongs to the law, not the reader.</b> Amendment history, implementing/delegated acts and linked legislation move from the reading sidebar to overview cards — with counts, human labels (“Corr.” not just a CELEX suffix), and honest empty states.</span></li>
     </ul>
   </section>
 
@@ -749,6 +846,194 @@ section.shot{margin-top:72px}
     </ul>
   </section>
 
+  <!-- ==================== MOCK-UP 4 : PARALLEL LANGUAGES ==================== -->
+  <section class="shot">
+    <div class="shot-head"><span class="shot-num">04</span><h2>Parallel languages — one text, two columns, no drift</h2></div>
+    <p class="shot-sub">The bilingual view is a genuinely distinctive feature, but today it renders as two separate cards with duplicated “SECOND LANGUAGE” labels and independently flowing text. Here both versions live in <em>one grid</em>: a single paragraph-number gutter, rows aligned per paragraph, and the contents rail collapses to a strip to protect the reading measure.</p>
+
+    <div class="frame">
+      <div class="frame-bar"><div class="dots"><i></i><i></i><i></i></div><div class="urlbar">legalviz.eu/eli/reg/2016/679/art/1?lang=en,de</div></div>
+      <div class="frame-scroll"><div class="mk">
+
+        <div class="mk-top">
+          <div class="mk-brand">
+            <svg class="starmark" width="24" height="24" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="10" fill="#1c2f6e"/><g fill="#d9ab3c"><circle cx="17" cy="10" r="1.1"/><circle cx="16.06" cy="13.5" r="1.1"/><circle cx="13.5" cy="16.06" r="1.1"/><circle cx="10" cy="17" r="1.1"/><circle cx="6.5" cy="16.06" r="1.1"/><circle cx="3.94" cy="13.5" r="1.1"/><circle cx="3" cy="10" r="1.1"/><circle cx="3.94" cy="6.5" r="1.1"/><circle cx="6.5" cy="3.94" r="1.1"/><circle cx="10" cy="3" r="1.1"/><circle cx="13.5" cy="3.94" r="1.1"/><circle cx="16.06" cy="6.5" r="1.1"/></g></svg>
+          </div>
+          <span class="crumb"><b>GDPR</b><span class="sep">/</span>Chapter I — General provisions</span>
+          <div class="grow"></div>
+          <div class="mk-search-sm">Search this law…<span class="k">/</span></div>
+          <span class="mk-pill-btn">EN + DE ▾</span>
+        </div>
+
+        <div class="mk-body">
+          <aside class="rail-mini" style="position:relative">
+            <span class="note" style="top:14px;right:-11px">3</span>
+            <span class="ico">☰</span>
+            <span class="rn2 on">I</span>
+            <span class="rn2">II</span>
+            <span class="rn2">III</span>
+            <span class="rn2">IV</span>
+            <span class="rn2">V</span>
+            <span class="rn2">VI</span>
+            <span class="rn2">VII</span>
+          </aside>
+
+          <main class="bi-wrap">
+            <p class="art-eyebrow">Chapter I · General provisions</p>
+            <h1 style="font-family:var(--serif);font-size:34px;margin:0 0 18px;letter-spacing:-.01em">Article 1</h1>
+
+            <div class="bi-langbar" style="position:relative">
+              <span class="note" style="top:-9px;left:275px">2</span>
+              <div class="lang-seg"><span class="on">English</span><span class="on">Deutsch</span><span>＋</span></div>
+              <span class="hint">Aligned by paragraph · 24 languages available · remembered for this law</span>
+            </div>
+
+            <div style="position:relative">
+              <span class="note" style="top:34px;left:-2px">1</span>
+              <div class="bi-row head">
+                <span></span>
+                <div class="cell"><span class="ltag">English</span>Subject-matter and objectives</div>
+                <div class="cell"><span class="ltag">Deutsch</span>Gegenstand und Ziele</div>
+              </div>
+              <div class="bi-row">
+                <span class="pn2">1.</span>
+                <div class="cell">This Regulation lays down rules relating to the protection of natural persons with regard to the <span class="dt">processing</span> of <span class="dt">personal data</span> and rules relating to the free movement of personal data.</div>
+                <div class="cell">Diese Verordnung enthält Vorschriften zum Schutz natürlicher Personen bei der <span class="dt">Verarbeitung</span> personenbezogener Daten und zum freien Verkehr solcher Daten.</div>
+              </div>
+              <div class="bi-row">
+                <span class="pn2">2.</span>
+                <div class="cell">This Regulation protects fundamental rights and freedoms of natural persons and in particular their right to the protection of personal data.</div>
+                <div class="cell">Diese Verordnung schützt die Grundrechte und Grundfreiheiten natürlicher Personen und insbesondere deren Recht auf Schutz personenbezogener Daten.</div>
+              </div>
+              <div class="bi-row">
+                <span class="pn2">3.</span>
+                <div class="cell">The free movement of personal data within the Union shall be neither restricted nor prohibited for reasons connected with the protection of natural persons with regard to the processing of personal data.</div>
+                <div class="cell">Der freie Verkehr personenbezogener Daten in der Union darf aus Gründen des Schutzes natürlicher Personen bei der Verarbeitung personenbezogener Daten weder eingeschränkt noch verboten werden.</div>
+              </div>
+            </div>
+
+            <div class="read-foot">
+              <span class="prev"><span>Previous</span>—</span>
+              <div class="mid"><div class="lab">Article 1 of 99 · keys: j / k</div><div class="bar"><i style="width:1%"></i></div></div>
+              <span class="next"><span>Next</span>Art. 2 — Material scope →</span>
+            </div>
+          </main>
+
+          <aside class="ctx-rail">
+            <span class="note" style="top:26px;left:-6px">4</span>
+            <div class="ctx-card">
+              <div class="ctx-tabs"><span>Recitals · 7</span><span class="on">Case law · 14</span><span>About</span></div>
+              <div class="ctx-body">
+                <div class="ai-btn">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2l1.8 6.2L20 10l-6.2 1.8L12 18l-1.8-6.2L4 10l6.2-1.8z"/></svg>
+                  Generate case-law digest — how courts read Art. 1
+                </div>
+                <div class="case">
+                  <div class="ch2"><span class="ref2">C‑439/19</span><span class="d">22 Jun 2021</span></div>
+                  <b>Latvijas Republikas Saeima (Penalty points)</b>
+                  <p>Processing of penalty-point data falls within the scope of the Regulation; road-safety aims do not take it outside Art. 1.</p>
+                </div>
+                <div class="case">
+                  <div class="ch2"><span class="ref2">C‑175/20</span><span class="d">24 Feb 2022</span></div>
+                  <b>Valsts ieņēmumu dienests</b>
+                  <p>Bulk data requests by tax authorities must be measured against the Regulation’s objectives and proportionality.</p>
+                </div>
+                <div class="ctx-more">Show all 14 judgments →</div>
+              </div>
+            </div>
+          </aside>
+        </div>
+      </div></div>
+    </div>
+
+    <ul class="legend">
+      <li><span class="n">1</span><span><b>One grid, not two cards.</b> A shared paragraph-number gutter and per-paragraph rows keep the versions aligned as you scroll — no duplicated “second language” headers, no drift between columns.</span></li>
+      <li><span class="n">2</span><span><b>Languages read as one control.</b> “English · Deutsch · ＋” in a single segmented picker, with the pairing remembered per law and echoed in the URL (<code style="font-family:var(--mono);font-size:12px">?lang=en,de</code>) so bilingual views stay shareable.</span></li>
+      <li><span class="n">3</span><span><b>The TOC yields, the text wins.</b> In parallel mode the contents rail collapses to a chapter strip (current chapter marked in gold) so both columns keep a readable measure.</span></li>
+      <li><span class="n">4</span><span><b>Case law tells you the holding.</b> Judgments as cards — case number, party name, date and a one-line takeaway — instead of bare identifiers; the AI digest stays opt-in and gold-labelled.</span></li>
+    </ul>
+  </section>
+
+  <!-- ==================== MOCK-UP 5 : SEARCH ==================== -->
+  <section class="shot">
+    <div class="shot-head"><span class="shot-num">05</span><h2>Search — a confident answer, not a list</h2></div>
+    <p class="shot-sub">Typing “gdpr” today returns the GDPR first — followed by merger and anti-dumping regulations at equal visual weight, which reads as a bug even when ranking is fine. The palette separates the best match from the long tail, labels repealed acts, and keeps the two search modes as one keyboard-reachable control.</p>
+
+    <div class="frame">
+      <div class="frame-bar"><div class="dots"><i></i><i></i><i></i></div><div class="urlbar">legalviz.eu — ⌘K</div></div>
+      <div class="frame-scroll"><div class="mk"><div class="pal-back">
+
+        <div class="pal">
+          <div class="pal-input">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" opacity=".45"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+            <span class="q">gdpr</span><span class="caret"></span>
+            <span class="esc">esc</span>
+          </div>
+          <div class="pal-modes">
+            <span class="note" style="top:-9px;right:-11px">3</span>
+            <div class="seg"><span class="on">Find laws</span><span>Search within a law</span></div>
+            <span class="scope">Titles &amp; references of 4,600 primary acts · switch with ⇥</span>
+          </div>
+          <div class="pal-group" style="position:relative">
+            <span class="note" style="top:6px;left:-11px">1</span>
+            <div class="pal-glabel">Best match</div>
+            <div class="hit on">
+              <div class="body">
+                <h5>General Data Protection Regulation</h5>
+                <div class="sub">Regulation (EU) 2016/679 — protection of natural persons with regard to the processing of personal data</div>
+                <div class="meta2">32016R0679 · 27 Apr 2016 · data protection</div>
+              </div>
+              <div class="side"><span class="pill ok"><i></i>In force</span></div>
+            </div>
+          </div>
+          <div class="pal-group" style="position:relative;padding-bottom:10px">
+            <span class="note" style="top:96px;left:-11px">2</span>
+            <div class="pal-glabel">Related acts</div>
+            <div class="hit">
+              <div class="body">
+                <h5>Law Enforcement Directive</h5>
+                <div class="sub">Directive (EU) 2016/680 — data processing by police and criminal-justice authorities</div>
+                <div class="meta2">32016L0680 · 27 Apr 2016</div>
+              </div>
+              <div class="side"><span class="pill ok"><i></i>In force</span></div>
+            </div>
+            <div class="hit">
+              <div class="body">
+                <h5>EUDPR</h5>
+                <div class="sub">Regulation (EU) 2018/1725 — data protection in Union institutions, bodies and agencies</div>
+                <div class="meta2">32018R1725 · 23 Oct 2018</div>
+              </div>
+              <div class="side"><span class="pill ok"><i></i>In force</span></div>
+            </div>
+            <div class="hit dead">
+              <div class="body">
+                <h5>Data Protection Directive</h5>
+                <div class="sub">Directive 95/46/EC — repealed and replaced by the GDPR on 25 May 2018</div>
+                <div class="meta2">31995L0046 · 24 Oct 1995</div>
+              </div>
+              <div class="side"><span class="pill off">Repealed</span></div>
+            </div>
+          </div>
+          <div class="pal-foot" style="position:relative">
+            <span class="note" style="top:-11px;right:110px">4</span>
+            <span><span class="kk">↑↓</span> navigate</span>
+            <span><span class="kk">↵</span> open</span>
+            <span><span class="kk">⇥</span> mode</span>
+            <span class="r">Secondary acts not indexed yet</span>
+          </div>
+        </div>
+
+      </div></div></div>
+    </div>
+
+    <ul class="legend">
+      <li><span class="n">1</span><span><b>Best match is separated from the long tail.</b> One confident, richer hit reads as an answer; today the GDPR sits visually equal to anti-dumping regulations that merely fuzzy-match.</span></li>
+      <li><span class="n">2</span><span><b>“Related acts” instead of noise.</b> The slots below the best match are spent on genuinely adjacent law (LED, EUDPR, the repealed 95/46 directive) — and repealed acts are muted and labelled so nobody opens dead law unknowingly.</span></li>
+      <li><span class="n">3</span><span><b>Two modes, one control.</b> “Find laws / Search within a law” as a segmented toggle with ⇥, and the scope spelled out in words — replacing the mode pills plus a separate explanatory sentence.</span></li>
+      <li><span class="n">4</span><span><b>Limits stated, not discovered.</b> “Secondary acts not indexed yet” lives quietly in the footer instead of a banner above every result list.</span></li>
+    </ul>
+  </section>
+
   <!-- ==================== QUICK WINS ==================== -->
   <section class="wins">
     <h2>If you only change five things</h2>
@@ -760,6 +1045,8 @@ section.shot{margin-top:72px}
       <div class="win"><span class="tag later">bigger move</span><h3>TOC left, context right</h3><p>Move contents to the left rail and give recitals / case law / cited-by a tabbed rail next to the article in <code>LawViewer.jsx</code>.</p></div>
       <div class="win"><span class="tag later">bigger move</span><h3>One “go to” box</h3><p>Merge the Article/Recital inputs into a single parser (“23”, “rec 40”) with a <code>g</code> shortcut, and add j/k prev-next keys.</p></div>
       <div class="win"><span class="tag later">bigger move</span><h3>Definition popovers</h3><p>Upgrade the dotted defined-terms to popovers quoting the Art. 2 definition with a link — the parser already extracts definitions.</p></div>
+      <div class="win"><span class="tag now">quick win</span><h3>Group search results</h3><p>Split results into “Best match” and the rest using the MiniSearch score you already have, and add a muted “Repealed” pill — the ranking doesn’t change, but it stops reading as broken.</p></div>
+      <div class="win"><span class="tag later">bigger move</span><h3>Align parallel languages</h3><p>Render both language versions into one grid keyed by paragraph number instead of two independent cards, and collapse the TOC to a strip while parallel mode is on.</p></div>
     </div>
   </section>
 </div>

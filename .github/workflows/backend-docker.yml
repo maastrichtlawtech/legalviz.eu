@@ -57,6 +57,30 @@ jobs:
               throw new Error("source JSON assets leaked into final image");
             }
           '
+      # date and eurovoc are enriched inline onto the records as the cache builders
+      # last step. Publishing a raw search-cache instead of carrying the enriched
+      # asset forward silently strips both: every pre-2010 act serves a null date,
+      # and /api/topics goes empty. The topics endpoint above only catches the
+      # second, so assert the invariant the release notes state -- every record
+      # dated, every record carrying an eurovoc key (an empty array is legitimate).
+      - name: Assert record enrichment survived the data build
+        run: |
+          docker exec legalviz-backend node -e '
+            const Database = require("better-sqlite3");
+            const db = new Database("search/data/data.sqlite", { readonly: true });
+            // The JSON path is bound, not inlined: SQLite reads a double-quoted
+            // literal as an identifier, and this runs inside single quotes already.
+            const missing = (jsonPath) => db.prepare(
+              "SELECT COUNT(*) AS c FROM laws WHERE json_extract(record_json, ?) IS NULL"
+            ).get(jsonPath).c;
+            const laws = db.prepare("SELECT COUNT(*) AS c FROM laws").get().c;
+            const undated = missing("$.date");
+            const untopiced = missing("$.eurovoc");
+            db.close();
+            if (undated > 0) throw new Error(undated + "/" + laws + " laws have no date - search-cache lost its date enrichment");
+            if (untopiced > 0) throw new Error(untopiced + "/" + laws + " laws have no eurovoc key - search-cache lost its EuroVoc enrichment");
+            console.log("enrichment intact: " + laws + " laws, all dated, all carrying eurovoc");
+          '
       - name: Container logs
         if: always()
         run: docker logs legalviz-backend || true

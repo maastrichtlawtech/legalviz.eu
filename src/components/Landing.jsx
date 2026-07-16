@@ -1,5 +1,5 @@
-import { Link, useNavigate } from "react-router-dom";
-import { useCallback, useEffect, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
+import { useCallback, useEffect } from "react";
 import { motion as Motion } from "framer-motion";
 import { Github } from "lucide-react";
 import { TopBar, SearchBox } from "./TopBar.jsx";
@@ -10,7 +10,7 @@ import { lawLangFromUiLocale, uiLocaleFromLawLang } from "../i18n/localeMeta.js"
 import { resetWholeApp } from "../utils/resetApp.js";
 import { useLandingLibrary } from "../hooks/useLandingLibrary.js";
 import { useLandingSearchIndex } from "../hooks/useLandingSearchIndex.js";
-import { buildImportedLawCandidate, getCanonicalLawRoute, getBundledLaws } from "../utils/lawRouting.js";
+import { buildImportedLawCandidate, getCanonicalLawRoute } from "../utils/lawRouting.js";
 import { saveLawMeta } from "../utils/library.js";
 
 function inferOfficialReferenceFromCelex(celex) {
@@ -61,24 +61,6 @@ export function Landing({ forcedLocale = null }) {
     libraryVersion,
   });
   const activeLocale = forcedLocale || locale;
-
-  const tryChips = useMemo(() => {
-    const bundled = getBundledLaws();
-    const bySlug = (slug) => bundled.find((law) => law.slug === slug) || null;
-    return [
-      { key: "gdpr", law: bySlug("gdpr"), mono: false },
-      { key: "aia", law: bySlug("aia"), mono: false },
-      { key: "dsa", law: bySlug("dsa"), mono: false },
-      { key: "data-act", law: bySlug("data-act"), mono: true },
-    ]
-      .filter((chip) => chip.law)
-      .map((chip) => ({
-        key: chip.key,
-        label: chip.mono ? chip.law.celex : chip.law.label,
-        mono: chip.mono,
-        to: getCanonicalLawRoute(chip.law, null, null, activeLocale),
-      }));
-  }, [activeLocale]);
 
   const handleOpenLaw = useCallback(async (law) => {
     // Best-effort bookkeeping: never let a stuck IndexedDB block navigation.
@@ -167,24 +149,6 @@ export function Landing({ forcedLocale = null }) {
               triggerVariant="hero"
             />
           </div>
-
-          {tryChips.length > 0 ? (
-            <div className="mt-4 flex flex-wrap items-center justify-center gap-2 text-xs text-gray-500 dark:text-gray-400">
-              <span>{t("landing.tryLabel")}</span>
-              {tryChips.map((chip) => (
-                <Link
-                  key={chip.key}
-                  to={chip.to}
-                  className={
-                    "rounded-full border border-eu-blue-soft-dark/40 bg-paper px-3 py-1 text-gray-600 transition hover:border-eu-blue/50 hover:text-eu-blue dark:border-panel-dark dark:bg-panel-dark dark:text-gray-300 dark:hover:text-eu-blue-bright " +
-                    (chip.mono ? "font-mono text-[11px]" : "")
-                  }
-                >
-                  {chip.label}
-                </Link>
-              ))}
-            </div>
-          ) : null}
         </Motion.div>
 
         <div className="mt-14 w-full max-w-5xl">

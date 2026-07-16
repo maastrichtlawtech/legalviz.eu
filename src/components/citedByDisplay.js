@@ -65,8 +65,23 @@ export function buildCitedByDisplay(payload, {
     ...source,
     referenceChips: uniqueReferenceChips(article, source?.references, formatReference),
   }));
+  // One entry per citing law, so the (very long) law title renders once with
+  // its citing units grouped under it instead of once per unit.
+  const provisionGroups = [];
+  const groupsByCelex = new Map();
+  for (const provision of provisions) {
+    let group = groupsByCelex.get(provision.celex);
+    if (!group) {
+      group = { celex: provision.celex, title: provision.title || null, units: [] };
+      groupsByCelex.set(provision.celex, group);
+      provisionGroups.push(group);
+    }
+    group.units.push(provision);
+  }
+
   const visibleLimit = Math.max(0, Number(initialPerSection) || 0);
-  const visibleProvisions = expanded ? provisions : provisions.slice(0, visibleLimit);
+  const visibleProvisionGroups = expanded ? provisionGroups : provisionGroups.slice(0, visibleLimit);
+  const visibleProvisions = visibleProvisionGroups.flatMap((group) => group.units);
   const visibleJudgments = expanded ? judgments : judgments.slice(0, visibleLimit);
   const returnedCount = Number.isFinite(Number(payload?.pagination?.returned))
     ? Number(payload.pagination.returned)
@@ -78,6 +93,8 @@ export function buildCitedByDisplay(payload, {
   return {
     provisions,
     judgments,
+    provisionGroups,
+    visibleProvisionGroups,
     visibleProvisions,
     visibleJudgments,
     counts: {

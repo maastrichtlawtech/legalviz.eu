@@ -8,6 +8,10 @@ import { useI18n } from "../i18n/useI18n.js";
  *
  * Shows which other articles are referenced by the current article,
  * and which articles reference the current article (back-references).
+ *
+ * `compact` renders for the narrow context rail: no outer gutters, no
+ * collapsible header (the rail tab already labels and counts the section),
+ * content always expanded.
  */
 export function CrossReferences({
   articleNumber,
@@ -20,9 +24,11 @@ export function CrossReferences({
   currentLang = "EN",
   onOpenExternalReference,
   isExternalReferencePending,
+  compact = false,
 }) {
   const { t } = useI18n();
   const [isOpen, setIsOpen] = useState(false);
+  const showContent = compact || isOpen;
   const referenceKey = entryKey || articleNumber;
   if (!crossReferences || !referenceKey) return null;
 
@@ -58,28 +64,30 @@ export function CrossReferences({
   }
 
   return (
-    <div className="mt-8 px-6 md:px-12">
-      <button
-        type="button"
-        className="flex w-full items-center justify-between gap-3 border-y border-gray-200 py-3 text-left transition hover:border-amber-200 dark:border-gray-800 dark:hover:border-amber-900/70"
-        aria-expanded={isOpen}
-        onClick={() => setIsOpen((current) => !current)}
-      >
-        <span className="flex min-w-0 items-center gap-2">
-          <span className="font-semibold text-gray-900 dark:text-gray-100">{t("crossReferences.title")}</span>
-          <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-sm font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-200">
-            {forwardRefs.length + backRefs.length + externalRefs.length}
-          </span>
-        </span>
-        <span
-          aria-hidden="true"
-          className={`shrink-0 text-sm text-gray-500 transition-transform dark:text-gray-400 ${isOpen ? "rotate-90" : ""}`}
+    <div className={compact ? "" : "mt-8 px-6 md:px-12"}>
+      {compact ? null : (
+        <button
+          type="button"
+          className="flex w-full items-center justify-between gap-3 border-y border-gray-200 py-3 text-left transition hover:border-amber-200 dark:border-gray-800 dark:hover:border-amber-900/70"
+          aria-expanded={isOpen}
+          onClick={() => setIsOpen((current) => !current)}
         >
-          &gt;
-        </span>
-      </button>
-      {isOpen ? (
-        <div className="space-y-4 border-b border-gray-200 py-3 dark:border-gray-800">
+          <span className="flex min-w-0 items-center gap-2">
+            <span className="font-semibold text-gray-900 dark:text-gray-100">{t("crossReferences.title")}</span>
+            <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-sm font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-200">
+              {forwardRefs.length + backRefs.length + externalRefs.length}
+            </span>
+          </span>
+          <span
+            aria-hidden="true"
+            className={`shrink-0 text-sm text-gray-500 transition-transform dark:text-gray-400 ${isOpen ? "rotate-90" : ""}`}
+          >
+            &gt;
+          </span>
+        </button>
+      )}
+      {showContent ? (
+        <div className={`space-y-4 py-3 ${compact ? "" : "border-b border-gray-200 dark:border-gray-800"}`}>
           {forwardRefs.length > 0 && (
             <div>
               <p className="mb-2 text-sm text-gray-500 dark:text-gray-400">

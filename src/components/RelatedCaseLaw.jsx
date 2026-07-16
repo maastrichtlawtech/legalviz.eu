@@ -91,9 +91,12 @@ function CaseCard({ c, currentLang }) {
   );
 }
 
-export function RelatedCaseLaw({ celex, articleNumber, currentLang = "EN" }) {
+// `compact` renders for the narrow context rail: no outer gutters, no title
+// row (the rail tab already says "Case law"), the judgment list open by
+// default and in a single column.
+export function RelatedCaseLaw({ celex, articleNumber, currentLang = "EN", compact = false }) {
   const { t } = useI18n();
-  const [isListOpen, setIsListOpen] = useState(false);
+  const [isListOpen, setIsListOpen] = useState(compact);
   const [digestRequested, setDigestRequested] = useState(false);
   const title = t("relatedCaseLaw.title");
   const { cases, loading, loaded } = useCaseLaw(celex, { autoLoad: true });
@@ -112,6 +115,14 @@ export function RelatedCaseLaw({ celex, articleNumber, currentLang = "EN" }) {
   if (!articleNumber) return null;
 
   if (loading && !loaded) {
+    if (compact) {
+      return (
+        <p className="flex items-center justify-center gap-2 py-6 text-xs text-gray-400 dark:text-gray-500">
+          <Loader2 size={14} className="animate-spin" />
+          {t("relatedCaseLaw.loading")}
+        </p>
+      );
+    }
     return (
       <div className="mt-6 px-6 md:px-12">
         <div className="flex items-center justify-between gap-3 border-y border-gray-200 py-3 dark:border-gray-800">
@@ -137,8 +148,8 @@ export function RelatedCaseLaw({ celex, articleNumber, currentLang = "EN" }) {
     const total = cases?.length || 0;
     if (total === 0) return null;
     return (
-      <div className="mt-6 px-6 md:px-12">
-        <div className="flex flex-wrap items-center gap-2 border-y border-gray-200 py-3 text-sm dark:border-gray-800">
+      <div className={compact ? "" : "mt-6 px-6 md:px-12"}>
+        <div className={`flex flex-wrap items-center gap-2 py-3 text-sm ${compact ? "" : "border-y border-gray-200 dark:border-gray-800"}`}>
           <Scale size={16} className="shrink-0 text-gray-400 dark:text-gray-500" />
           <span className="text-gray-500 dark:text-gray-400">
             {t("relatedCaseLaw.noMatchPrefix", {
@@ -153,16 +164,18 @@ export function RelatedCaseLaw({ celex, articleNumber, currentLang = "EN" }) {
   }
 
   return (
-    <div className="mt-6 px-6 md:px-12">
-      <div className="flex w-full items-center justify-between gap-3 border-y border-gray-200 py-3 text-left dark:border-gray-800">
-        <span className="flex min-w-0 items-center gap-2">
-          <Scale size={16} className="shrink-0 text-teal-700 dark:text-teal-300" />
-          <span className="font-semibold text-gray-900 dark:text-gray-100">{title}</span>
-          <span className="rounded-full bg-teal-100 px-2.5 py-0.5 text-sm font-medium text-teal-800 dark:bg-teal-900/40 dark:text-teal-200">
-            {matching.length}
+    <div className={compact ? "" : "mt-6 px-6 md:px-12"}>
+      {compact ? null : (
+        <div className="flex w-full items-center justify-between gap-3 border-y border-gray-200 py-3 text-left dark:border-gray-800">
+          <span className="flex min-w-0 items-center gap-2">
+            <Scale size={16} className="shrink-0 text-teal-700 dark:text-teal-300" />
+            <span className="font-semibold text-gray-900 dark:text-gray-100">{title}</span>
+            <span className="rounded-full bg-teal-100 px-2.5 py-0.5 text-sm font-medium text-teal-800 dark:bg-teal-900/40 dark:text-teal-200">
+              {matching.length}
+            </span>
           </span>
-        </span>
-      </div>
+        </div>
+      )}
 
       {digestRequested ? (
         <ArticleCaseLawDigest
@@ -199,7 +212,9 @@ export function RelatedCaseLaw({ celex, articleNumber, currentLang = "EN" }) {
         </span>
       </button>
       {isListOpen ? (
-        <div className="grid gap-4 border-b border-gray-200 py-4 dark:border-gray-800 sm:grid-cols-2">
+        <div className={compact
+          ? "grid gap-3 py-3"
+          : "grid gap-4 border-b border-gray-200 py-4 dark:border-gray-800 sm:grid-cols-2"}>
           {matching.map((c) => (
             <CaseCard key={c.celex} c={c} currentLang={currentLang} />
           ))}

@@ -1,5 +1,4 @@
 import { useMemo, useState } from "react";
-import { GeneralRecitals } from "../RelatedRecitals.jsx";
 import { RelatedCaseLaw } from "../RelatedCaseLaw.jsx";
 import { CrossReferences } from "../CrossReferences.jsx";
 import { CitedByPanel } from "../CitedByPanel.jsx";
@@ -15,10 +14,6 @@ function countReferences(crossReferences, articleNumber) {
   }
   return count;
 }
-
-// The children render with generous below-article spacing; strip the outer
-// margin/padding so they sit flush inside the narrow rail card.
-const BARE = "[&>div]:!mt-0 [&>div]:!px-0";
 
 // Everything before the recital's own words: "(39)" numbering and whitespace.
 function recitalSnippet(recital) {
@@ -64,9 +59,50 @@ function RailRecitalCards({ recitals, allRecitals, onSelectRecital, t }) {
           </button>
         );
       })}
-      <p className="px-1 pt-1 text-[10.5px] text-gray-400 dark:text-gray-500">
-        {t("lawViewer.railRecitalsHint")}
-      </p>
+    </div>
+  );
+}
+
+// Collapsed-by-default list of the law's general (unmatched) recitals, in the
+// same card style as the related-recital matches above it. The full-width
+// GeneralRecitals component renders an inline comma-separated paragraph that
+// falls apart in this narrow column.
+function RailGeneralRecitals({ recitalNumbers, allRecitals, onSelectRecital, t }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const recitals = useMemo(
+    () => (recitalNumbers || []).map((recitalNumber) => ({ recital_number: recitalNumber })),
+    [recitalNumbers]
+  );
+
+  if (recitals.length === 0) return null;
+
+  return (
+    <div className="border-t border-gray-100 pt-1 dark:border-gray-800">
+      <button
+        type="button"
+        aria-expanded={isOpen}
+        onClick={() => setIsOpen((current) => !current)}
+        className="flex w-full items-center justify-between gap-2 px-1 py-2 text-left text-xs font-semibold text-gray-700 transition hover:text-gray-900 dark:text-gray-300 dark:hover:text-gray-100"
+      >
+        <span>
+          {t("relatedRecitals.generalTitle")}
+          <span className="ml-1 font-normal text-gray-400 dark:text-gray-500">· {recitals.length}</span>
+        </span>
+        <span
+          aria-hidden="true"
+          className={`text-gray-400 transition-transform dark:text-gray-500 ${isOpen ? "rotate-90" : ""}`}
+        >
+          &gt;
+        </span>
+      </button>
+      {isOpen ? (
+        <RailRecitalCards
+          recitals={recitals}
+          allRecitals={allRecitals}
+          onSelectRecital={onSelectRecital}
+          t={t}
+        />
+      ) : null}
     </div>
   );
 }
@@ -75,7 +111,6 @@ export function LawViewerContextRail({
   relatedRecitals,
   orphanRecitalNumbers,
   allRecitals,
-  recitalTitlesLoading,
   onSelectRecital,
   celex,
   articleNumber,
@@ -127,20 +162,25 @@ export function LawViewerContextRail({
       <div className="max-h-[calc(100vh-9rem)] overflow-y-auto px-4 py-2">
         {tab === "recitals" ? (
           recitalsCount > 0 || (orphanRecitalNumbers?.length || 0) > 0 ? (
-            <div className={BARE}>
+            <div>
               {recitalsCount > 0 ? (
-                <RailRecitalCards
-                  recitals={relatedRecitals}
-                  allRecitals={allRecitals}
-                  onSelectRecital={onSelectRecital}
-                  t={t}
-                />
+                <>
+                  <RailRecitalCards
+                    recitals={relatedRecitals}
+                    allRecitals={allRecitals}
+                    onSelectRecital={onSelectRecital}
+                    t={t}
+                  />
+                  <p className="px-1 pb-2 text-[10.5px] text-gray-400 dark:text-gray-500">
+                    {t("lawViewer.railRecitalsHint")}
+                  </p>
+                </>
               ) : null}
-              <GeneralRecitals
+              <RailGeneralRecitals
                 recitalNumbers={orphanRecitalNumbers}
                 allRecitals={allRecitals}
-                recitalTitlesLoading={recitalTitlesLoading}
                 onSelectRecital={onSelectRecital}
+                t={t}
               />
             </div>
           ) : (
@@ -149,38 +189,34 @@ export function LawViewerContextRail({
         ) : null}
 
         {tab === "cases" ? (
-          <div className={BARE}>
-            <RelatedCaseLaw celex={celex} articleNumber={articleNumber} currentLang={currentLang} />
-          </div>
+          <RelatedCaseLaw celex={celex} articleNumber={articleNumber} currentLang={currentLang} compact />
         ) : null}
 
         {tab === "references" ? (
           refsCount > 0 ? (
-            <div className={BARE}>
-              <CrossReferences
-                articleNumber={articleNumber}
-                crossReferences={crossReferences}
-                articles={articles}
-                onSelectArticle={onSelectArticle}
-                currentLang={currentLang}
-                onOpenExternalReference={onOpenExternalReference}
-                isExternalReferencePending={isExternalReferencePending}
-              />
-            </div>
+            <CrossReferences
+              articleNumber={articleNumber}
+              crossReferences={crossReferences}
+              articles={articles}
+              onSelectArticle={onSelectArticle}
+              currentLang={currentLang}
+              onOpenExternalReference={onOpenExternalReference}
+              isExternalReferencePending={isExternalReferencePending}
+              compact
+            />
           ) : (
             <p className="py-6 text-center text-xs text-gray-400 dark:text-gray-500">{t("lawViewer.tabEmptyReferences")}</p>
           )
         ) : null}
 
         {tab === "citedBy" ? (
-          <div className={BARE}>
-            <CitedByPanel
-              celex={celex}
-              articleNumber={articleNumber}
-              currentLang={currentLang}
-              onOpenLaw={onOpenLaw}
-            />
-          </div>
+          <CitedByPanel
+            celex={celex}
+            articleNumber={articleNumber}
+            currentLang={currentLang}
+            onOpenLaw={onOpenLaw}
+            compact
+          />
         ) : null}
       </div>
     </div>

@@ -81,6 +81,38 @@ describe("buildCitedByDisplay", () => {
     expect(isCitedByUnavailableError({ status: 500 })).toBe(false);
   });
 
+  it("groups citing units under one entry per law, in first-seen order", () => {
+    const display = buildCitedByDisplay({
+      article: "6",
+      citingProvisions: [
+        provision("A", "article", "2"),
+        provision("B", "article", "9"),
+        provision("A", "recital", "recital_140"),
+      ],
+      counts: { provisions: 3, judgments: 0, total: 3 },
+      pagination: { returned: 3 },
+    });
+
+    expect(display.provisionGroups.map(({ celex, units }) => ({ celex, unitLabels: units.map((u) => u.unitLabel) }))).toEqual([
+      { celex: "A", unitLabels: ["Article 2", "Recital 140"] },
+      { celex: "B", unitLabels: ["Article 9"] },
+    ]);
+    expect(display.visibleProvisionGroups).toEqual(display.provisionGroups);
+  });
+
+  it("collapses to the initial number of laws, not units", () => {
+    const display = buildCitedByDisplay({
+      citingProvisions: Array.from({ length: 12 }, (_, index) => provision(`P${index % 6}`, "article", String(index + 1))),
+      counts: { provisions: 12, judgments: 0, total: 12 },
+      pagination: { returned: 12 },
+    });
+
+    expect(display.provisionGroups).toHaveLength(6);
+    expect(display.visibleProvisionGroups).toHaveLength(5);
+    expect(display.visibleProvisions).toHaveLength(10);
+    expect(display.hasHiddenResults).toBe(true);
+  });
+
   it("computes endpoint overflow separately from collapsed rows", () => {
     const display = buildCitedByDisplay({
       citingProvisions: Array.from({ length: 6 }, (_, index) => provision(`P${index}`, "article", String(index + 1))),

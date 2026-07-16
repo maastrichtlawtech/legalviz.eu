@@ -2,11 +2,14 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { BookOpen, ChevronDown, ChevronUp, Link2, Loader2, RefreshCw, Scale } from "lucide-react";
 import { useI18n } from "../i18n/useI18n.js";
 import { fetchArticleCitedBy } from "../utils/formexApi.js";
+import { buildLawDisplayLabel } from "../utils/lawDisplay.js";
 import { Button } from "./Button.jsx";
 import { JudgmentCite } from "./ArticleCaseLawDigest.jsx";
 import { buildCitedByDisplay, isCitedByUnavailableError } from "./citedByDisplay.js";
 
-export function CitedByPanel({ celex, articleNumber, currentLang = "EN", onOpenLaw }) {
+// `compact` renders the panel for the narrow context rail: no outer gutters
+// and no title row (the rail tab already says "Cited by").
+export function CitedByPanel({ celex, articleNumber, currentLang = "EN", onOpenLaw, compact = false }) {
   const { t } = useI18n();
   const [payload, setPayload] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -14,6 +17,8 @@ export function CitedByPanel({ celex, articleNumber, currentLang = "EN", onOpenL
   const [error, setError] = useState(null);
   const [suppressed, setSuppressed] = useState(false);
   const [expanded, setExpanded] = useState(false);
+
+  const outerClass = compact ? "py-1" : "mt-6 px-6 md:px-12";
 
   useEffect(() => {
     setPayload(null);
@@ -82,8 +87,16 @@ export function CitedByPanel({ celex, articleNumber, currentLang = "EN", onOpenL
   if (!celex || !articleNumber || suppressed) return null;
 
   if (loading && !loaded) {
+    if (compact) {
+      return (
+        <p className={`${outerClass} flex items-center justify-center gap-2 py-6 text-xs text-gray-400 dark:text-gray-500`}>
+          <Loader2 size={14} className="animate-spin" />
+          {t("citedBy.loading")}
+        </p>
+      );
+    }
     return (
-      <div className="mt-6 px-6 md:px-12">
+      <div className={outerClass}>
         <div className="flex items-center justify-between gap-3 border-y border-gray-200 py-3 dark:border-gray-800">
           <span className="flex min-w-0 items-center gap-2">
             <Link2 size={16} className="shrink-0 text-teal-700 dark:text-teal-300" />
@@ -100,8 +113,8 @@ export function CitedByPanel({ celex, articleNumber, currentLang = "EN", onOpenL
 
   if (error) {
     return (
-      <div className="mt-6 px-6 md:px-12">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-y border-amber-300 py-3 text-sm text-amber-800 dark:border-amber-700 dark:text-amber-200">
+      <div className={outerClass}>
+        <div className={`flex flex-wrap items-center justify-between gap-3 py-3 text-sm text-amber-800 dark:text-amber-200 ${compact ? "" : "border-y border-amber-300 dark:border-amber-700"}`}>
           <span>{t("citedBy.unavailable")}</span>
           <Button type="button" variant="outline" size="sm" onClick={retry}>
             <RefreshCw size={14} />
@@ -115,56 +128,65 @@ export function CitedByPanel({ celex, articleNumber, currentLang = "EN", onOpenL
   if (!loaded || !payload) return null;
 
   return (
-    <div className="mt-6 px-6 md:px-12">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-y border-gray-200 py-3 dark:border-gray-800">
-        <span className="flex min-w-0 items-center gap-2">
-          <Link2 size={16} className="shrink-0 text-teal-700 dark:text-teal-300" />
-          <span className="font-semibold text-gray-900 dark:text-gray-100">{t("citedBy.title")}</span>
-          <span className="rounded-full bg-teal-100 px-2.5 py-0.5 text-sm font-medium text-teal-800 dark:bg-teal-900/40 dark:text-teal-200">
-            {display.counts.total}
+    <div className={outerClass}>
+      {compact ? null : (
+        <div className="flex flex-wrap items-center justify-between gap-3 border-y border-gray-200 py-3 dark:border-gray-800">
+          <span className="flex min-w-0 items-center gap-2">
+            <Link2 size={16} className="shrink-0 text-teal-700 dark:text-teal-300" />
+            <span className="font-semibold text-gray-900 dark:text-gray-100">{t("citedBy.title")}</span>
+            <span className="rounded-full bg-teal-100 px-2.5 py-0.5 text-sm font-medium text-teal-800 dark:bg-teal-900/40 dark:text-teal-200">
+              {display.counts.total}
+            </span>
           </span>
-        </span>
-        <span className="text-sm text-gray-500 dark:text-gray-400">{t("citedBy.subtitle")}</span>
-      </div>
+          <span className="text-sm text-gray-500 dark:text-gray-400">{t("citedBy.subtitle")}</span>
+        </div>
+      )}
 
       {display.empty ? (
-        <p className="border-b border-gray-200 py-3 text-sm text-gray-500 dark:border-gray-800 dark:text-gray-400">
+        <p className={compact
+          ? "py-6 text-center text-xs text-gray-400 dark:text-gray-500"
+          : "border-b border-gray-200 py-3 text-sm text-gray-500 dark:border-gray-800 dark:text-gray-400"}>
           {t("citedBy.empty")}
         </p>
       ) : (
         <>
-          {display.visibleProvisions.length ? (
-            <section aria-labelledby="cited-by-legislation-heading" className="border-b border-gray-200 py-3 dark:border-gray-800">
+          {display.visibleProvisionGroups.length ? (
+            <section aria-labelledby="cited-by-legislation-heading" className={`py-3 ${compact ? "" : "border-b border-gray-200 dark:border-gray-800"}`}>
               <h3 id="cited-by-legislation-heading" className="mb-1.5 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
                 <BookOpen size={13} />
                 {t("citedBy.legislationLabel", { count: display.counts.provisions })}
               </h3>
               <div className="divide-y divide-gray-100 dark:divide-gray-800">
-                {display.visibleProvisions.map((source, index) => {
-                  const lawLabel = source.title || source.celex;
+                {display.visibleProvisionGroups.map((group) => {
+                  const { label, fullTitle } = buildLawDisplayLabel(group);
                   return (
-                    <button
-                      key={`${source.celex}-${source.unitType}-${source.unit}-${index}`}
-                      type="button"
-                      className="flex w-full items-start justify-between gap-4 rounded-sm px-1 py-2.5 text-left transition hover:bg-teal-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:ring-offset-2 dark:hover:bg-teal-950/30 dark:focus-visible:ring-teal-400 dark:focus-visible:ring-offset-gray-900"
-                      aria-label={t("citedBy.openLaw", { law: lawLabel, unit: source.unitLabel })}
-                      onClick={() => onOpenLaw?.(source.celex, {
-                        articleNumber: source.articleNumber,
-                        label: source.title,
-                      })}
-                    >
-                      <span className="min-w-0">
-                        <span className="block font-medium text-gray-900 dark:text-gray-100">{lawLabel}</span>
-                        <span className="block text-xs text-gray-500 dark:text-gray-400">{source.unitLabel}</span>
+                    <div key={group.celex} className="px-1 py-2.5">
+                      <button
+                        type="button"
+                        className="block w-full rounded-sm text-left text-sm font-medium text-gray-900 transition hover:text-teal-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:ring-offset-2 dark:text-gray-100 dark:hover:text-teal-200 dark:focus-visible:ring-teal-400 dark:focus-visible:ring-offset-gray-900"
+                        title={fullTitle || undefined}
+                        onClick={() => onOpenLaw?.(group.celex, { label: group.title })}
+                      >
+                        <span className="line-clamp-2">{label}</span>
+                      </button>
+                      <span className="mt-1.5 flex flex-wrap gap-1">
+                        {group.units.map((unit, index) => (
+                          <button
+                            key={`${unit.unitType}-${unit.unit}-${index}`}
+                            type="button"
+                            className="rounded bg-gray-100 px-1.5 py-0.5 text-[11px] font-medium text-gray-600 transition hover:bg-teal-100 hover:text-teal-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:ring-offset-2 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-teal-900/40 dark:hover:text-teal-200 dark:focus-visible:ring-teal-400 dark:focus-visible:ring-offset-gray-900"
+                            title={unit.referenceChips.join(", ") || undefined}
+                            aria-label={t("citedBy.openLaw", { law: label, unit: unit.unitLabel })}
+                            onClick={() => onOpenLaw?.(group.celex, {
+                              articleNumber: unit.articleNumber,
+                              label: group.title,
+                            })}
+                          >
+                            {unit.unitLabel}
+                          </button>
+                        ))}
                       </span>
-                      {source.referenceChips.length ? (
-                        <span className="flex shrink-0 flex-wrap justify-end gap-1">
-                          {source.referenceChips.map((chip) => (
-                            <span key={chip} className="rounded bg-gray-100 px-1.5 py-0.5 text-[11px] font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-300">{chip}</span>
-                          ))}
-                        </span>
-                      ) : null}
-                    </button>
+                    </div>
                   );
                 })}
               </div>
@@ -172,7 +194,7 @@ export function CitedByPanel({ celex, articleNumber, currentLang = "EN", onOpenL
           ) : null}
 
           {display.visibleJudgments.length ? (
-            <section aria-labelledby="cited-by-judgments-heading" className="border-b border-gray-200 py-3 dark:border-gray-800">
+            <section aria-labelledby="cited-by-judgments-heading" className={`py-3 ${compact ? "" : "border-b border-gray-200 dark:border-gray-800"}`}>
               <h3 id="cited-by-judgments-heading" className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
                 <Scale size={13} />
                 {t("citedBy.judgmentsLabel", { count: display.counts.judgments })}
@@ -188,7 +210,7 @@ export function CitedByPanel({ celex, articleNumber, currentLang = "EN", onOpenL
           {display.hasHiddenResults || expanded ? (
             <button
               type="button"
-              className="flex w-full items-center justify-between gap-3 border-b border-gray-200 py-3 text-left text-sm font-medium text-teal-700 transition hover:text-teal-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:ring-offset-2 dark:border-gray-800 dark:text-teal-300 dark:hover:text-teal-100 dark:focus-visible:ring-teal-400 dark:focus-visible:ring-offset-gray-900"
+              className={`flex w-full items-center justify-between gap-3 py-3 text-left text-sm font-medium text-teal-700 transition hover:text-teal-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:ring-offset-2 dark:text-teal-300 dark:hover:text-teal-100 dark:focus-visible:ring-teal-400 dark:focus-visible:ring-offset-gray-900 ${compact ? "border-t border-gray-100 dark:border-gray-800" : "border-b border-gray-200 dark:border-gray-800"}`}
               aria-expanded={expanded}
               onClick={() => setExpanded((current) => !current)}
             >
@@ -198,7 +220,7 @@ export function CitedByPanel({ celex, articleNumber, currentLang = "EN", onOpenL
           ) : null}
 
           {display.overflowCount > 0 ? (
-            <p className="border-b border-gray-200 py-2 text-xs text-gray-500 dark:border-gray-800 dark:text-gray-400">
+            <p className={`py-2 text-xs text-gray-500 dark:text-gray-400 ${compact ? "" : "border-b border-gray-200 dark:border-gray-800"}`}>
               {t("citedBy.andMore", { count: display.overflowCount })}
             </p>
           ) : null}

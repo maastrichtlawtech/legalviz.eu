@@ -9,59 +9,12 @@ import { searchContent, searchIndex as searchWithIndex, buildSearchIndex } from 
 import { useI18n } from "../i18n/useI18n.js";
 import { searchLaws as searchLawsApi } from "../utils/formexApi.js";
 import { buildImportedLawCandidate, getCanonicalLawRoute, parseCelexQuery } from "../utils/lawRouting.js";
-import { saveLawMeta } from "../utils/library.js";
+import { inferOfficialReferenceFromCelex, saveLawMeta } from "../utils/library.js";
+import { cleanLawTitle, extractShortLawTitle, formatOfficialReference } from "../utils/lawDisplay.js";
 
 // Law search hits the network per query, so wait for a typing pause before
 // firing to avoid a request per keystroke (which trips the API rate limiter).
 const LAW_SEARCH_DEBOUNCE_MS = 300;
-
-function inferOfficialReferenceFromCelex(celex) {
-  const match = String(celex || "").match(/^3(\d{4})([RLD])0*(\d{1,4})(?:\(\d+\))?$/);
-  if (!match) return null;
-
-  const actTypeMap = {
-    R: "regulation",
-    L: "directive",
-    D: "decision",
-  };
-
-  const actType = actTypeMap[match[2]] || null;
-  if (!actType) return null;
-
-  return {
-    actType,
-    year: match[1],
-    number: String(Number.parseInt(match[3], 10)),
-  };
-}
-
-function formatOfficialReference(reference) {
-  if (!reference?.actType || !reference?.year || !reference?.number) return null;
-  const actTypeLabel = reference.actType.charAt(0).toUpperCase() + reference.actType.slice(1);
-  return `${actTypeLabel} (EU) ${reference.year}/${reference.number}`;
-}
-
-function cleanLawTitle(title, referenceLabel) {
-  const raw = String(title || "").replace(/\s+/g, " ").trim();
-  if (!raw || !referenceLabel) return raw;
-  const escapedReference = referenceLabel.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return raw.replace(new RegExp(`^${escapedReference}\\s+`, "i"), "").trim() || raw;
-}
-
-function extractShortLawTitle(title) {
-  const raw = String(title || "").replace(/\s+/g, " ").trim();
-  if (!raw) return "";
-
-  const matches = Array.from(raw.matchAll(/\(([^)]{5,120})\)/g));
-  for (const match of matches) {
-    const candidate = String(match[1] || "").trim();
-    if (!candidate) continue;
-    if (/text with eea relevance/i.test(candidate)) continue;
-    return candidate;
-  }
-
-  return "";
-}
 
 function getLawResultDisplay(item) {
   const officialReference = inferOfficialReferenceFromCelex(item.celex);

@@ -492,7 +492,6 @@ export function LawViewer() {
                   relatedRecitals={recitalMap.get(selection.selected.id) || []}
                   orphanRecitalNumbers={recitalMap.orphanRecitalNumbers || []}
                   allRecitals={primaryDocument.data.recitals}
-                  recitalTitlesLoading={primaryDocument.recitalTitlesLoading}
                   onSelectRecital={selection.onClickRecital}
                   celex={source.effectiveCelex}
                   articleNumber={selection.selected.id}

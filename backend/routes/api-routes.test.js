@@ -584,6 +584,29 @@ test("GET /api/laws/:celex/summary falls back to HTML parsing when FMX is unavai
   });
 });
 
+test("GET /api/laws/:celex/summary returns 404 for laws outside the search index", async () => {
+  // No API key in the environment: the not-indexed gate must answer before
+  // the key check (404, not 503) and before any law resolution.
+  await withOpenRouterEnv({}, async () => {
+    let prepared = false;
+    const { app } = registerTestRoutes({
+      prepareLawPayload: async () => {
+        prepared = true;
+        throw new Error("prepareLawPayload should not be called for a non-indexed law");
+      },
+    });
+    const handler = app.routes.get("/api/laws/:celex/summary");
+    const res = createResponseRecorder();
+
+    // Valid CELEX format, but not part of the search fixture.
+    await handler({ params: { celex: "31995L0046" }, query: { lang: "ENG" } }, res);
+
+    assert.equal(res.statusCode, 404);
+    assert.equal(res.payload.code, "summary_not_indexed");
+    assert.equal(prepared, false);
+  });
+});
+
 test("Case-law-digest routes fail fast without an OpenRouter key, before resolving/parsing the law", async () => {
   await withOpenRouterEnv({}, async () => {
     let resolveParsedLawCalled = false;

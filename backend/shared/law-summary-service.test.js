@@ -6,6 +6,7 @@ const path = require('node:path');
 
 const {
   buildLawSummaryInput,
+  buildSystemPrompt,
   ensureLawSummary,
   parseLawSummaryJson,
 } = require('./law-summary-service');
@@ -38,17 +39,43 @@ function sampleParsedLaw() {
 test('parseLawSummaryJson keeps only valid article citations', () => {
   const input = buildLawSummaryInput(sampleParsedLaw());
   const summary = parseLawSummaryJson(JSON.stringify({
+    natureAndEffect: { text: 'A directly applicable regulation binding on controllers and processors.', citations: ['1', '999'] },
     purpose: { text: 'It protects personal data.', citations: ['1', '999'] },
     scope: { text: 'It applies to personal data processing.', citations: ['1'] },
     keyPoints: [
       { text: 'Data must be processed lawfully.', citations: ['5'] },
       { text: 'Invalid point is dropped.', citations: ['999'] },
     ],
-    structure: 'It starts with general provisions and then sets principles.',
   }), input);
 
+  assert.deepEqual(summary.natureAndEffect.citations, ['1']);
   assert.deepEqual(summary.purpose.citations, ['1']);
   assert.deepEqual(summary.keyPoints.map((item) => item.citations), [['5']]);
+});
+
+test('scope is optional but natureAndEffect is required', () => {
+  const input = buildLawSummaryInput(sampleParsedLaw());
+
+  const withoutScope = parseLawSummaryJson(JSON.stringify({
+    natureAndEffect: { text: 'A short addressed decision.', citations: [] },
+    purpose: { text: 'It protects personal data.', citations: ['1'] },
+    keyPoints: [{ text: 'Data must be processed lawfully.', citations: ['5'] }],
+  }), input);
+  assert.equal(withoutScope.scope, null);
+
+  // An uncited scope is dropped rather than fatal.
+  const uncitedScope = parseLawSummaryJson(JSON.stringify({
+    natureAndEffect: { text: 'A short addressed decision.', citations: [] },
+    purpose: { text: 'It protects personal data.', citations: ['1'] },
+    scope: { text: 'It applies to everything.', citations: ['999'] },
+    keyPoints: [{ text: 'Data must be processed lawfully.', citations: ['5'] }],
+  }), input);
+  assert.equal(uncitedScope.scope, null);
+
+  assert.throws(() => parseLawSummaryJson(JSON.stringify({
+    purpose: { text: 'It protects personal data.', citations: ['1'] },
+    keyPoints: [{ text: 'Data must be processed lawfully.', citations: ['5'] }],
+  }), input), /natureAndEffect/);
 });
 
 test('ensureLawSummary caches validated summaries', async () => {
@@ -60,10 +87,10 @@ test('ensureLawSummary caches validated summaries', async () => {
       model: 'test-model',
       usage: { total_tokens: 10 },
       text: JSON.stringify({
+        natureAndEffect: { text: 'A directly applicable regulation.', citations: [] },
         purpose: { text: 'It protects personal data.', citations: ['1'] },
         scope: { text: 'It applies to personal data processing.', citations: ['1'] },
         keyPoints: [{ text: 'Data must be processed lawfully.', citations: ['5'] }],
-        structure: 'It starts with general provisions and then sets principles.',
       }),
     };
   };
@@ -133,10 +160,10 @@ test('overall article budget drops bodies but keeps every article number citable
   assert.ok(droppedArticle, 'expected at least one article whose body was trimmed away');
 
   const summary = parseLawSummaryJson(JSON.stringify({
+    natureAndEffect: { text: 'A directly applicable regulation.', citations: [] },
     purpose: { text: 'It protects personal data.', citations: [droppedArticle.number] },
     scope: { text: 'It applies broadly.', citations: [droppedArticle.number] },
     keyPoints: [{ text: 'A rule still cites a body-trimmed article.', citations: [droppedArticle.number] }],
-    structure: 'It is organised into many articles.',
   }), input);
 
   assert.deepEqual(summary.scope.citations, [droppedArticle.number]);
@@ -152,6 +179,40 @@ test('actType is derived from the CELEX descriptor letter', () => {
   assert.equal(buildLawSummaryInput({ ...base, celex: null }).actType, 'unknown');
 });
 
+test('title-based hints flag amending and implementing acts', () => {
+  const base = sampleParsedLaw();
+
+  const amending = buildLawSummaryInput({
+    ...base,
+    title: 'Regulation (EU) 2024/900 amending Regulation (EU) 2016/679',
+  });
+  assert.ok(amending.titleHints.some((hint) => hint.includes('amends other acts')));
+
+  const implementing = buildLawSummaryInput({
+    ...base,
+    title: 'Commission Implementing Decision (EU) 2021/914',
+  });
+  assert.ok(implementing.titleHints.some((hint) => hint.includes('implementing act')));
+
+  assert.deepEqual(buildLawSummaryInput({ ...base, title: 'Regulation (EU) 2016/679' }).titleHints, []);
+});
+
+test('buildSystemPrompt passes metadata as hints to verify, not verdicts', () => {
+  const input = buildLawSummaryInput({
+    ...sampleParsedLaw(),
+    title: 'Regulation (EU) 2024/900 amending Regulation (EU) 2016/679',
+  });
+  const prompt = buildSystemPrompt(input);
+
+  assert.match(prompt, /verify against the text rather than assume/);
+  assert.match(prompt, /the CELEX descriptor suggests a regulation/);
+  assert.match(prompt, /the title says it amends other acts/);
+  assert.match(prompt, /concrete changes made to the amended acts/);
+
+  const bare = buildSystemPrompt(buildLawSummaryInput({ ...sampleParsedLaw(), celex: null, title: null }));
+  assert.match(bare, /No act-type metadata is available/);
+});
+
 function stubChatComplete(counter) {
   return async () => {
     counter.calls++;
@@ -159,10 +220,10 @@ function stubChatComplete(counter) {
       model: 'test-model',
       usage: { total_tokens: 10 },
       text: JSON.stringify({
+        natureAndEffect: { text: 'A directly applicable regulation.', citations: [] },
         purpose: { text: 'It protects personal data.', citations: ['1'] },
         scope: { text: 'It applies to personal data processing.', citations: ['1'] },
         keyPoints: [{ text: 'Data must be processed lawfully.', citations: ['5'] }],
-        structure: 'It starts with general provisions and then sets principles.',
       }),
     };
   };

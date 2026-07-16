@@ -136,6 +136,7 @@ function buildLawSummarySection(law, summaryPayload) {
   const summary = summaryPayload?.summary;
   if (!summary) return "";
 
+  const natureHtml = citedText(law, summary.natureAndEffect);
   const purposeHtml = citedText(law, summary.purpose);
   const scopeHtml = citedText(law, summary.scope);
   const keyPointsHtml = (summary.keyPoints || [])
@@ -144,10 +145,10 @@ function buildLawSummarySection(law, summaryPayload) {
   return `
     <section class="lv-summary">
       <h2>Overview</h2>
+      ${natureHtml ? `<p>${natureHtml}</p>` : ""}
       ${purposeHtml ? `<p>${purposeHtml}</p>` : ""}
       ${scopeHtml ? `<p>${scopeHtml}</p>` : ""}
       ${keyPointsHtml ? `<h3>Key points</h3><ul>${keyPointsHtml}</ul>` : ""}
-      ${summary.structure ? `<h3>Structure</h3><p>${escapeHtml(summary.structure)}</p>` : ""}
     </section>
   `;
 }

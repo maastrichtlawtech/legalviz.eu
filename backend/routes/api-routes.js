@@ -435,6 +435,13 @@ function registerApiRoutes(app, deps) {
       if (!validateCelex(celex)) {
         return res.status(400).json({ error: 'Invalid CELEX format' });
       }
+      // AI summaries are only offered for acts in the search index; laws
+      // loaded via /import from arbitrary CELEX ids must not trigger
+      // generation. When no search data is loaded (local dev without the
+      // built cache) the gate stands open rather than disabling the feature.
+      if (legalCacheStore.isReady() && !legalCacheStore.getByCelex(celex)) {
+        return res.status(404).json({ error: 'AI summaries are only available for laws in the search index', code: 'summary_not_indexed' });
+      }
       // Summaries are generated in English only for now; the lang query
       // parameter is ignored so other languages cannot trigger generation.
       const lang = 'ENG';

@@ -207,6 +207,7 @@ export function LawOverviewPage({
         implementing={meta.implementing}
         externalLawOverview={externalLawOverview}
         citedBy={meta.citedBy}
+        centreLabel={currentLaw?.label || title}
         currentLang={formexLang}
         locale={locale}
         onOpenExternalLaw={onOpenExternalLaw}

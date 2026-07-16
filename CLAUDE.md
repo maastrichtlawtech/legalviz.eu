@@ -61,7 +61,7 @@ Nearly every expensive operation — Formex parsing, TF‑IDF recital mapping, C
 | Citation graph edge/artifact shape | `GRAPH_VERSION` | `backend/search/citation-graph-store.js` (shared by builder and store) |
 | Offline CJEU detail shape (declarations, `articleRefs`) | `CASE_LAW_CACHE_FILE` → `case-law-cache-vN.json` (keep the offline legacy-migration path) | `backend/shared/law-queries.js` |
 | Recital-title prompt/output format | `CACHE_VERSION` | `backend/shared/recital-title-service.js` |
-| Law-summary JSON schema / prompt | `SCHEMA_VERSION` / `PROMPT_VERSION` | `backend/shared/law-summary-service.js` |
+| Law-summary cache / JSON schema / prompt | `cacheVersion` / `schemaVersion` / `promptVersion` | `backend/shared/law-summary-cache-version.json` (shared by backend and frontend) |
 | Article-digest JSON schema / prompt | `SCHEMA_VERSION` / `PROMPT_VERSION` | `backend/shared/article-digest-service.js` |
 | Whole-law digest JSON schema / prompt | `SCHEMA_VERSION` / `PROMPT_VERSION` | `backend/shared/case-law-digest-service.js` |
 | Persisted analytics shape (`analytics.json` fields) | `ANALYTICS_SCHEMA_VERSION` | `backend/shared/analytics.js` |
@@ -74,6 +74,8 @@ The data caches are the one entry above that isn't a code constant: they ship as
 
 `PARSER_VERSION` is **shared with the frontend** (imported into `src/utils/formexApi.js`), so bumping it re-parses the browser IndexedDB cache too. When you bump `CASE_LAW_CACHE_FILE`, also update `CASE_LAW_CACHE_VERSION` in `article-digest-service.js` **and** `case-law-digest-service.js` — they are kept in lock-step so digests regenerate when enrichment shape changes.
 
+The law-summary cache versions are also shared with the frontend through `backend/shared/law-summary-cache-version.json`. `fetchLawSummary` includes all three values in its IndexedDB key, so bumping any backend summary cache/schema/prompt version makes browsers fetch the regenerated summary immediately after loading the updated frontend.
+
 **Frontend, browser** (`src/`):
 
 | When you change… | Bump | In |
@@ -82,4 +84,5 @@ The data caches are the one entry above that isn't a code constant: they ship as
 | IndexedDB store shape (DB `formex-cache`) | `CACHE_VERSION` | `src/utils/formexApi.js` |
 | Cached recital-title envelope shape | `RECITAL_TITLE_CACHE_VERSION` | `src/utils/formexApi.js` |
 | Cached API-JSON payload shape | `API_JSON_CACHE_VERSION` | `src/utils/formexApi.js` |
+| Cached law-summary output | Shared law-summary versions | `backend/shared/law-summary-cache-version.json` |
 | Force every client to wipe local data once | `CURRENT_MIGRATION_VERSION` | `src/utils/resetApp.js` |

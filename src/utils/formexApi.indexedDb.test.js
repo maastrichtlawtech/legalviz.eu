@@ -67,3 +67,12 @@ describe("Formex IndexedDB connection lifecycle", () => {
     expect(lateDb.close).toHaveBeenCalledOnce();
   });
 });
+
+describe("law summary cache versioning", () => {
+  it("uses the backend cache, schema, and prompt versions in the browser key", async () => {
+    const { makeLawSummaryCacheKey } = await importFormexApi();
+
+    expect(makeLawSummaryCacheKey("32016R0679"))
+      .toBe("32016R0679_ENG_summary_v1_schema3_prompt3");
+  });
+});

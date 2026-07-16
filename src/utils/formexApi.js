@@ -6,6 +6,7 @@
  */
 
 import { PARSER_VERSION, parseFmxToCombined, isFmxDocument } from "./fmxParser.js";
+import lawSummaryCacheVersion from "../../backend/shared/law-summary-cache-version.json";
 
 export const API_BASE = (() => {
   if (typeof import.meta !== "undefined" && import.meta.env?.VITE_FORMEX_API_BASE) {
@@ -825,8 +826,13 @@ export async function fetchRecitalTitles(celex, lang = "EN") {
 
 // Law summaries are generated in English only for now, regardless of the
 // reading language.
+export function makeLawSummaryCacheKey(celex) {
+  const { cacheVersion, schemaVersion, promptVersion } = lawSummaryCacheVersion;
+  return `${celex}_ENG_summary_v${cacheVersion}_schema${schemaVersion}_prompt${promptVersion}`;
+}
+
 export async function fetchLawSummary(celex) {
-  const key = `${celex}_ENG_summary`;
+  const key = makeLawSummaryCacheKey(celex);
   return getInFlightRequest(`law-summary:${key}`, () => fetchJsonWithCache({
     cacheKey: key,
     url: `${API_BASE}/api/laws/${encodeURIComponent(celex)}/summary?lang=ENG`,

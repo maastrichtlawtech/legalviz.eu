@@ -4,6 +4,11 @@ const path = require('path');
 const { chatComplete } = require('./openrouter-chat');
 const { inferTypeFromCelex } = require('../search/search-ranking');
 const {
+  cacheVersion: CACHE_VERSION,
+  schemaVersion: SCHEMA_VERSION,
+  promptVersion: PROMPT_VERSION,
+} = require('./law-summary-cache-version.json');
+const {
   stripTags,
   normalizeText,
   stableHash,
@@ -13,9 +18,6 @@ const {
 } = require('./ai-digest-utils');
 
 const CACHE_FILE = 'law-summary-cache-v1.json';
-const CACHE_VERSION = 1;
-const SCHEMA_VERSION = 3;
-const PROMPT_VERSION = 3;
 const MAX_ARTICLE_TEXT_CHARS = 6000;
 const MAX_RECITAL_COUNT = 60;
 const MAX_RECITAL_TEXT_CHARS = 700;

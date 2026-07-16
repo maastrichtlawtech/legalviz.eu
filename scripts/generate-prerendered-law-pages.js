@@ -141,14 +141,6 @@ function buildLawSummarySection(law, summaryPayload) {
   const keyPointsHtml = (summary.keyPoints || [])
     .map((item) => `<li>${citedText(law, item)}</li>`)
     .join("");
-  const relatedInstrumentsHtml = (summary.relatedInstruments || [])
-    .map((item) => {
-      const celexSuffix = item.celex ? ` (${escapeHtml(item.celex)})` : "";
-      const relationship = item.relationship ? ` — ${escapeHtml(item.relationship)}` : "";
-      return `<li>${escapeHtml(item.label || "")}${celexSuffix}${relationship}</li>`;
-    })
-    .join("");
-
   return `
     <section class="lv-summary">
       <h2>Overview</h2>
@@ -156,7 +148,6 @@ function buildLawSummarySection(law, summaryPayload) {
       ${scopeHtml ? `<p>${scopeHtml}</p>` : ""}
       ${keyPointsHtml ? `<h3>Key points</h3><ul>${keyPointsHtml}</ul>` : ""}
       ${summary.structure ? `<h3>Structure</h3><p>${escapeHtml(summary.structure)}</p>` : ""}
-      ${relatedInstrumentsHtml ? `<h3>Related instruments</h3><ul>${relatedInstrumentsHtml}</ul>` : ""}
     </section>
   `;
 }

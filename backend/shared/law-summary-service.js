@@ -2,7 +2,6 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const { chatComplete } = require('./openrouter-chat');
-const { ACT_CELEX_MAP } = require('./law-queries');
 const { inferTypeFromCelex } = require('../search/search-ranking');
 const {
   stripTags,
@@ -15,12 +14,11 @@ const {
 
 const CACHE_FILE = 'law-summary-cache-v1.json';
 const CACHE_VERSION = 1;
-const SCHEMA_VERSION = 2;
-const PROMPT_VERSION = 2;
+const SCHEMA_VERSION = 3;
+const PROMPT_VERSION = 3;
 const MAX_ARTICLE_TEXT_CHARS = 6000;
 const MAX_RECITAL_COUNT = 60;
 const MAX_RECITAL_TEXT_CHARS = 700;
-const MAX_RELATED_CANDIDATES = 12;
 const MAX_ARTICLE_TEXT_BUDGET_CHARS = 500000;
 
 const ACT_TYPE_GUIDANCE = {
@@ -45,18 +43,15 @@ Return ONLY a JSON object with this exact shape:
   "keyPoints": [
     { "text": "one concrete obligation, right, power, or prohibition", "citations": ["5"] }
   ],
-  "structure": "short narrative of how the chapters/sections are organised",
-  "relatedInstruments": [
-    { "label": "instrument name or reference from the candidates", "celex": "optional CELEX from candidates", "relationship": "why it is related" }
-  ]
+  "structure": "short narrative of how the chapters/sections are organised"
 }
 
 Rules:
-- Use only the provided law input and related-instrument candidates.
+- Use only the provided law input.
 - Every scope and key-point item must cite existing article numbers from the provided article list.
 - Prefer 3-6 key points.
 - Keep the whole output under about 400 words.
-- Do not invent article numbers, CELEX identifiers, instruments, obligations, or legal effects.`;
+- Do not invent article numbers, obligations, or legal effects.`;
 }
 
 // Sentence-boundary-aware truncation, specific to the summary feature (the
@@ -118,53 +113,6 @@ function cachedResult(entry) {
   };
 }
 
-function findKnownCelex(label, actCelexMap = ACT_CELEX_MAP) {
-  const text = String(label || '');
-  if (!text) return null;
-  for (const [alias, celex] of Object.entries(actCelexMap || {})) {
-    if (!celex) continue;
-    if (alias.includes('/') && text.toLowerCase().includes(alias.toLowerCase())) {
-      return celex;
-    }
-    const escaped = alias.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    if (new RegExp(`(^|[^A-Za-z0-9/])${escaped}([^A-Za-z0-9/]|$)`, 'i').test(text)) {
-      return celex;
-    }
-  }
-  return null;
-}
-
-function buildRelatedInstrumentCandidates(crossReferences, actCelexMap = ACT_CELEX_MAP) {
-  const candidates = new Map();
-  for (const refs of Object.values(crossReferences || {})) {
-    for (const ref of refs || []) {
-      if (ref?.type !== 'external' && ref?.type !== 'oj_ref') continue;
-      const label = ref.raw || ref.target;
-      if (!label) continue;
-      const key = ref.type === 'oj_ref'
-        ? `oj:${ref.ojColl || ''}:${ref.ojYear || ''}:${ref.ojNo || ''}`
-        : `external:${ref.target || label}`;
-      const celex = ref.celex || ref.actCelex || findKnownCelex(label, actCelexMap);
-      const existing = candidates.get(key);
-      if (existing) {
-        existing.count += 1;
-      } else {
-        candidates.set(key, {
-          key,
-          label,
-          celex,
-          type: ref.type,
-          count: 1,
-        });
-      }
-    }
-  }
-
-  return Array.from(candidates.values())
-    .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label))
-    .slice(0, MAX_RELATED_CANDIDATES);
-}
-
 function buildSkeleton(articles) {
   return (articles || []).map((article) => ({
     number: String(article.article_number || '').trim(),
@@ -174,7 +122,7 @@ function buildSkeleton(articles) {
   })).filter((article) => article.number);
 }
 
-function buildLawSummaryInput(parsedLaw, { actCelexMap = ACT_CELEX_MAP } = {}) {
+function buildLawSummaryInput(parsedLaw) {
   let articleTextBudgetUsed = 0;
   const articles = (parsedLaw.articles || [])
     .map((article) => {
@@ -212,7 +160,6 @@ function buildLawSummaryInput(parsedLaw, { actCelexMap = ACT_CELEX_MAP } = {}) {
       text: clip(recital.recital_text || recital.recital_html || '', MAX_RECITAL_TEXT_CHARS),
     })).filter((recital) => recital.number && recital.text),
     articles,
-    relatedInstrumentCandidates: buildRelatedInstrumentCandidates(parsedLaw.crossReferences || {}, actCelexMap),
   };
 }
 
@@ -244,33 +191,6 @@ function normalizeCitedBlock(value, validArticles, { requireCitation = false } =
   return { text, citations };
 }
 
-function normalizeRelatedInstruments(value, candidates) {
-  const candidateByCelex = new Map();
-  const candidateByLabel = new Map();
-  for (const candidate of candidates || []) {
-    if (candidate.celex) candidateByCelex.set(candidate.celex, candidate);
-    candidateByLabel.set(String(candidate.label).toLowerCase(), candidate);
-  }
-
-  return (Array.isArray(value) ? value : [])
-    .map((entry) => {
-      if (!entry || typeof entry !== 'object') return null;
-      const label = normalizeText(entry.label, 220);
-      const celex = normalizeText(entry.celex, 40) || null;
-      const relationship = normalizeText(entry.relationship, 320);
-      const candidate = (celex && candidateByCelex.get(celex))
-        || candidateByLabel.get(label.toLowerCase());
-      if (!label || !relationship || !candidate) return null;
-      return {
-        label: candidate.label,
-        celex: candidate.celex || celex || null,
-        relationship,
-      };
-    })
-    .filter(Boolean)
-    .slice(0, 6);
-}
-
 function parseLawSummaryJson(text, input) {
   const parsed = extractJsonObject(text);
   const validArticles = new Set([
@@ -284,7 +204,6 @@ function parseLawSummaryJson(text, input) {
     .filter(Boolean)
     .slice(0, 8);
   const structure = normalizeText(parsed.structure, 1000);
-  const relatedInstruments = normalizeRelatedInstruments(parsed.relatedInstruments, input.relatedInstrumentCandidates || []);
 
   if (!purpose?.text) throw new Error('Summary is missing purpose');
   if (!scope?.text) throw new Error('Summary is missing cited scope');
@@ -296,7 +215,6 @@ function parseLawSummaryJson(text, input) {
     scope,
     keyPoints,
     structure,
-    relatedInstruments,
   };
 }
 
@@ -314,7 +232,6 @@ function buildUserPrompt(input) {
     definitions: input.definitions,
     openingRecitals: input.recitals,
     articles: input.articles,
-    relatedInstrumentCandidates: input.relatedInstrumentCandidates,
   }, null, 2);
 }
 

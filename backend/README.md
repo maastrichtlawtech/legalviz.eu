@@ -303,10 +303,7 @@ The backend stores titles in `recital-title-cache-v1.json` with a cache `version
     "keyObligations": [
       { "text": "…", "citations": ["5"] }
     ],
-    "structure": "…",
-    "relatedInstruments": [
-      { "label": "Directive 95/46/EC", "celex": "31995L0046", "relationship": "…" }
-    ]
+    "structure": "…"
   }
 }
 ```

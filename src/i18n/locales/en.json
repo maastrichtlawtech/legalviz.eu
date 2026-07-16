@@ -377,7 +377,6 @@
     "scope": "Scope",
     "keyPoints": "Key points",
     "structure": "Structure",
-    "relatedInstruments": "Related instruments",
     "generatedOn": "Static summary generated {date}"
   }
 }

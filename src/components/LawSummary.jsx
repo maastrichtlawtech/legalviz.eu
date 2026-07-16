@@ -140,21 +140,6 @@ export function LawSummary({ celex, lang = "EN", onArticleClick, className = "ro
                 </div>
               ) : null}
 
-              {summary.relatedInstruments?.length ? (
-                <div>
-                  <SectionLabel>{t("lawSummary.relatedInstruments")}</SectionLabel>
-                  <ul className="space-y-1.5">
-                    {summary.relatedInstruments.map((item, index) => (
-                      <li key={`${item.label}-${index}`}>
-                        <span className="font-medium text-gray-900 dark:text-gray-100">{item.label}</span>
-                        {item.celex ? <span className="ml-1 font-mono text-xs text-gray-500 dark:text-gray-400">{item.celex}</span> : null}
-                        {item.relationship ? <span> — {item.relationship}</span> : null}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ) : null}
-
               {metadata?.generatedAt ? (
                 <div className="pt-1 text-[11px] text-gray-400 dark:text-gray-500">
                   {t("lawSummary.generatedOn", {

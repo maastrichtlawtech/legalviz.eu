@@ -32,13 +32,10 @@ function sampleParsedLaw() {
     ],
     recitals: [{ recital_number: '1', recital_text: 'Protection of natural persons.' }],
     definitions: [{ term: 'personal data', sourceArticle: '4' }],
-    crossReferences: {
-      1: [{ type: 'external', raw: 'Directive 95/46/EC', target: 'Directive 95/46/EC' }],
-    },
   };
 }
 
-test('parseLawSummaryJson keeps only valid article citations and related instruments', () => {
+test('parseLawSummaryJson keeps only valid article citations', () => {
   const input = buildLawSummaryInput(sampleParsedLaw());
   const summary = parseLawSummaryJson(JSON.stringify({
     purpose: { text: 'It protects personal data.', citations: ['1', '999'] },
@@ -48,16 +45,10 @@ test('parseLawSummaryJson keeps only valid article citations and related instrum
       { text: 'Invalid point is dropped.', citations: ['999'] },
     ],
     structure: 'It starts with general provisions and then sets principles.',
-    relatedInstruments: [
-      { label: 'Directive 95/46/EC', celex: '31995L0046', relationship: 'Predecessor data-protection framework.' },
-      { label: 'Invented Act', celex: '39999X0000', relationship: 'Should be rejected.' },
-    ],
   }), input);
 
   assert.deepEqual(summary.purpose.citations, ['1']);
   assert.deepEqual(summary.keyPoints.map((item) => item.citations), [['5']]);
-  assert.equal(summary.relatedInstruments.length, 1);
-  assert.equal(summary.relatedInstruments[0].celex, '31995L0046');
 });
 
 test('ensureLawSummary caches validated summaries', async () => {
@@ -73,7 +64,6 @@ test('ensureLawSummary caches validated summaries', async () => {
         scope: { text: 'It applies to personal data processing.', citations: ['1'] },
         keyPoints: [{ text: 'Data must be processed lawfully.', citations: ['5'] }],
         structure: 'It starts with general provisions and then sets principles.',
-        relatedInstruments: [{ label: 'Directive 95/46/EC', celex: '31995L0046', relationship: 'Predecessor framework.' }],
       }),
     };
   };
@@ -147,7 +137,6 @@ test('overall article budget drops bodies but keeps every article number citable
     scope: { text: 'It applies broadly.', citations: [droppedArticle.number] },
     keyPoints: [{ text: 'A rule still cites a body-trimmed article.', citations: [droppedArticle.number] }],
     structure: 'It is organised into many articles.',
-    relatedInstruments: [],
   }), input);
 
   assert.deepEqual(summary.scope.citations, [droppedArticle.number]);
@@ -174,7 +163,6 @@ function stubChatComplete(counter) {
         scope: { text: 'It applies to personal data processing.', citations: ['1'] },
         keyPoints: [{ text: 'Data must be processed lawfully.', citations: ['5'] }],
         structure: 'It starts with general provisions and then sets principles.',
-        relatedInstruments: [],
       }),
     };
   };

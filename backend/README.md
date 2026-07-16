@@ -572,13 +572,13 @@ See the [case-law data refresh runbook](docs/case-law-data-refresh.md) for the
 schedule, incremental-update model, Chromium/WAF behavior, candidate review and
 approval procedure, recovery steps, and current operational limitations.
 
-### Metadata that isn't in the corpus (dates + EuroVoc topics)
+### Metadata that isn't in the corpus (dates, EuroVoc topics, in-force status)
 
-`date` and `eurovoc` are SPARQL metadata that the gzipped source on disk doesn't
-carry, so an offline rebuild (`build-cache-from-corpus.js`) can't reconstruct
-them. Both builders fill them in, and **both fields ship inside the release
-asset** from `data-v6` on — the server reads them straight off each record and
-merges nothing at startup.
+`date`, `eurovoc` and `inForce` are SPARQL metadata that the gzipped source on
+disk doesn't carry, so an offline rebuild (`build-cache-from-corpus.js`) can't
+reconstruct them. Both builders fill them in, and **all of them ship inside the
+release asset** (`date`/`eurovoc` from `data-v6`, `inForce` from `data-v8`) — the
+server reads them straight off each record and merges nothing at startup.
 
 - **`date`** (`cdm:work_date_document`) — `search-build.js` persists it for every
   year it harvests into `search/data/law-dates.json` (`law-corpus-dates.js`),
@@ -586,11 +586,27 @@ merges nothing at startup.
 - **`eurovoc`** (subject labels) — `search/eurovoc-enrich.js` runs as the **last
   step of both builders**, fetching labels for any record that doesn't have them
   and journaling results to `search/data/eurovoc.json`.
+- **`inForce`** / **`endOfValidity`** — `search/in-force-enrich.js`, same shape,
+  journaling to `search/data/in-force.json`.
 
-Both files are **gitignored build-time artifacts**. `eurovoc.json` is a resume
-journal only: it means an interrupted harvest (~800 batches over Cellar) doesn't
-restart from zero, and a rebuild reuses labels already fetched for unchanged
-acts.
+`inForce` is a **tri-state**: `true`, `false`, or `null` when Cellar has no
+status for the act. Three things about it are easy to get wrong:
+
+- **`false` means "no longer in force" and nothing more.** Cellar exposes no
+  repeal predicate, so there is no way to tell a repealed act from one that
+  expired on its own terms (`31970R0729` ran out in 1999 and was never repealed).
+  Don't let a label upgrade this into a claim the data can't support — EUR-Lex
+  itself says "No longer in force".
+- **The flag is authoritative; never derive status from dates.** They disagree:
+  `32015L2366` (PSD2) is flagged in force while carrying an `endOfValidity` of
+  `2026-06-18`, already in the past.
+- **`9999-12-31` is a sentinel**, not a date. `in-force-enrich.js` normalises it
+  to `null`; `entry-into-force` is deliberately not fetched because it is
+  multi-valued and fans every act out into duplicate rows.
+
+All three journals are **gitignored build-time artifacts** and resume journals
+only: they mean an interrupted harvest (~800 batches over Cellar) doesn't restart
+from zero, and a rebuild reuses values already fetched for unchanged acts.
 
 Enrichment is part of the build **on purpose**. Topics are keyed by CELEX, so a
 pass bolted on afterwards is generated against one cache and served alongside
@@ -599,17 +615,27 @@ errors. That is exactly how the `data-v5` corpus expansion (13k → 80k acts) le
 ~83% of records topic-less.
 
 It's best-effort: a Cellar outage logs and ships the cache without topics rather
-than discarding a multi-hour harvest. Opt out with `--no-eurovoc`, which for
-`build-cache-from-corpus.js` also restores a genuinely network-free build (the
-enrichment runs in the driver; the parse workers keep their hard `fetch` block
-either way).
+than discarding a multi-hour harvest. Opt out with `--no-eurovoc` /
+`--no-in-force`, which for `build-cache-from-corpus.js` also restores a genuinely
+network-free build (the enrichment runs in the driver; the parse workers keep
+their hard `fetch` block either way).
 
-If a cache is fine but its topics aren't — a build ran `--no-eurovoc`, or EuroVoc
-changed upstream — backfill without a rebuild:
+If a cache is fine but its topics or status aren't — a build ran `--no-eurovoc`,
+EuroVoc changed upstream, or acts have since fallen out of force — backfill
+without a rebuild:
 
 ```bash
 node --max-old-space-size=8192 search/fetch-eurovoc.js
+node --max-old-space-size=8192 search/fetch-in-force.js
 ```
+
+**Backfill; don't rebuild, to add a field.** These tools patch the cache they
+read, touching only their own field and carrying everything else through
+verbatim. A rebuild re-derives `date` and `eurovoc` from scratch and will happily
+ship a cache with 13k/80k dates and zero topics if the harvest is anything short
+of complete — that is not hypothetical, it is what the first `data-v7` upload
+did, and CI only caught half of it. `fetch-in-force.js` refuses to write if the
+date or EuroVoc counts regress against the cache it loaded.
 
 Publish `search-cache.json.gz` as the next `data-vN` release asset and bump
 `DATA_RELEASE_TAG` in `backend/Dockerfile`. Docker fetches both JSON assets and

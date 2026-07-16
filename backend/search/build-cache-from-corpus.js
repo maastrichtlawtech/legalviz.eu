@@ -33,6 +33,7 @@ const { spawn } = require("child_process");
 
 const { readCorpusDates, normalizeCelexKey } = require("./law-corpus-dates.js");
 const { enrichRecordsWithEurovoc } = require("./eurovoc-enrich.js");
+const { enrichRecordsWithInForce } = require("./in-force-enrich.js");
 
 const CORPUS_DIR = path.join(__dirname, "data");
 const FMX_ROOT = path.join(CORPUS_DIR, "laws");
@@ -246,7 +247,7 @@ async function runPool(jobs, concurrency) {
   return failed;
 }
 
-async function driver({ noEurovoc = false } = {}) {
+async function driver({ noEurovoc = false, noInForce = false } = {}) {
   const t0 = Date.now();
   const { enrichSearchRecord } = require("./search-ranking.js");
 
@@ -367,11 +368,12 @@ async function driver({ noEurovoc = false } = {}) {
     records: merged,
   };
 
-  // EuroVoc topics are SPARQL metadata, so — like the dates overlaid above —
-  // they can't be reconstructed from disk. This is the one network call in an
-  // otherwise offline build, and it runs *here in the driver*: the workers keep
-  // their hard `fetch` block, so a corpus miss still fails loudly instead of
-  // silently scraping. Skip it with --no-eurovoc for a genuinely offline run.
+  // EuroVoc topics and in-force status are SPARQL metadata, so — like the dates
+  // overlaid above — they can't be reconstructed from disk. These are the only
+  // network calls in an otherwise offline build, and they run *here in the
+  // driver*: the workers keep their hard `fetch` block, so a corpus miss still
+  // fails loudly instead of silently scraping. Skip them with --no-eurovoc /
+  // --no-in-force for a genuinely offline run.
   //
   // It runs as part of the build rather than as a follow-up pass because a
   // CELEX-keyed sidecar bolted on afterwards strands every record it never saw,
@@ -386,6 +388,19 @@ async function driver({ noEurovoc = false } = {}) {
       console.log(`[corpus-build] EuroVoc: ${stats.withLabels} records with topics (${stats.fromJournal} from journal, ${stats.fetched} fetched)`);
     } catch (error) {
       console.log(`[corpus-build] EuroVoc enrichment failed, cache ships without topics: ${error.message}`);
+    }
+  }
+
+  if (noInForce) {
+    console.log("[corpus-build] In-force enrichment skipped (--no-in-force)");
+  } else {
+    try {
+      const stats = await enrichRecordsWithInForce(payload.records, {
+        log: (message) => console.log(`[corpus-build] [in-force] ${message}`),
+      });
+      console.log(`[corpus-build] In-force: ${stats.withStatus} records with status, ${stats.inForce} in force (${stats.fromJournal} from journal, ${stats.fetched} fetched)`);
+    } catch (error) {
+      console.log(`[corpus-build] In-force enrichment failed, cache ships without status: ${error.message}`);
     }
   }
 
@@ -423,7 +438,10 @@ async function main() {
     await runWorker(variant, batchPath, outPath);
     return;
   }
-  await driver({ noEurovoc: args.includes("--no-eurovoc") });
+  await driver({
+    noEurovoc: args.includes("--no-eurovoc"),
+    noInForce: args.includes("--no-in-force"),
+  });
 }
 
 if (require.main === module) {

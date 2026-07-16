@@ -11,6 +11,7 @@ const { parseFmxXml } = require("../shared/fmx-parser-node");
 const { readCorpusXml, writeCorpusXml } = require("./law-corpus-store");
 const { mergeCorpusDates } = require("./law-corpus-dates");
 const { enrichRecordsWithEurovoc } = require("./eurovoc-enrich");
+const { enrichRecordsWithInForce } = require("./in-force-enrich");
 
 const execFileAsync = promisify(execFile);
 const SPARQL_ENDPOINT = "https://publications.europa.eu/webapi/rdf/sparql";
@@ -864,6 +865,7 @@ async function reEnrichCurrentCache(options = {}) {
   nextPayload.count = nextPayload.records.length;
 
   await attachEurovocTopics(nextPayload.records, options, logProgress);
+  await attachInForceStatus(nextPayload.records, options, logProgress);
 
   await writeCacheAtomically(cachePath, nextPayload);
   return nextPayload;
@@ -896,6 +898,28 @@ async function attachEurovocTopics(records, options, log) {
     log(`EuroVoc: ${stats.withLabels} records with topics (${stats.fromJournal} from journal, ${stats.fetched} fetched)`);
   } catch (error) {
     log(`EuroVoc enrichment failed, cache will ship without topics: ${error.message}`);
+  }
+}
+
+// Attach in-force status to a finished record set, for the same reason and on
+// the same terms as attachEurovocTopics above: CELEX-keyed, so it belongs to the
+// build rather than to a later pass, and best-effort, so Cellar can't cost us a
+// harvest. Opt out with `inForce: false` (`--no-in-force`).
+async function attachInForceStatus(records, options, log) {
+  if (options.inForce === false) {
+    log("In-force enrichment skipped (--no-in-force)");
+    return;
+  }
+  try {
+    const stats = await enrichRecordsWithInForce(records, {
+      journalPath: options.inForceJournalPath,
+      limit: options.inForceLimit,
+      runQueryFn: options.inForceRunQueryFn,
+      log: (message) => log(`[in-force] ${message}`),
+    });
+    log(`In-force: ${stats.withStatus} records with status, ${stats.inForce} in force (${stats.fromJournal} from journal, ${stats.fetched} fetched)`);
+  } catch (error) {
+    log(`In-force enrichment failed, cache will ship without status: ${error.message}`);
   }
 }
 
@@ -1007,6 +1031,7 @@ async function buildSearchCache(options = {}) {
   payload.count = payload.records.length;
 
   await attachEurovocTopics(payload.records, options, logProgress);
+  await attachInForceStatus(payload.records, options, logProgress);
 
   await writeCacheAtomically(cachePath, payload);
   await writeStateAtomically(statePath, createStatePayload({
@@ -1067,6 +1092,7 @@ module.exports = {
   CORPUS_DIR,
   EXCERPT_MAX_LENGTH,
   attachEurovocTopics,
+  attachInForceStatus,
   buildExcerptFromCombined,
   buildSearchCache,
   extractExcerptFromXml,

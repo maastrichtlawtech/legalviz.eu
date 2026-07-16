@@ -76,10 +76,29 @@ jobs:
             const laws = db.prepare("SELECT COUNT(*) AS c FROM laws").get().c;
             const undated = missing("$.date");
             const untopiced = missing("$.eurovoc");
+            // inForce is a tri-state, and json_extract cannot police it: it
+            // returns SQL NULL both for an absent key and for a stored JSON
+            // null ("Cellar has no status"), which is a legitimate value.
+            // json_type returns SQL NULL only when the key is genuinely absent.
+            const untyped = (jsonPath) => db.prepare(
+              "SELECT COUNT(*) AS c FROM laws WHERE json_type(record_json, ?) IS NULL"
+            ).get(jsonPath).c;
+            const unstatused = untyped("$.inForce");
+            // A run that answered "unknown" for every act would still carry the
+            // key everywhere, so also assert real booleans actually landed.
+            // ~87% is the ceiling, not 100%: Cellar carries no in-force triple
+            // at all for ~10k Commission Implementing Regulations (mostly
+            // 2000s), so `null` there is correct rather than a failed fetch.
+            // The floor only needs to catch a wholesale enrichment collapse.
+            const decided = db.prepare(
+              "SELECT COUNT(*) AS c FROM laws WHERE json_type(record_json, ?) IN ('true', 'false')"
+            ).get("$.inForce").c;
             db.close();
             if (undated > 0) throw new Error(undated + "/" + laws + " laws have no date - search-cache lost its date enrichment");
             if (untopiced > 0) throw new Error(untopiced + "/" + laws + " laws have no eurovoc key - search-cache lost its EuroVoc enrichment");
-            console.log("enrichment intact: " + laws + " laws, all dated, all carrying eurovoc");
+            if (unstatused > 0) throw new Error(unstatused + "/" + laws + " laws have no inForce key - search-cache lost its in-force enrichment");
+            if (decided < laws * 0.8) throw new Error(decided + "/" + laws + " laws have a known in-force status - expected >80% (data-v8 shipped 87%), in-force enrichment is degraded");
+            console.log("enrichment intact: " + laws + " laws, all dated, all carrying eurovoc, " + decided + " with a known in-force status");
           '
       - name: Container logs
         if: always()

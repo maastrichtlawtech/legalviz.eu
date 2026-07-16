@@ -23,6 +23,8 @@ function publicRecord(record) {
     fmxUnavailable: record?.fmxUnavailable,
     enrichError: record?.enrichError,
     eurovoc: record?.eurovoc,
+    inForce: record?.inForce,
+    endOfValidity: record?.endOfValidity,
     celexYear: record?.celexYear,
     celexNumber: record?.celexNumber,
     aliases: record?.aliases,
@@ -247,6 +249,101 @@ test("legal cache store caps searchLaws topics at 5 and defaults to empty array 
 
   const [dataAct] = store.searchLaws("32023R2854", { limit: 1 });
   assert.deepEqual(dataAct.topics, []);
+});
+
+// In-force status rides in the cache like topics do. `inForce` is a tri-state:
+// true / false / null for "Cellar has no status for this act". The wire contract
+// normalises an absent field to null so the client sees one shape.
+test("legal cache store exposes in-force status through searchLaws", () => {
+  const store = new JsonLegalCacheStore(fixturePath);
+  store.load();
+
+  const [gdpr] = store.searchLaws("32016R0679", { limit: 1 });
+  assert.equal(gdpr.inForce, true);
+  assert.equal(gdpr.endOfValidity, null);
+
+  // PSD2 is flagged in force *and* carries an end-of-validity date. Cellar's
+  // flag is authoritative; status must never be derived from the date.
+  const [psd2] = store.searchLaws("32015L2366", { limit: 1 });
+  assert.equal(psd2.inForce, true);
+  assert.equal(psd2.endOfValidity, "2026-06-18");
+
+  // A record predating the field reads as unknown, not as out of force.
+  const [synthetic] = store.searchLaws("32026R0667", { limit: 1 });
+  assert.equal(synthetic.inForce, null);
+  assert.equal(synthetic.endOfValidity, null);
+});
+
+// `false` is the whole point of the field, and it is exactly the value a
+// `|| null` or a truthiness check would quietly turn into "unknown".
+test("legal cache store keeps a false in-force status distinct from unknown", () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "legal-cache-store-in-force-"));
+  const tempPath = path.join(tempDir, "repealed.json");
+  fs.writeFileSync(tempPath, JSON.stringify({
+    records: [{
+      celex: "31995L0046",
+      title: "Directive 95/46/EC on the protection of individuals with regard to the processing of personal data",
+      type: "directive",
+      date: "1995-10-24",
+      eli: "http://data.europa.eu/eli/dir/1995/46/oj",
+      inForce: false,
+      endOfValidity: "2018-05-24",
+    }],
+  }), "utf8");
+
+  const store = new JsonLegalCacheStore(tempPath, { preferJson: true });
+  assert.equal(store.load(), true);
+
+  const [match] = store.searchLaws("31995L0046", { limit: 1 });
+  assert.equal(match.inForce, false);
+  assert.equal(match.endOfValidity, "2018-05-24");
+});
+
+// The SQLite path is production. compactSqliteRecord is a hand-maintained
+// whitelist, so a field can pass every JSON-backed test and still never reach
+// the client — silently. Pin the round trip, including the false case.
+test("SQLite round trip carries in-force status, including false", () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "legal-cache-store-in-force-sqlite-"));
+  const cachePath = path.join(tempDir, "cache.json");
+  const caseLawPath = path.join(tempDir, "case-law.json");
+  const sqlitePath = path.join(tempDir, "data.sqlite");
+  fs.writeFileSync(caseLawPath, "{}", "utf8");
+  fs.writeFileSync(cachePath, JSON.stringify({
+    records: [
+      {
+        celex: "32016R0679",
+        title: "Regulation (EU) 2016/679 on the protection of natural persons",
+        type: "regulation",
+        date: "2016-04-27",
+        eli: "http://data.europa.eu/eli/reg/2016/679/oj",
+        inForce: true,
+        endOfValidity: null,
+      },
+      {
+        celex: "31995L0046",
+        title: "Directive 95/46/EC on the protection of individuals",
+        type: "directive",
+        date: "1995-10-24",
+        eli: "http://data.europa.eu/eli/dir/1995/46/oj",
+        inForce: false,
+        endOfValidity: "2018-05-24",
+      },
+    ],
+  }), "utf8");
+  buildSqliteData({ searchCachePath: cachePath, caseLawCachePath: caseLawPath, outputPath: sqlitePath });
+
+  const store = new JsonLegalCacheStore(cachePath, { sqlitePath, requireSqlite: true });
+  assert.equal(store.load(), true);
+  assert.equal(store.source, "sqlite");
+
+  assert.equal(store.getByCelex("32016R0679")?.inForce, true);
+  assert.equal(store.getByCelex("31995L0046")?.inForce, false);
+  assert.equal(store.getByCelex("31995L0046")?.endOfValidity, "2018-05-24");
+
+  const [repealed] = store.searchLaws("31995L0046", { limit: 1 });
+  assert.equal(repealed.inForce, false);
+  assert.equal(repealed.endOfValidity, "2018-05-24");
+  store.close();
 });
 
 // A cache built by search-build.js carries no eurovoc field at all (the fold

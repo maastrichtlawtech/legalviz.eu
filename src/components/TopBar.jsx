@@ -925,7 +925,11 @@ export function SearchBox({
                                 {item.search_kind === "law" ? (
                                   <>
                                     <div className="flex w-full min-w-0 items-baseline gap-2">
-                                      <span className={`min-w-0 flex-1 truncate font-display font-bold text-eu-navy dark:text-white ${dense ? "text-[14px]" : "text-[15px]"}`}>
+                                      <span className={`min-w-0 flex-1 truncate font-display font-bold ${dense ? "text-[14px]" : "text-[15px]"} ${
+                                        item.inForce === false
+                                          ? "text-gray-400 dark:text-gray-500"
+                                          : "text-eu-navy dark:text-white"
+                                      }`}>
                                         {lawDisplay?.primaryTitle || item.title}
                                       </span>
                                       {item.directCelex && (
@@ -938,9 +942,31 @@ export function SearchBox({
                                           {item.law_label}
                                         </span>
                                       )}
+                                      {/* Tri-state, so compare to true/false explicitly: null means
+                                          Cellar has no status for this act, and drawing nothing is
+                                          the only honest answer. `false` means "no longer in force"
+                                          and nothing more — there is no repeal data behind it. */}
+                                      {item.inForce === true && (
+                                        <span className="inline-flex flex-shrink-0 items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
+                                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 dark:bg-emerald-400" aria-hidden="true" />
+                                          {t("search.inForce")}
+                                        </span>
+                                      )}
+                                      {item.inForce === false && (
+                                        <span
+                                          className="flex-shrink-0 rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-gray-500 dark:bg-gray-800 dark:text-gray-400"
+                                          title={item.endOfValidity ? t("search.endOfValidity").replace("{date}", item.endOfValidity) : undefined}
+                                        >
+                                          {t("search.notInForce")}
+                                        </span>
+                                      )}
                                     </div>
                                     {lawDisplay?.secondaryTitle ? (
-                                      <p className="text-xs leading-relaxed text-gray-500 line-clamp-2 dark:text-gray-400">
+                                      <p className={`text-xs leading-relaxed line-clamp-2 ${
+                                        item.inForce === false
+                                          ? "text-gray-400 dark:text-gray-500"
+                                          : "text-gray-500 dark:text-gray-400"
+                                      }`}>
                                         {lawDisplay.secondaryTitle}
                                       </p>
                                     ) : null}

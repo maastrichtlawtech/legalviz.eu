@@ -170,6 +170,13 @@ function searchableAliases(record) {
   return (record.aliases || []).filter((alias) => !structural.has(alias));
 }
 
+// NOTE: this is an explicit whitelist, not a projection — a field added to the
+// cache records upstream is dropped here unless it is named below, and nothing
+// errors when that happens. enrichSearchRecord spreads `{...record}`, so new
+// fields survive *it* and appear to flow through end to end in a JSON-cache dev
+// checkout, then silently vanish in production, which loads from SQLite. Add the
+// field here and to the result mapping in searchLaws() below, or it will not
+// reach the client.
 function compactSqliteRecord(record) {
   const enriched = enrichSearchRecord(record);
   if (!enriched.isPrimaryAct) return null;
@@ -183,6 +190,13 @@ function compactSqliteRecord(record) {
     fmxUnavailable: enriched.fmxUnavailable,
     enrichError: enriched.enrichError,
     eurovoc: enriched.eurovoc,
+    // Passed through undefined-and-all, like eurovoc above: JSON.stringify drops
+    // an undefined key, so a record predating the field hydrates identically
+    // from JSON and from SQLite. Coercing to null here instead would store an
+    // explicit null and break that parity. Normalisation belongs at the wire
+    // boundary (searchLaws), not here.
+    inForce: enriched.inForce,
+    endOfValidity: enriched.endOfValidity,
     celexYear: enriched.celexYear,
     celexNumber: enriched.celexNumber,
     aliases: enriched.aliases,
@@ -503,6 +517,8 @@ class JsonLegalCacheStore {
       }
     }
 
+    // Like compactSqliteRecord, an explicit whitelist: a field not named here
+    // never reaches the client, however far it got through the store.
     return matched
       .slice(0, limit)
       .map((law) => ({
@@ -514,6 +530,10 @@ class JsonLegalCacheStore {
         fmxAvailable: Boolean(law.fmxAvailable),
         matchReason: determineMatchReason(law, parsed),
         topics: (law.eurovoc || []).slice(0, 5),
+        // Tri-state; `?? null` keeps a real `false` from collapsing to null.
+        // null means "unknown", and the client draws no badge for it.
+        inForce: law.inForce ?? null,
+        endOfValidity: law.endOfValidity || null,
       }));
   }
 

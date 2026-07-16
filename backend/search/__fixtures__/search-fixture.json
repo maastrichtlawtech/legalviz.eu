@@ -18,7 +18,9 @@
         "approximation of laws",
         "EU Member State",
         "electronic data processing"
-      ]
+      ],
+      "inForce": true,
+      "endOfValidity": null
     },
     {
       "celex": "32022R1925",
@@ -32,7 +34,9 @@
         "digital economy",
         "competition policy",
         "online platform"
-      ]
+      ],
+      "inForce": true,
+      "endOfValidity": null
     },
     {
       "celex": "32022R2065",
@@ -41,7 +45,9 @@
       "date": "2022-10-19",
       "eli": "http://data.europa.eu/eli/reg/2022/2065/oj",
       "fmxAvailable": true,
-      "fmxUnavailable": false
+      "fmxUnavailable": false,
+      "inForce": true,
+      "endOfValidity": null
     },
     {
       "celex": "32023R2854",
@@ -50,7 +56,9 @@
       "date": "2023-12-13",
       "eli": "http://data.europa.eu/eli/reg/2023/2854/oj",
       "fmxAvailable": true,
-      "fmxUnavailable": false
+      "fmxUnavailable": false,
+      "inForce": true,
+      "endOfValidity": null
     },
     {
       "celex": "32022R0868",
@@ -59,7 +67,9 @@
       "date": "2022-05-30",
       "eli": "http://data.europa.eu/eli/reg/2022/868/oj",
       "fmxAvailable": true,
-      "fmxUnavailable": false
+      "fmxUnavailable": false,
+      "inForce": true,
+      "endOfValidity": null
     },
     {
       "celex": "32024D0788",
@@ -68,7 +78,9 @@
       "date": "2024-03-06",
       "eli": "http://data.europa.eu/eli/dec/2024/788/oj",
       "fmxAvailable": true,
-      "fmxUnavailable": false
+      "fmxUnavailable": false,
+      "inForce": true,
+      "endOfValidity": null
     },
     {
       "celex": "32026R0667",
@@ -86,7 +98,9 @@
       "date": "2015-11-25",
       "eli": "http://data.europa.eu/eli/dir/2015/2366/oj",
       "fmxAvailable": false,
-      "fmxUnavailable": true
+      "fmxUnavailable": true,
+      "inForce": true,
+      "endOfValidity": "2026-06-18"
     },
     {
       "celex": "32019L0789",
@@ -95,7 +109,9 @@
       "date": "2019-04-17",
       "eli": "http://data.europa.eu/eli/dir/2019/789/oj",
       "fmxAvailable": true,
-      "fmxUnavailable": false
+      "fmxUnavailable": false,
+      "inForce": true,
+      "endOfValidity": null
     },
     {
       "celex": "32019L0790",
@@ -104,7 +120,9 @@
       "date": "2019-04-17",
       "eli": "http://data.europa.eu/eli/dir/2019/790/oj",
       "fmxAvailable": true,
-      "fmxUnavailable": false
+      "fmxUnavailable": false,
+      "inForce": true,
+      "endOfValidity": null
     },
     {
       "celex": "32024R1689",
@@ -113,7 +131,9 @@
       "date": "2024-06-13",
       "eli": "http://data.europa.eu/eli/reg/2024/1689/oj",
       "fmxAvailable": true,
-      "fmxUnavailable": false
+      "fmxUnavailable": false,
+      "inForce": true,
+      "endOfValidity": null
     },
     {
       "celex": "32022L2464",
@@ -122,7 +142,9 @@
       "date": "2022-12-14",
       "eli": "http://data.europa.eu/eli/dir/2022/2464/oj",
       "fmxAvailable": true,
-      "fmxUnavailable": false
+      "fmxUnavailable": false,
+      "inForce": true,
+      "endOfValidity": null
     },
     {
       "celex": "32023R1114",
@@ -131,7 +153,9 @@
       "date": "2023-05-31",
       "eli": "http://data.europa.eu/eli/reg/2023/1114/oj",
       "fmxAvailable": true,
-      "fmxUnavailable": false
+      "fmxUnavailable": false,
+      "inForce": true,
+      "endOfValidity": null
     },
     {
       "celex": "32024R1083",
@@ -140,7 +164,9 @@
       "date": "2024-04-11",
       "eli": "http://data.europa.eu/eli/reg/2024/1083/oj",
       "fmxAvailable": true,
-      "fmxUnavailable": false
+      "fmxUnavailable": false,
+      "inForce": true,
+      "endOfValidity": null
     },
     {
       "celex": "32021D0998",

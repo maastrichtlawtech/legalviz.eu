@@ -41,6 +41,7 @@ import { LawViewerLoadingState } from "./law-viewer/LawViewerLoadingState.jsx";
 import { LawViewerErrorState } from "./law-viewer/LawViewerErrorState.jsx";
 import { LawViewerSidebar } from "./law-viewer/LawViewerSidebar.jsx";
 import { LawViewerSideBySide } from "./law-viewer/LawViewerSideBySide.jsx";
+import { DefinitionTooltip } from "./law-viewer/DefinitionTooltip.jsx";
 import { LawViewerReadingFooter } from "./law-viewer/LawViewerReadingFooter.jsx";
 import { LawViewerContextRail } from "./law-viewer/LawViewerContextRail.jsx";
 import { LawOverviewPage } from "./law-viewer/LawOverviewPage.jsx";
@@ -388,6 +389,8 @@ export function LawViewer() {
                     onTouchEnd={interactions.onTouchEnd}
                     t={t}
                   />
+
+                  <DefinitionTooltip t={t} />
 
                   <LawViewerReadingFooter
                     selected={selection.selected}

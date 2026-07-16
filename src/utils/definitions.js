@@ -1,6 +1,7 @@
 /**
- * Inject definition tooltips into HTML content.
- * Wraps occurrences of defined terms with span elements that show the definition on hover.
+ * Inject definition markers into HTML content.
+ * Wraps occurrences of defined terms with span elements carrying data-term /
+ * data-definition attributes; DefinitionTooltip renders the actual popup.
  */
 
 /**
@@ -101,10 +102,13 @@ export function injectDefinitionTooltips(html, definitions, options = {}) {
             }
             if (insideDefinedTerm) continue;
 
-            // Replace occurrences in text nodes
+            // Replace occurrences in text nodes. The span is a pure data
+            // marker: the popup itself is rendered by <DefinitionTooltip />
+            // outside this HTML, so no title attribute here.
             parts[i] = part.replace(termPattern, (match) => {
                 const escapedDef = escapeHtml(definition);
-                return `<span class="defined-term" data-definition="${escapedDef}" title="${escapedDef}">${match}</span>`;
+                const escapedTerm = escapeHtml(term);
+                return `<span class="defined-term" data-term="${escapedTerm}" data-definition="${escapedDef}">${match}</span>`;
             });
         }
 

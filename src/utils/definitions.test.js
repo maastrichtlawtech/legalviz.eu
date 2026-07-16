@@ -21,6 +21,13 @@ describe("injectDefinitionTooltips", () => {
     expect(result).toContain('data-definition="');
   });
 
+  it("includes the canonical term in data-term and no native title attribute", () => {
+    const html = "<p>The CONTROLLER processes data.</p>";
+    const result = injectDefinitionTooltips(html, DEFINITIONS);
+    expect(result).toContain('data-term="controller"');
+    expect(result).not.toContain("title=");
+  });
+
   it("returns html unchanged when definitions array is empty", () => {
     const html = "<p>Some text.</p>";
     expect(injectDefinitionTooltips(html, [])).toBe(html);

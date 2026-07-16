@@ -373,10 +373,10 @@
     "englishOnly": "English only",
     "generating": "Generating overview",
     "unavailable": "Overview is not available for this law yet.",
+    "natureAndEffect": "Nature & legal effect",
     "purpose": "Purpose",
     "scope": "Scope",
     "keyPoints": "Key points",
-    "structure": "Structure",
     "generatedOn": "Static summary generated {date}"
   }
 }

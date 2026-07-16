@@ -51,6 +51,9 @@ export function LawSummary({ celex, lang = "EN", onArticleClick, className = "ro
   const showEnglishOnlyNote = (lang || "EN").toUpperCase() !== "EN";
 
   if (!celex) return null;
+  // Imported laws outside the search index have summaries deliberately
+  // disabled server-side; hide the panel instead of offering a retry.
+  if (error?.code === "summary_not_indexed") return null;
 
   return (
     <div className={className}>
@@ -96,15 +99,24 @@ export function LawSummary({ celex, lang = "EN", onArticleClick, className = "ro
 
           {summary ? (
             <>
+              {summary.natureAndEffect?.text ? (
+                <div>
+                  <SectionLabel>{t("lawSummary.natureAndEffect")}</SectionLabel>
+                  <p><CitedText block={summary.natureAndEffect} onArticleClick={onArticleClick} t={t} /></p>
+                </div>
+              ) : null}
+
               <div>
                 <SectionLabel>{t("lawSummary.purpose")}</SectionLabel>
                 <p><CitedText block={summary.purpose} onArticleClick={onArticleClick} t={t} /></p>
               </div>
 
-              <div>
-                <SectionLabel>{t("lawSummary.scope")}</SectionLabel>
-                <p><CitedText block={summary.scope} onArticleClick={onArticleClick} t={t} /></p>
-              </div>
+              {summary.scope?.text ? (
+                <div>
+                  <SectionLabel>{t("lawSummary.scope")}</SectionLabel>
+                  <p><CitedText block={summary.scope} onArticleClick={onArticleClick} t={t} /></p>
+                </div>
+              ) : null}
 
               {summary.keyPoints?.length ? (
                 <div>
@@ -130,13 +142,6 @@ export function LawSummary({ celex, lang = "EN", onArticleClick, className = "ro
                       </li>
                     ))}
                   </ul>
-                </div>
-              ) : null}
-
-              {summary.structure ? (
-                <div>
-                  <SectionLabel>{t("lawSummary.structure")}</SectionLabel>
-                  <p>{summary.structure}</p>
                 </div>
               ) : null}
 

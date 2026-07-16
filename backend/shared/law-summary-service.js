@@ -14,42 +14,73 @@ const {
 
 const CACHE_FILE = 'law-summary-cache-v1.json';
 const CACHE_VERSION = 1;
-const SCHEMA_VERSION = 3;
-const PROMPT_VERSION = 3;
+const SCHEMA_VERSION = 4;
+const PROMPT_VERSION = 4;
 const MAX_ARTICLE_TEXT_CHARS = 6000;
 const MAX_RECITAL_COUNT = 60;
 const MAX_RECITAL_TEXT_CHARS = 700;
 const MAX_ARTICLE_TEXT_BUDGET_CHARS = 500000;
 
-const ACT_TYPE_GUIDANCE = {
-  regulation: 'This is a regulation: frame key points as directly-applicable obligations, rights, and prohibitions binding on the addressees themselves.',
-  directive: 'This is a directive: frame key points as duties on Member States, i.e. what must be transposed into national law and by when if a deadline is stated, not direct obligations on private parties.',
-  decision: 'This is a decision or establishing act: frame key points around the addressees, the body or authority it creates, and that body\'s powers and mandate.',
-  unknown: 'The act type could not be determined: frame key points generically as obligations, rights, powers, or prohibitions as best supported by the text.',
+// The CELEX descriptor letter and the official title are hints, not verdicts:
+// legal form is a weak proxy for how an act functions (a sui generis decision
+// can operate like a regulation; an adequacy decision addresses Member
+// States; a "regulation" may only amend another act). The prompt passes these
+// to the model and asks it to verify against the text itself.
+const CELEX_TYPE_HINTS = {
+  regulation: 'a regulation',
+  directive: 'a directive',
+  decision: 'a decision',
 };
+
+function detectTitleHints(title) {
+  const text = String(title || '').toLowerCase();
+  const hints = [];
+  if (/\bamending\b/.test(text)) hints.push('the title says it amends other acts');
+  if (/\brepealing\b/.test(text)) hints.push('the title says it repeals other acts');
+  if (/\bimplementing\b/.test(text)) hints.push('the title marks it as an implementing act');
+  if (/\bdelegated\b/.test(text)) hints.push('the title marks it as a delegated act');
+  if (/\bframework decision\b/.test(text)) hints.push('the title marks it as a framework decision');
+  if (/\brecommendation\b/.test(text)) hints.push('the title marks it as a recommendation');
+  return hints;
+}
 
 const withSingleFlight = makeSingleFlight();
 
-function buildSystemPrompt(actType) {
-  const guidance = ACT_TYPE_GUIDANCE[actType] || ACT_TYPE_GUIDANCE.unknown;
+function buildSystemPrompt(input) {
+  const hints = [];
+  const celexHint = CELEX_TYPE_HINTS[input.actType];
+  if (celexHint) hints.push(`the CELEX descriptor suggests ${celexHint}`);
+  hints.push(...(input.titleHints || []));
+  const hintSentence = hints.length
+    ? `Metadata hints, to verify against the text rather than assume: ${hints.join('; ')}.`
+    : 'No act-type metadata is available; rely on the text alone.';
+
   return `You write concise, grounded summaries of EU legal acts for a legal research reader.
 
-${guidance}
+Before summarising, determine from the text itself what kind of act this is and how it takes legal effect: read the enacting formula, the addressee clause and the final articles, and check whether the act mainly amends other acts. ${hintSentence}
+
+Frame the key points to match how the act actually operates:
+- directly applicable acts: the obligations, rights, powers, and prohibitions binding on the persons covered;
+- acts requiring national transposition (directives and similar): duties on Member States, with the transposition deadline if stated, not direct obligations on private parties;
+- addressed or establishing acts: the addressees, the body or scheme created, and its powers and mandate;
+- acts that mainly amend other acts: the concrete changes made to the amended acts;
+- non-binding acts (recommendations, opinions): what is recommended — never present these as imposing obligations.
 
 Return ONLY a JSON object with this exact shape:
 {
+  "natureAndEffect": { "text": "1-2 sentences: what kind of act this is, who it binds or addresses, and how it takes effect (directly applicable, requires transposition with any deadline, addressed to named parties, or non-binding)", "citations": ["99"] },
   "purpose": { "text": "1-2 sentences", "citations": ["1", "2"] },
   "scope": { "text": "who or what the law applies to", "citations": ["2", "3"] },
   "keyPoints": [
-    { "text": "one concrete obligation, right, power, or prohibition", "citations": ["5"] }
-  ],
-  "structure": "short narrative of how the chapters/sections are organised"
+    { "text": "one concrete obligation, right, power, prohibition, or change made to another act", "citations": ["5"] }
+  ]
 }
 
 Rules:
 - Use only the provided law input.
-- Every scope and key-point item must cite existing article numbers from the provided article list.
-- Prefer 3-6 key points.
+- Every scope and key-point item must cite existing article numbers from the provided article list; cite natureAndEffect where the text supports it (an addressee or transposition article), else leave its citations empty.
+- Omit "scope" entirely rather than padding it — include it only when the text supports it.
+- Prefer 3-6 key points for substantial acts; 1-3 are enough for short or narrow ones.
 - Keep the whole output under about 400 words.
 - Do not invent article numbers, obligations, or legal effects.`;
 }
@@ -148,6 +179,7 @@ function buildLawSummaryInput(parsedLaw) {
     eli: parsedLaw.eli || null,
     source: parsedLaw.source || null,
     actType: inferTypeFromCelex(parsedLaw.celex),
+    titleHints: detectTitleHints(parsedLaw.title || parsedLaw.doc_title || parsedLaw.name || null),
     skeleton: buildSkeleton(parsedLaw.articles || []),
     definitions: (parsedLaw.definitions || [])
       .map((definition) => ({
@@ -197,24 +229,26 @@ function parseLawSummaryJson(text, input) {
     ...(input.articles || []).map((article) => String(article.number)),
     ...(input.skeleton || []).map((article) => String(article.number)),
   ]);
+  const natureAndEffect = normalizeCitedBlock(parsed.natureAndEffect, validArticles);
   const purpose = normalizeCitedBlock(parsed.purpose, validArticles);
+  // Scope is optional: for acts without a meaningful scope provision (a
+  // one-article amending act, an addressed decision) omitting the section
+  // beats forcing the model to pad it. An uncited scope is dropped, not fatal.
   const scope = normalizeCitedBlock(parsed.scope, validArticles, { requireCitation: true });
   const keyPoints = (Array.isArray(parsed.keyPoints) ? parsed.keyPoints : [])
     .map((item) => normalizeCitedBlock(item, validArticles, { requireCitation: true }))
     .filter(Boolean)
     .slice(0, 8);
-  const structure = normalizeText(parsed.structure, 1000);
 
+  if (!natureAndEffect?.text) throw new Error('Summary is missing natureAndEffect');
   if (!purpose?.text) throw new Error('Summary is missing purpose');
-  if (!scope?.text) throw new Error('Summary is missing cited scope');
   if (keyPoints.length === 0) throw new Error('Summary is missing cited key points');
-  if (!structure) throw new Error('Summary is missing structure');
 
   return {
+    natureAndEffect,
     purpose,
     scope,
     keyPoints,
-    structure,
   };
 }
 
@@ -248,7 +282,7 @@ async function generateLawSummary(input, {
     responseFormat: 'json_object',
     reasoning: { max_tokens: 256, exclude: true },
     messages: [
-      { role: 'system', content: buildSystemPrompt(input.actType) },
+      { role: 'system', content: buildSystemPrompt(input) },
       { role: 'user', content: buildUserPrompt(input) },
     ],
   });
@@ -369,6 +403,7 @@ module.exports = {
   PROMPT_VERSION,
   SCHEMA_VERSION,
   buildLawSummaryInput,
+  buildSystemPrompt,
   ensureLawSummary,
   generateLawSummary,
   parseLawSummaryJson,

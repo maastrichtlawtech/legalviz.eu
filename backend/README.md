@@ -190,7 +190,7 @@ cat input.xml | parse-fmx > output.json
 | `GET` | `/api/laws/:celex/implementing` | Implementing and delegated acts |
 | `GET` | `/api/laws/:celex/case-law?lang=ENG` | CJEU judgments citing this act, with operative parts and structured `articleRefs` |
 | `GET` | `/api/laws/:celex/recital-titles?lang=ENG` | Cached AI-generated short titles for recitals. Requires `RECITAL_TITLE_OPENROUTER_API_KEY` or `OPENROUTER_API_KEY` on cache miss. |
-| `GET` | `/api/laws/:celex/summary?lang=ENG` | Cached static law overview with article citations. Requires `LAW_SUMMARY_OPENROUTER_API_KEY`, `ARTICLE_QA_OPENROUTER_API_KEY`, or `OPENROUTER_API_KEY` on cache miss. |
+| `GET` | `/api/laws/:celex/summary?lang=ENG` | Cached static law overview with article citations. Only for acts in the search index (`404` `summary_not_indexed` otherwise). Requires `LAW_SUMMARY_OPENROUTER_API_KEY`, `ARTICLE_QA_OPENROUTER_API_KEY`, or `OPENROUTER_API_KEY` on cache miss. |
 | `GET` | `/api/laws/:celex/case-law-digest?lang=ENG` | Cached static digest of CJEU case law interpreting the whole act, grouped into doctrinal themes. Zero-case results are cached without an LLM call. |
 | `GET` | `/api/laws/:celex/articles/:n/case-law-digest?lang=ENG` | Cached static digest of CJEU case law interpreting one article. Zero-case results are cached without an LLM call. |
 | `GET` | `/api/laws/by-reference?actType=...&year=...&number=...` | Fetch law by official reference |
@@ -290,7 +290,7 @@ The backend stores titles in `recital-title-cache-v1.json` with a cache `version
 
 ### Static summary endpoints
 
-`GET /api/laws/:celex/summary?lang=ENG` returns a cached overview:
+`GET /api/laws/:celex/summary?lang=ENG` returns a cached overview. Summaries are only generated for acts present in the search index; other CELEX ids (e.g. laws opened via `/import`) get `404` with code `summary_not_indexed`.
 
 ```json
 {
@@ -298,15 +298,17 @@ The backend stores titles in `recital-title-cache-v1.json` with a cache `version
   "lang": "ENG",
   "cached": true,
   "summary": {
+    "natureAndEffect": { "text": "…", "citations": ["99"] },
     "purpose": { "text": "…", "citations": ["1"] },
     "scope": { "text": "…", "citations": ["2", "3"] },
-    "keyObligations": [
+    "keyPoints": [
       { "text": "…", "citations": ["5"] }
-    ],
-    "structure": "…"
+    ]
   }
 }
 ```
+
+`scope` is optional and may be `null` for acts without a meaningful scope provision (e.g. short amending or addressed acts).
 
 `GET /api/laws/:celex/articles/:n/case-law-digest?lang=ENG` returns a cached article-level digest:
 

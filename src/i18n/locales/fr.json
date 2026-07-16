@@ -288,5 +288,12 @@
     "title": "Statut et dates",
     "unavailable": "Métadonnées non disponibles",
     "yes": "Oui"
+  },
+  "lawOverview": {
+    "tabCites": "Cite",
+    "tabImplementing": "Actes d'exécution",
+    "tabAmendments": "Modifications",
+    "implDelActLabel": "Acte d'exécution/délégué",
+    "relatedTabsLabel": "Documents liés"
   }
 }

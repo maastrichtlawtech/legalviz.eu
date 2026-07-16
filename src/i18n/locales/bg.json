@@ -288,5 +288,12 @@
     "title": "Статус и дати",
     "unavailable": "Метаданните не са налични",
     "yes": "Да"
+  },
+  "lawOverview": {
+    "tabCites": "Цитира",
+    "tabImplementing": "Актове за изпълнение",
+    "tabAmendments": "Изменения",
+    "implDelActLabel": "Акт за изпълнение/делегиран акт",
+    "relatedTabsLabel": "Свързани документи"
   }
 }

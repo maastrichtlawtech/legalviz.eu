@@ -288,5 +288,12 @@
     "title": "Status och datum",
     "unavailable": "Metadata inte tillgänglig",
     "yes": "Ja"
+  },
+  "lawOverview": {
+    "tabCites": "Citerar",
+    "tabImplementing": "Genomförandeakter",
+    "tabAmendments": "Ändringar",
+    "implDelActLabel": "Genomförande-/delegerad akt",
+    "relatedTabsLabel": "Relaterade dokument"
   }
 }

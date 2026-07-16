@@ -288,5 +288,12 @@
     "title": "Status u dati",
     "unavailable": "Metadata mhux disponibbli",
     "yes": "Iva"
+  },
+  "lawOverview": {
+    "tabCites": "Jiċċita",
+    "tabImplementing": "Atti ta' implimentazzjoni",
+    "tabAmendments": "Emendi",
+    "implDelActLabel": "Att ta' implimentazzjoni/delegat",
+    "relatedTabsLabel": "Dokumenti relatati"
   }
 }

@@ -288,5 +288,12 @@
     "title": "Állapot és dátumok",
     "unavailable": "A metaadatok nem érhetők el",
     "yes": "Igen"
+  },
+  "lawOverview": {
+    "tabCites": "Hivatkozik",
+    "tabImplementing": "Végrehajtási jogi aktusok",
+    "tabAmendments": "Módosítások",
+    "implDelActLabel": "Végrehajtási/felhatalmazáson alapuló jogi aktus",
+    "relatedTabsLabel": "Kapcsolódó dokumentumok"
   }
 }

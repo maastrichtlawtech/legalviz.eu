@@ -288,5 +288,12 @@
     "title": "Stav a data",
     "unavailable": "Metadata nejsou k dispozici",
     "yes": "Ano"
+  },
+  "lawOverview": {
+    "tabCites": "Cituje",
+    "tabImplementing": "Prováděcí akty",
+    "tabAmendments": "Změny",
+    "implDelActLabel": "Prováděcí akt / akt v přenesené pravomoci",
+    "relatedTabsLabel": "Související dokumenty"
   }
 }

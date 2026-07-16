@@ -288,5 +288,12 @@
     "title": "Stare și date",
     "unavailable": "Metadate indisponibile",
     "yes": "Da"
+  },
+  "lawOverview": {
+    "tabCites": "Citează",
+    "tabImplementing": "Acte de punere în aplicare",
+    "tabAmendments": "Modificări",
+    "implDelActLabel": "Act de punere în aplicare/delegat",
+    "relatedTabsLabel": "Documente conexe"
   }
 }

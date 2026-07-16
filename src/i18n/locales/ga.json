@@ -288,5 +288,12 @@
     "title": "Stádas agus dátaí",
     "unavailable": "Meiteashonraí nach bhfuil ar fáil",
     "yes": "Tá"
+  },
+  "lawOverview": {
+    "tabCites": "Luann",
+    "tabImplementing": "Gníomhartha cur chun feidhme",
+    "tabAmendments": "Leasuithe",
+    "implDelActLabel": "Gníomh cur chun feidhme/tarmligthe",
+    "relatedTabsLabel": "Doiciméid ghaolmhara"
   }
 }

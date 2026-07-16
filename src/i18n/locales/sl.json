@@ -288,5 +288,12 @@
     "title": "Stanje in datumi",
     "unavailable": "Metapodatki niso na voljo",
     "yes": "Da"
+  },
+  "lawOverview": {
+    "tabCites": "Navaja",
+    "tabImplementing": "Izvedbeni akti",
+    "tabAmendments": "Spremembe",
+    "implDelActLabel": "Izvedbeni/delegirani akt",
+    "relatedTabsLabel": "Povezani dokumenti"
   }
 }

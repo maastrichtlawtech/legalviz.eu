@@ -288,5 +288,12 @@
     "title": "Status und Daten",
     "unavailable": "Metadaten nicht verfügbar",
     "yes": "Ja"
+  },
+  "lawOverview": {
+    "tabCites": "Zitiert",
+    "tabImplementing": "Durchführungsrechtsakte",
+    "tabAmendments": "Änderungen",
+    "implDelActLabel": "Durchführungs-/delegierter Rechtsakt",
+    "relatedTabsLabel": "Verwandte Dokumente"
   }
 }

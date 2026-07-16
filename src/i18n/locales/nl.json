@@ -288,5 +288,12 @@
     "title": "Status en data",
     "unavailable": "Metadata niet beschikbaar",
     "yes": "Ja"
+  },
+  "lawOverview": {
+    "tabCites": "Citeert",
+    "tabImplementing": "Uitvoeringshandelingen",
+    "tabAmendments": "Wijzigingen",
+    "implDelActLabel": "Uitvoerings-/gedelegeerde handeling",
+    "relatedTabsLabel": "Gerelateerde documenten"
   }
 }

@@ -288,5 +288,12 @@
     "title": "Tila ja päivämäärät",
     "unavailable": "Metatiedot eivät ole saatavilla",
     "yes": "Kyllä"
+  },
+  "lawOverview": {
+    "tabCites": "Viittaa",
+    "tabImplementing": "Täytäntöönpanosäädökset",
+    "tabAmendments": "Muutokset",
+    "implDelActLabel": "Täytäntöönpano-/delegoitu säädös",
+    "relatedTabsLabel": "Liittyvät asiakirjat"
   }
 }

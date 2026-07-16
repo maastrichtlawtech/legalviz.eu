@@ -288,5 +288,12 @@
     "title": "Stav a dátumy",
     "unavailable": "Metaúdaje nie sú k dispozícii",
     "yes": "Áno"
+  },
+  "lawOverview": {
+    "tabCites": "Cituje",
+    "tabImplementing": "Vykonávacie akty",
+    "tabAmendments": "Zmeny",
+    "implDelActLabel": "Vykonávací/delegovaný akt",
+    "relatedTabsLabel": "Súvisiace dokumenty"
   }
 }

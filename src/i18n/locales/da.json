@@ -288,5 +288,12 @@
     "title": "Status og datoer",
     "unavailable": "Metadata ikke tilgængelige",
     "yes": "Ja"
+  },
+  "lawOverview": {
+    "tabCites": "Citerer",
+    "tabImplementing": "Gennemførelsesretsakter",
+    "tabAmendments": "Ændringer",
+    "implDelActLabel": "Gennemførelses-/delegeret retsakt",
+    "relatedTabsLabel": "Relaterede dokumenter"
   }
 }

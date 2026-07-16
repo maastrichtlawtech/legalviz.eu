@@ -288,5 +288,12 @@
     "title": "Statuss un datumi",
     "unavailable": "Metadati nav pieejami",
     "yes": "Jā"
+  },
+  "lawOverview": {
+    "tabCites": "Citē",
+    "tabImplementing": "Īstenošanas akti",
+    "tabAmendments": "Grozījumi",
+    "implDelActLabel": "Īstenošanas/deleģētais akts",
+    "relatedTabsLabel": "Saistītie dokumenti"
   }
 }

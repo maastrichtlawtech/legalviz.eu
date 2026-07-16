@@ -288,5 +288,12 @@
     "title": "Staatus ja kuupäevad",
     "unavailable": "Metaandmed pole saadaval",
     "yes": "Jah"
+  },
+  "lawOverview": {
+    "tabCites": "Viitab",
+    "tabImplementing": "Rakendusaktid",
+    "tabAmendments": "Muudatused",
+    "implDelActLabel": "Rakendus-/delegeeritud akt",
+    "relatedTabsLabel": "Seotud dokumendid"
   }
 }

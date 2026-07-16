@@ -360,7 +360,12 @@
     "implementingEmpty": "None adopted yet.",
     "linkedEmpty": "No linked legislation yet.",
     "showAll": "Show all ({count})",
-    "showLess": "Show less"
+    "showLess": "Show less",
+    "tabCites": "Cites",
+    "tabImplementing": "Implementing acts",
+    "tabAmendments": "Amendments",
+    "implDelActLabel": "Implementing / delegated act",
+    "relatedTabsLabel": "Related documents"
   },
   "lawSummary": {
     "title": "AI overview",

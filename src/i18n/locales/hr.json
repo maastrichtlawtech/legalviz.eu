@@ -288,5 +288,12 @@
     "title": "Status i datumi",
     "unavailable": "Metapodaci nisu dostupni",
     "yes": "Da"
+  },
+  "lawOverview": {
+    "tabCites": "Citira",
+    "tabImplementing": "Provedbeni akti",
+    "tabAmendments": "Izmjene",
+    "implDelActLabel": "Provedbeni/delegirani akt",
+    "relatedTabsLabel": "Povezani dokumenti"
   }
 }

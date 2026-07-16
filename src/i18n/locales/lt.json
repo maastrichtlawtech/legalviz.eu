@@ -288,5 +288,12 @@
     "title": "Būsena ir datos",
     "unavailable": "Metaduomenys neprieinami",
     "yes": "Taip"
+  },
+  "lawOverview": {
+    "tabCites": "Cituoja",
+    "tabImplementing": "Įgyvendinimo aktai",
+    "tabAmendments": "Pakeitimai",
+    "implDelActLabel": "Įgyvendinimo / deleguotasis aktas",
+    "relatedTabsLabel": "Susiję dokumentai"
   }
 }

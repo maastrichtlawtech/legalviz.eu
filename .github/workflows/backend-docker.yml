@@ -90,9 +90,15 @@ jobs:
             // at all for ~10k Commission Implementing Regulations (mostly
             // 2000s), so `null` there is correct rather than a failed fetch.
             // The floor only needs to catch a wholesale enrichment collapse.
+            // Both the path and the two type names are bound. Nothing in this
+            // script may contain a literal single quote: the whole thing is
+            // already inside single quotes in the YAML, so bash strips them and
+            // IN ('true', 'false') arrives as IN (true, false) - SQLite keywords
+            // for 1 and 0, which never match a text json_type and silently
+            // return zero. Bind values; do not quote them.
             const decided = db.prepare(
-              "SELECT COUNT(*) AS c FROM laws WHERE json_type(record_json, ?) IN ('true', 'false')"
-            ).get("$.inForce").c;
+              "SELECT COUNT(*) AS c FROM laws WHERE json_type(record_json, ?) IN (?, ?)"
+            ).get("$.inForce", "true", "false").c;
             db.close();
             if (undated > 0) throw new Error(undated + "/" + laws + " laws have no date - search-cache lost its date enrichment");
             if (untopiced > 0) throw new Error(untopiced + "/" + laws + " laws have no eurovoc key - search-cache lost its EuroVoc enrichment");

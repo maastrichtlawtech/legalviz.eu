@@ -23,6 +23,23 @@ function escapeHtml(str) {
         .replace(/>/g, '&gt;');
 }
 
+function isInsideElement(parts, index, tagName, openingMatches = () => true) {
+    let closingDepth = 0;
+    const openingPattern = new RegExp(`^<${tagName}\\b`, "i");
+    const closingPattern = new RegExp(`^<\\/${tagName}\\b`, "i");
+    for (let cursor = index - 1; cursor >= 0; cursor--) {
+        const tag = parts[cursor];
+        if (!tag.startsWith('<')) continue;
+        if (closingPattern.test(tag)) {
+            closingDepth += 1;
+        } else if (openingPattern.test(tag)) {
+            if (closingDepth > 0) closingDepth -= 1;
+            else if (openingMatches(tag)) return true;
+        }
+    }
+    return false;
+}
+
 /**
  * Build a stem-based regex pattern for inflected languages (e.g. Polish).
  * Truncates each word to a stem and allows flexible endings.
@@ -107,18 +124,16 @@ export function injectDefinitionTooltips(html, definitions, options = {}) {
             // Skip HTML tags
             if (part.startsWith('<')) continue;
 
-            // Skip if we're inside a defined-term span (check previous parts)
-            let insideDefinedTerm = false;
-            for (let j = i - 1; j >= 0; j--) {
-                if (parts[j].includes('class="defined-term"')) {
-                    insideDefinedTerm = true;
-                    break;
-                }
-                if (parts[j].includes('</span>')) {
-                    break;
-                }
-            }
-            if (insideDefinedTerm) continue;
+            // Definition terms inside links remain links, and text already inside
+            // any definition marker must not become a nested interactive control.
+            const insideLink = isInsideElement(parts, i, "a");
+            const insideDefinedTerm = isInsideElement(
+                parts,
+                i,
+                "span",
+                (tag) => /\bclass=["'][^"']*\bdefined-term\b/i.test(tag)
+            );
+            if (insideLink || insideDefinedTerm) continue;
 
             // Replace occurrences in text nodes. The span is a pure data
             // marker: the popup itself is rendered by <DefinitionTooltip />

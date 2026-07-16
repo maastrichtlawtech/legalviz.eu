@@ -113,20 +113,14 @@ export function LawSummary({ celex, lang = "EN", onArticleClick, className = "ro
                     {summary.keyPoints.map((item, index) => (
                       <li key={`${item.text}-${index}`} className="flex items-baseline gap-2.5">
                         <span className="h-1.5 w-1.5 shrink-0 translate-y-1 rounded-full bg-eu-gold dark:bg-eu-gold-bright" />
-                        <span className="min-w-0 flex-1">{item.text}</span>
-                        {item.citations?.length ? (
-                          <span className="ml-auto shrink-0 space-x-1 pl-3 text-right">
-                            {item.citations.map((article) => (
-                              <Chip
-                                key={article}
-                                onClick={() => onArticleClick?.(article)}
-                                className="align-baseline"
-                              >
-                                {t("lawViewer.artShort")} {article}
-                              </Chip>
-                            ))}
-                          </span>
-                        ) : null}
+                        <span className="min-w-0 flex-1">
+                          {item.text}
+                          <CitationChips
+                            citations={item.citations}
+                            onArticleClick={onArticleClick}
+                            t={t}
+                          />
+                        </span>
                       </li>
                     ))}
                   </ul>

@@ -18,7 +18,7 @@ function t(key, vars = {}) {
 
 const citedBy = {
   citingLaws: {
-    total: 2,
+    total: 12,
     laws: [
       { celex: "32022R1925", title: "Regulation (Digital Markets Act)", provisions: 5 },
       { celex: "32022R2065", title: "Regulation (Digital Services Act)", provisions: 3 },
@@ -58,6 +58,7 @@ function render(props) {
         implementing,
         externalLawOverview,
         currentLang: "EN",
+        centreLabel: "GDPR",
         locale: "en",
         onOpenExternalLaw: () => {},
         onOpenCitedLaw: () => {},
@@ -84,10 +85,14 @@ describe("MetadataPanel tabs", () => {
     expect(labels[0]).toContain("Cited by");
     expect(labels.some((l) => l.includes("Cites"))).toBe(true);
     expect(labels.some((l) => l.includes("Amendments"))).toBe(true);
+    expect(tabs().every((tab) => tab.classList.contains("items-baseline"))).toBe(true);
     expect(activeTab().textContent).toContain("Cited by");
     // The active panel lists the citing laws + totals footer.
     expect(container.textContent).toContain("Digital Markets Act");
     expect(container.textContent).toContain("8 provisions");
+    expect(container.querySelector('svg[role="img"]')).not.toBeNull();
+    expect(container.querySelector("svg").textContent).toContain("GDPR");
+    expect(container.textContent).toContain("And 10 more not shown.");
   });
 
   it("omits the Cited by tab and defaults to Cites when citedBy is null", () => {
@@ -97,6 +102,7 @@ describe("MetadataPanel tabs", () => {
     expect(labels).toHaveLength(3);
     expect(activeTab().textContent).toContain("Cites");
     expect(container.textContent).toContain("E-Commerce Directive");
+    expect(container.querySelector('svg[role="img"]')).toBeNull();
   });
 
   it("switches to the Amendments tab and humanises the row", () => {
@@ -109,5 +115,6 @@ describe("MetadataPanel tabs", () => {
     expect(container.textContent).toContain("32016R0679R(01)");
     // The cited-by laws are no longer visible once the tab changes.
     expect(container.textContent).not.toContain("Digital Markets Act");
+    expect(container.querySelector('svg[role="img"]')).toBeNull();
   });
 });

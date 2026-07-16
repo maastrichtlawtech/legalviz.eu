@@ -115,6 +115,18 @@
       "category": "prefix",
       "query": "european media free",
       "expectedCelexes": ["32024R1083"]
+    },
+    {
+      "id": "gdpr-eurovoc-topic",
+      "category": "topic",
+      "query": "electronic data processing",
+      "expectedCelexes": ["32016R0679"]
+    },
+    {
+      "id": "dma-eurovoc-topic",
+      "category": "topic",
+      "query": "online platform competition policy",
+      "expectedCelexes": ["32022R1925"]
     }
   ]
 }

@@ -65,7 +65,7 @@ function publicSourceUnit(edge) {
   return unit.slice(prefix.length);
 }
 
-function publicCitation(edge) {
+function publicCitation(edge, sourceDate = null) {
   const references = edge._references || [{
       paragraph: edge.targetParagraph == null ? null : String(edge.targetParagraph),
       point: edge.targetPoint == null ? null : String(edge.targetPoint),
@@ -76,6 +76,7 @@ function publicCitation(edge) {
   }
   return {
     celex: edge.sourceCelex, title: edge.sourceTitle || null,
+    date: sourceDate,
     unitType: edge.sourceUnitType, unit: publicSourceUnit(edge), references,
   };
 }
@@ -107,6 +108,14 @@ class CitationGraphStore {
     this.byTargetCelex = new Map();
     this.database = null;
     this.source = null;
+    // Dates already live on the legal-cache records (overlaid from
+    // law-dates.json during the corpus build). Keep them out of the citation
+    // graph's repeated edges and resolve them once when shaping the response.
+    this.legalCacheStore = options.legalCacheStore || null;
+  }
+
+  sourceDate(celex) {
+    return this.legalCacheStore?.getByCelex?.(celex)?.date || null;
   }
 
   load() {
@@ -259,7 +268,8 @@ class CitationGraphStore {
     const page = combined.slice(offset, offset + limit);
     return {
       celex: targetCelex, article: String(article),
-      citingProvisions: page.filter((item) => item.kind === "legislation").map((item) => publicCitation(item.edge)),
+      citingProvisions: page.filter((item) => item.kind === "legislation")
+        .map((item) => publicCitation(item.edge, this.sourceDate(item.edge.sourceCelex))),
       citingJudgments: page.filter((item) => item.kind === "judgment").map((item) => publicCitation(item.edge)),
       counts: { provisions: provisions.length, judgments: judgments.length, total: combined.length },
       pagination: { limit, offset, returned: page.length, hasMore: offset + page.length < combined.length },
@@ -299,6 +309,7 @@ class CitationGraphStore {
       .map(([sourceCelex, lawEdges]) => ({
         celex: sourceCelex,
         title: lawEdges.find((edge) => edge.sourceTitle)?.sourceTitle || null,
+        date: this.sourceDate(sourceCelex),
         provisions: distinctSources(lawEdges).length,
       }))
       .sort((a, b) => b.provisions - a.provisions

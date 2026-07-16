@@ -56,7 +56,7 @@ test("article queries count distinct sources and paginate the combined result", 
   assert.equal(first.pagination.hasMore, true);
   assert.equal(first.citingProvisions.length + first.citingJudgments.length, 1);
   assert.equal(first.citingProvisions[0].references.length, 2);
-  assert.deepEqual(Object.keys(first.citingProvisions[0]).sort(), ["celex", "references", "title", "unit", "unitType"]);
+  assert.deepEqual(Object.keys(first.citingProvisions[0]).sort(), ["celex", "date", "references", "title", "unit", "unitType"]);
   const second = store.getArticleCitations("32016R0679", "6", { limit: 1, offset: 1 });
   assert.equal(second.citingProvisions.length + second.citingJudgments.length, 1);
 });
@@ -91,8 +91,8 @@ test("act query separates act-only references from article references", () => {
     citingLaws: {
       total: 2,
       laws: [
-        { celex: "32024R0001", title: "A", provisions: 1 },
-        { celex: "32024R0002", title: "B", provisions: 1 },
+        { celex: "32024R0001", title: "A", date: null, provisions: 1 },
+        { celex: "32024R0002", title: "B", date: null, provisions: 1 },
       ],
     },
     totals: { provisions: 2, judgments: 1, total: 3 },
@@ -116,14 +116,32 @@ test("act query ranks citing laws by distinct provisions and honours the limit",
   assert.deepEqual(result.citingLaws, {
     total: 2,
     laws: [
-      { celex: "32024R0005", title: "Busy citer", provisions: 2 },
-      { celex: "32024R0004", title: "Single citer", provisions: 1 },
+      { celex: "32024R0005", title: "Busy citer", date: null, provisions: 2 },
+      { celex: "32024R0004", title: "Single citer", date: null, provisions: 1 },
     ],
   });
 
   const limited = store.getActCitations("32016R0679", { citingLawsLimit: 1 });
   assert.equal(limited.citingLaws.total, 2);
-  assert.deepEqual(limited.citingLaws.laws, [{ celex: "32024R0005", title: "Busy citer", provisions: 2 }]);
+  assert.deepEqual(limited.citingLaws.laws, [{ celex: "32024R0005", title: "Busy citer", date: null, provisions: 2 }]);
+});
+
+test("citing legislation includes dates from the corpus-enriched legal cache", () => {
+  const legalCacheStore = {
+    getByCelex: (celex) => ({ date: celex === "32024R0001" ? "2024-01-15" : null }),
+  };
+  const store = new CitationGraphStore(
+    writeGraph({ graphVersion: GRAPH_VERSION, edges }),
+    { preferJson: true, legalCacheStore },
+  );
+  assert.equal(store.load(), true);
+
+  const article = store.getArticleCitations("32016R0679", "6");
+  assert.equal(article.citingProvisions[0].date, "2024-01-15");
+  assert.deepEqual(store.getActCitations("32016R0679").citingLaws.laws.map(({ celex, date }) => ({ celex, date })), [
+    { celex: "32024R0001", date: "2024-01-15" },
+    { celex: "32024R0002", date: null },
+  ]);
 });
 
 test("act query dedups a provision citing both the act and an article across subsets", () => {

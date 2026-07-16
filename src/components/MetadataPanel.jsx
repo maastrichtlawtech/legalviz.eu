@@ -3,6 +3,7 @@ import { ExternalLink, Loader2 } from "lucide-react";
 import { buildEurlexCelexUrl } from "../utils/url.js";
 import { formatMetaDate } from "../utils/formatMetaDate.js";
 import { buildLawDisplayLabel } from "../utils/lawDisplay.js";
+import { MiniCitationGraph } from "./MiniCitationGraph.jsx";
 
 const ROW_DIVIDERS = "divide-y divide-gray-100 dark:divide-gray-800";
 
@@ -91,6 +92,7 @@ export function MetadataPanel({
   implementing,
   externalLawOverview = [],
   citedBy = null,
+  centreLabel = "",
   currentLang = "EN",
   locale = "en",
   onOpenExternalLaw,
@@ -186,6 +188,7 @@ export function MetadataPanel({
   // yet re-derives the default as citedBy loads in asynchronously.
   const defaultTab = citedBy ? "citedBy" : "cites";
   const effectiveTab = activeTab && tabs.some((entry) => entry.id === activeTab) ? activeTab : defaultTab;
+  const showCitationGraph = effectiveTab === "citedBy" && citingLaws.length > 0;
 
   const sections = {
     citedBy: { rows: citedByRows, emptyText: t("citedBy.empty"), footer: citedByFooter },
@@ -238,7 +241,7 @@ export function MetadataPanel({
               }}
               onClick={() => setActiveTab(entry.id)}
               onKeyDown={handleTabKeyDown}
-              className={`-mb-px flex items-center gap-1.5 whitespace-nowrap rounded-sm border-b-2 px-3 py-2.5 text-[13px] font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-eu-blue/40 ${
+              className={`-mb-px flex items-baseline gap-1.5 whitespace-nowrap rounded-sm border-b-2 px-3 py-2.5 text-[13px] font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-eu-blue/40 ${
                 isActive
                   ? "border-eu-blue text-eu-blue dark:border-eu-blue-bright dark:text-eu-blue-bright"
                   : "border-transparent text-gray-500 hover:text-gray-800 dark:text-gray-500 dark:hover:text-gray-300"
@@ -255,15 +258,36 @@ export function MetadataPanel({
         role="tabpanel"
         id="metadata-tabpanel"
         aria-labelledby={`metadata-tab-${effectiveTab}`}
-        className="px-4 py-2"
+        className={showCitationGraph ? "p-0" : "px-4 py-2"}
       >
-        <SectionList
-          key={effectiveTab}
-          rows={active.rows}
-          emptyText={active.emptyText}
-          footer={active.footer}
-          t={t}
-        />
+        {showCitationGraph ? (
+          <div className="grid md:grid-cols-[minmax(0,1fr)_minmax(18rem,1fr)]">
+            <div className="px-4 py-2">
+              <SectionList
+                key={effectiveTab}
+                rows={active.rows}
+                emptyText={active.emptyText}
+                footer={active.footer}
+                t={t}
+              />
+            </div>
+            <MiniCitationGraph
+              laws={citingLaws}
+              total={citedBy?.citingLaws?.total ?? citingLaws.length}
+              centreLabel={centreLabel || citedBy?.celex}
+              ariaLabel={t("citedBy.title")}
+              formatMore={(count) => t("citedBy.andMore", { count })}
+            />
+          </div>
+        ) : (
+          <SectionList
+            key={effectiveTab}
+            rows={active.rows}
+            emptyText={active.emptyText}
+            footer={active.footer}
+            t={t}
+          />
+        )}
       </div>
     </div>
   );

@@ -1069,6 +1069,10 @@ async function loadHelpers() {
         extractCrossRefsFromText: parserMod.extractCrossRefsFromText,
         repairCorroboratedTruncatedInstrumentIdentifiers: parserMod.repairCorroboratedTruncatedInstrumentIdentifiers,
         getLangConfig: langMod.getLangConfig,
+        // This parser reads a different document format, but its cross-references come
+        // from the Formex parser's grammar above — so PARSER_VERSION versions this
+        // output too, and is taken from there rather than declared a second time.
+        PARSER_VERSION: parserMod.PARSER_VERSION,
       };
     })();
   }
@@ -1085,6 +1089,7 @@ async function parseEurlexHtmlToCombined(htmlText, lang = "ENG") {
     extractCrossRefsFromText,
     repairCorroboratedTruncatedInstrumentIdentifiers,
     getLangConfig,
+    PARSER_VERSION,
   } = await loadHelpers();
   const langConfig = getLangConfig(langCode);
 
@@ -1107,6 +1112,7 @@ async function parseEurlexHtmlToCombined(htmlText, lang = "ENG") {
       ...Object.values(checked.crossReferences).flat(),
       ...checked.definitions.flatMap((entry) => entry.references || []),
     ]);
+    checked.parserVersion = PARSER_VERSION;
     return checked;
   };
 
@@ -1275,6 +1281,10 @@ async function parseEurlexHtmlToCombined(htmlText, lang = "ENG") {
     definitions,
     langCode,
     crossReferences,
+    // Stamped here as well as in withCrossReferences: this oldest-era branch builds
+    // its own crossReferences (it alone passes footnotesByNumber) instead of going
+    // through that helper, so a stamp there would miss every pre-2004 OJ act.
+    parserVersion: PARSER_VERSION,
   });
   parsed.definitions = parsed.definitions.map((entry) => ({
     ...entry,

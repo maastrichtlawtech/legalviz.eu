@@ -503,6 +503,31 @@ test("parseEurlexHtmlToCombined captures annexes from the older XHTML layout", a
   assert.match(parsed.annexes[0].annex_html, /legal liability of a seller or supplier/i);
 });
 
+// This parser reads a different document format from the Formex one, but it imports that
+// parser's cross-reference grammar, so a single PARSER_VERSION versions both outputs — and
+// the citation-graph builder reads this field off every parsed law to decide whether a
+// published artifact predates a parser fix. An unstamped layout reports `null` there and
+// silently exempts itself from staleness detection.
+//
+// Asserted per layout, not once: the oldest TXT_TE branch builds its own crossReferences
+// (it alone needs footnotesByNumber) rather than going through withCrossReferences, so it
+// carries a second, separate stamp. That branch is the one every pre-2004 OJ act takes —
+// the bulk of the HTML corpus — so a single-layout test would pass while it returned null.
+test("parseEurlexHtmlToCombined stamps the shared parser version on every layout", async () => {
+  const { PARSER_VERSION } = await import("./formex-parser/fmxParser.mjs");
+  const layouts = [
+    ["TXT_TE fallback", SAMPLE_HTML],
+    ["structured", STRUCTURED_HTML],
+    ["legacy XHTML", LEGACY_XHTML_HTML],
+    ["LegisWrite", LEGISWRITE_COM_HTML],
+  ];
+
+  for (const [layout, html] of layouts) {
+    const parsed = await parseEurlexHtmlToCombined(html, "ENG");
+    assert.equal(parsed.parserVersion, PARSER_VERSION, `${layout} layout must report the shared parser version`);
+  }
+});
+
 test("fetchAndParseEurlexHtmlLaw always fetches and parses the English fallback", async () => {
   const originalFetch = global.fetch;
   let requestedUrl = null;

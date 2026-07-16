@@ -50,7 +50,10 @@ const HTML_CACHE_LIMIT_MB = parseInt(process.env.HTML_CACHE_LIMIT_MB) || 200; //
 const resolutionCache = new Map(); // key -> { expiresAt, value }
 const RESOLUTION_CACHE_MS = 24 * 60 * 60 * 1000;
 const legalCacheStore = new JsonLegalCacheStore(process.env.SEARCH_CACHE_PATH || DEFAULT_SEARCH_CACHE_PATH);
-const citationGraphStore = new CitationGraphStore(process.env.CITATION_GRAPH_PATH || DEFAULT_CITATION_GRAPH_PATH);
+const citationGraphStore = new CitationGraphStore(
+  process.env.CITATION_GRAPH_PATH || DEFAULT_CITATION_GRAPH_PATH,
+  { legalCacheStore },
+);
 const rateLimitMiddleware = createRateLimitMiddleware({
   windowMs: RATE_LIMIT_WINDOW_MS,
   max: RATE_LIMIT_MAX

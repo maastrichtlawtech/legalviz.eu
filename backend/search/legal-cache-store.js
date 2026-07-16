@@ -146,16 +146,44 @@ function dedupeByCelex(records) {
 // surface a law that free text alone would otherwise miss entirely, but not
 // enough for body-text noise to outrank a genuine title/alias match.
 const EXCERPT_BOOST = 0.3;
+const EUROVOC_BOOST = 0.8;
+const IN_FORCE_BOOST = 1.08;
+const NO_LONGER_IN_FORCE_BOOST = 0.9;
+const MAX_CITATION_BOOST = 1.2;
+const MAX_GLOBAL_PRIOR = 1.25;
+const CITATION_LOG_SCALE = 0.025;
+const RRF_K = 20;
+const CANDIDATE_LIMIT = 200;
+// Title and controlled-vocabulary evidence are co-equal. Body-text matches are
+// useful for recall but deliberately weaker because recitals contain many
+// incidental concepts. Selected on the development split; see eval/README.md.
+const SOURCE_WEIGHTS = { title: 1.1, eurovoc: 1.1, excerpt: 0.5 };
+const COVERAGE_EXPONENT = 2;
 
-function buildMiniSearch(records, { includeExcerpt = true } = {}) {
-  const fields = includeExcerpt ? ["title", "aliases", "excerpt"] : ["title", "aliases"];
-  const boost = includeExcerpt
-    ? { aliases: 3, title: 1, excerpt: EXCERPT_BOOST }
-    : { aliases: 3, title: 1 };
+function citationBoost(count, {
+  citationLogScale = CITATION_LOG_SCALE,
+  maxCitationBoost = MAX_CITATION_BOOST,
+} = {}) {
+  const citations = Math.max(0, Number(count) || 0);
+  return Math.min(maxCitationBoost, 1 + citationLogScale * Math.log1p(citations));
+}
+
+function requestsHistoricalLaw(parsed) {
+  return /\b(?:former|historic|historical|old|repealed|repeal|expired|obsolete|superseded|no longer in force)\b/i
+    .test(String(parsed.originalQuery || ""));
+}
+
+function buildMiniSearch(records, { includeExcerpt = true, includeEurovoc = true } = {}) {
+  const fields = ["title", "aliases"];
+  if (includeEurovoc) fields.push("eurovoc");
+  if (includeExcerpt) fields.push("excerpt");
+  const boost = { aliases: 3, title: 1 };
+  if (includeEurovoc) boost.eurovoc = EUROVOC_BOOST;
+  if (includeExcerpt) boost.excerpt = EXCERPT_BOOST;
   const miniSearch = new MiniSearch({
     idField: "celex",
     fields,
-    storeFields: ["type"],
+    storeFields: ["type", "inForce"],
     searchOptions: {
       boost,
       fuzzy: 0.2,
@@ -172,10 +200,46 @@ function buildMiniSearch(records, { includeExcerpt = true } = {}) {
     // low-value postings for the three act-type words, while retaining named
     // aliases/acronyms for fuzzy and prefix matching.
     aliases: searchableAliases(record).join(" "),
+    eurovoc: (record.eurovoc || []).join(" "),
     excerpt: record.excerpt || "",
     type: record.type,
+    inForce: record.inForce,
   })));
 
+  return miniSearch;
+}
+
+function buildEurovocSearch(records) {
+  const miniSearch = new MiniSearch({
+    idField: "celex",
+    fields: ["eurovoc"],
+    searchOptions: {
+      fuzzy: false,
+      prefix: true,
+      combineWith: "AND",
+    },
+  });
+  miniSearch.addAll(dedupeByCelex(records).map((record) => ({
+    celex: record.celex,
+    eurovoc: (record.eurovoc || []).join(" "),
+  })));
+  return miniSearch;
+}
+
+function buildExcerptMiniSearch(records) {
+  const miniSearch = new MiniSearch({
+    idField: "celex",
+    fields: ["excerpt"],
+    searchOptions: {
+      fuzzy: false,
+      prefix: true,
+      combineWith: "AND",
+    },
+  });
+  miniSearch.addAll(dedupeByCelex(records).map((record) => ({
+    celex: record.celex,
+    excerpt: record.excerpt || "",
+  })));
   return miniSearch;
 }
 
@@ -244,18 +308,28 @@ function containedAliasKeys(normalizedQuery) {
   return [...new Set(keys)];
 }
 
-// Re-encodes the act-type priors that the retired scoreLaw ranking applied,
-// as multiplicative boosts on MiniSearch relevance. This only reshuffles the
-// free-text stage: the deterministic celex/reference/alias matches run first
-// and are unaffected. Demote decisions (they rarely answer a plain "... act"
-// query) and nudge results toward the act type the query names.
-function buildDocumentBoost(parsed) {
+// Query-dependent and global priors for MiniSearch relevance. This only
+// reshuffles the free-text stage: deterministic celex/reference/alias matches
+// run first and are unaffected. Type intent remains the strongest prior;
+// current status and distinct citing acts are deliberately small and capped.
+function buildDocumentBoost(parsed, citationCounts = new Map(), {
+  useGlobalPriors = true,
+  useStatusPrior = true,
+  useCitationPrior = true,
+  inForceBoost = IN_FORCE_BOOST,
+  noLongerInForceBoost = NO_LONGER_IN_FORCE_BOOST,
+  citationLogScale = CITATION_LOG_SCALE,
+  maxCitationBoost = MAX_CITATION_BOOST,
+  maxGlobalPrior = MAX_GLOBAL_PRIOR,
+} = {}) {
   const query = String(parsed.originalQuery || "").toLowerCase();
   const mentionsAct = /\bact\b/.test(query);
   const mentionsDirective = /\bdirective\b/.test(query);
   const mentionsRegulation = /\bregulation\b/.test(query);
 
-  return (_id, _term, stored) => {
+  const historicalIntent = requestsHistoricalLaw(parsed);
+
+  return (id, _term, stored) => {
     const type = stored && stored.type;
     let boost = 1;
     if (type === "decision") boost *= mentionsAct ? 0.3 : 0.6;
@@ -263,8 +337,29 @@ function buildDocumentBoost(parsed) {
     else if (type === "regulation") boost *= mentionsRegulation ? 1.5 : 1.1;
     if (mentionsDirective && type === "regulation") boost *= 0.7;
     if (mentionsRegulation && type === "directive") boost *= 0.7;
+    if (useGlobalPriors) {
+      let statusBoost = 1;
+      if (useStatusPrior) {
+        if (historicalIntent && stored?.inForce === false) statusBoost = inForceBoost;
+        else if (historicalIntent && stored?.inForce === true) statusBoost = noLongerInForceBoost;
+        else if (stored?.inForce === true) statusBoost = inForceBoost;
+        else if (stored?.inForce === false) statusBoost = noLongerInForceBoost;
+      }
+      const authorityBoost = useCitationPrior
+        ? citationBoost(citationCounts.get(normalizeCelexLookupKey(id)), {
+          citationLogScale,
+          maxCitationBoost,
+        })
+        : 1;
+      boost *= Math.min(maxGlobalPrior, statusBoost * authorityBoost);
+    }
     return boost;
   };
+}
+
+function documentPrior(parsed, law, citationCounts, options) {
+  const boost = buildDocumentBoost(parsed, citationCounts, options);
+  return boost(law.celex, "", { type: law.type, inForce: law.inForce });
 }
 
 class JsonLegalCacheStore {
@@ -285,6 +380,20 @@ class JsonLegalCacheStore {
       || (cachePath === BUILTIN_SEARCH_CACHE_PATH
         ? DEFAULT_DEFINITIONS_PATH
         : path.join(path.dirname(cachePath), "definitions.json"));
+    this.rankingProfile = options.rankingProfile === "baseline" ? "baseline" : "revised";
+    this.rankingConfig = {
+      rrfK: options.rankingConfig?.rrfK ?? RRF_K,
+      candidateLimit: options.rankingConfig?.candidateLimit ?? CANDIDATE_LIMIT,
+      coverageExponent: options.rankingConfig?.coverageExponent ?? COVERAGE_EXPONENT,
+      sourceWeights: { ...SOURCE_WEIGHTS, ...(options.rankingConfig?.sourceWeights || {}) },
+      useStatusPrior: options.rankingConfig?.useStatusPrior ?? true,
+      useCitationPrior: options.rankingConfig?.useCitationPrior ?? true,
+      inForceBoost: options.rankingConfig?.inForceBoost ?? IN_FORCE_BOOST,
+      noLongerInForceBoost: options.rankingConfig?.noLongerInForceBoost ?? NO_LONGER_IN_FORCE_BOOST,
+      citationLogScale: options.rankingConfig?.citationLogScale ?? CITATION_LOG_SCALE,
+      maxCitationBoost: options.rankingConfig?.maxCitationBoost ?? MAX_CITATION_BOOST,
+      maxGlobalPrior: options.rankingConfig?.maxGlobalPrior ?? MAX_GLOBAL_PRIOR,
+    };
     this.payload = null;
     this.records = [];
     this.loadedAt = null;
@@ -294,14 +403,18 @@ class JsonLegalCacheStore {
     this.byOfficialReference = new Map();
     this.byAlias = new Map();
     this.miniSearch = null;
+    this.eurovocSearch = null;
+    this.excerptMiniSearch = null;
     this.database = null;
     this.excerptSearchStatement = null;
     this.definitionSearchStatement = null;
     this.definitionOccurrenceStatement = null;
+    this.definitionRepresentativeStatement = null;
     this.definitionUsageStatement = null;
     this.definitionTerms = [];
     this.definitionOccurrences = [];
     this.definitionsAvailable = false;
+    this.citationCounts = new Map(options.citationCounts || []);
     this.source = null;
   }
 
@@ -328,6 +441,8 @@ class JsonLegalCacheStore {
     this.definitionTerms = [];
     this.definitionOccurrences = [];
     this.definitionsAvailable = false;
+    this.eurovocSearch = null;
+    this.excerptMiniSearch = null;
     this.source = null;
   }
 
@@ -375,7 +490,13 @@ class JsonLegalCacheStore {
       }
     }
 
-    this.miniSearch = buildMiniSearch(records, { includeExcerpt });
+    const revised = this.rankingProfile !== "baseline";
+    this.miniSearch = buildMiniSearch(records, {
+      includeExcerpt: includeExcerpt && !revised,
+      includeEurovoc: false,
+    });
+    this.eurovocSearch = revised ? buildEurovocSearch(records) : null;
+    this.excerptMiniSearch = revised && includeExcerpt ? buildExcerptMiniSearch(records) : null;
     this.loadedAt = new Date().toISOString();
     this.loadError = null;
   }
@@ -406,6 +527,12 @@ class JsonLegalCacheStore {
       }
 
       this.database = database;
+      this.citationCounts = this.rankingProfile === "baseline" ? new Map() : new Map(database.prepare(`
+          SELECT target_celex AS celex, COUNT(DISTINCT source_celex) AS count
+          FROM citations
+          WHERE kind = 'legislation'
+          GROUP BY target_celex
+        `).all().map((row) => [normalizeCelexLookupKey(row.celex), row.count]));
       this.excerptSearchStatement = database.prepare(`
         SELECT mapping.celex
         FROM law_excerpts
@@ -428,6 +555,15 @@ class JsonLegalCacheStore {
         FROM definition_occurrences
         WHERE normalized_term = ?
         ORDER BY celex, source_article, id
+      `);
+      this.definitionRepresentativeStatement = database.prepare(`
+        SELECT occurrence_id, normalized_term, term, definition, definition_hash, celex,
+               source_article, source_point, classification, classification_reason
+        FROM definition_occurrences
+        WHERE normalized_term = ?
+        ORDER BY CASE WHEN classification IN ('substantive', 'hybrid') THEN 0 ELSE 1 END,
+                 celex, source_article, id
+        LIMIT 1
       `);
       this.definitionUsageStatement = database.prepare(`
         SELECT edge_type, source_occurrence_id, target_celex, target_article, target_paragraph,
@@ -567,12 +703,23 @@ class JsonLegalCacheStore {
     });
   }
 
-  definitionOccurrenceRows(normalizedTerm) {
-    const rows = this.database
-      ? this.definitionOccurrenceStatement.all(normalizedTerm)
-      : this.definitionOccurrences.filter((item) => (
+  definitionOccurrenceRows(normalizedTerm, { representativeOnly = false, includeUsageEdges = true } = {}) {
+    let rows;
+    if (this.database) {
+      const representative = representativeOnly
+        ? this.definitionRepresentativeStatement.get(normalizedTerm)
+        : null;
+      rows = representativeOnly
+        ? (representative ? [representative] : [])
+        : this.definitionOccurrenceStatement.all(normalizedTerm);
+    } else {
+      const matching = this.definitionOccurrences.filter((item) => (
         normalizeDefinitionTerm(item?.normalizedTerm || item?.term) === normalizedTerm
-      )).map((item) => ({
+      ));
+      const selected = representativeOnly
+        ? [matching.find((item) => ["substantive", "hybrid"].includes(item.classification || "substantive")) || matching[0]].filter(Boolean)
+        : matching;
+      rows = selected.map((item) => ({
         normalized_term: normalizedTerm,
         term: item.term,
         definition: item.definition || item.text,
@@ -584,11 +731,14 @@ class JsonLegalCacheStore {
         classification: item.classification || "substantive",
         classification_reason: item.classificationReason || null,
       }));
+    }
     return rows.map((row) => {
       const law = this.getByCelex(row.celex);
-      const referenceEdges = this.database
-        ? (row.occurrence_id ? this.definitionUsageStatement.all(row.occurrence_id) : [])
-        : (this.definitionOccurrences.find((item) => item.occurrenceId === row.occurrence_id)?.referenceEdges || []);
+      const referenceEdges = includeUsageEdges
+        ? (this.database
+          ? (row.occurrence_id ? this.definitionUsageStatement.all(row.occurrence_id) : [])
+          : (this.definitionOccurrences.find((item) => item.occurrenceId === row.occurrence_id)?.referenceEdges || []))
+        : [];
       return {
         occurrenceId: row.occurrence_id,
         term: row.term,
@@ -651,7 +801,19 @@ class JsonLegalCacheStore {
         const tokens = normalized.match(/[\p{L}\p{N}]+/gu) || [];
         if (tokens.length === 0) return [];
         const expression = tokens.map((token) => `"${token.replace(/"/g, '""')}"*`).join(" AND ");
-        rows = this.definitionSearchStatement.all(expression, normalized, limit);
+        if (filter) {
+          const predicate = filter === "different" ? "wording_count > 1" : "import_count > 0";
+          rows = this.database.prepare(`
+            SELECT normalized_term, display_term, sample_definition, law_count,
+                   substantive_law_count, import_count, wording_count
+            FROM definition_terms
+            WHERE definition_terms MATCH ? AND ${predicate}
+            ORDER BY (normalized_term = ?) DESC, bm25(definition_terms), normalized_term
+            LIMIT ?
+          `).all(expression, normalized, limit);
+        } else {
+          rows = this.definitionSearchStatement.all(expression, normalized, limit);
+        }
       }
     } else {
       rows = this.definitionTerms
@@ -664,10 +826,14 @@ class JsonLegalCacheStore {
           import_count: item.importCount ?? 0,
           wording_count: item.wordingCount,
         }))
-        .filter((row) => normalized
-          ? (row.normalized_term.includes(normalized)
-            || normalizeDefinitionTerm(row.sample_definition).includes(normalized))
-          : (filter === "different" ? Number(row.wording_count) > 1 : Number(row.import_count) > 0))
+        .filter((row) => {
+          const matchesQuery = !normalized
+            || row.normalized_term.includes(normalized)
+            || normalizeDefinitionTerm(row.sample_definition).includes(normalized);
+          const matchesFilter = !filter
+            || (filter === "different" ? Number(row.wording_count) > 1 : Number(row.import_count) > 0);
+          return matchesQuery && matchesFilter;
+        })
         .sort((a, b) => normalized
           ? (Number(b.normalized_term === normalized) - Number(a.normalized_term === normalized)
             || a.normalized_term.localeCompare(b.normalized_term))
@@ -681,10 +847,10 @@ class JsonLegalCacheStore {
         .slice(0, limit);
     }
     return rows.map((row) => {
-      const occurrenceRows = this.definitionOccurrenceRows(row.normalized_term);
-      const representativeSource = occurrenceRows.find((item) => (
-        item.classification === "substantive" || item.classification === "hybrid"
-      )) || occurrenceRows[0] || null;
+      const representativeSource = this.definitionOccurrenceRows(row.normalized_term, {
+        representativeOnly: true,
+        includeUsageEdges: false,
+      })[0] || null;
       return {
       term: row.display_term,
       normalizedTerm: row.normalized_term,
@@ -720,6 +886,32 @@ class JsonLegalCacheStore {
       occurrences,
       wordings: [...grouped.values()],
       usageEdges: occurrences.flatMap((item) => item.referenceEdges || []),
+    };
+  }
+
+  getRankingSignalStats() {
+    const celexes = new Set(this.records.map((record) => normalizeCelexLookupKey(record.celex)).filter(Boolean));
+    let citedCelexes = this.citationCounts;
+    let excerptRecords = this.records.filter((record) => String(record.excerpt || "").trim()).length;
+    if (this.database) {
+      citedCelexes = new Map(this.database.prepare(`
+        SELECT DISTINCT target_celex AS celex
+        FROM citations
+        WHERE kind = 'legislation'
+      `).all().map((row) => [normalizeCelexLookupKey(row.celex), true]));
+      excerptRecords = this.database.prepare(
+        "SELECT COUNT(DISTINCT celex) AS count FROM law_excerpt_map"
+      ).get().count;
+    }
+    const countMatching = (predicate) => this.records.filter(predicate).length;
+    return {
+      records: this.records.length,
+      eurovocRecords: countMatching((record) => (record.eurovoc || []).length > 0),
+      knownStatusRecords: countMatching((record) => typeof record.inForce === "boolean"),
+      inForceRecords: countMatching((record) => record.inForce === true),
+      noLongerInForceRecords: countMatching((record) => record.inForce === false),
+      excerptRecords,
+      citedRecords: [...celexes].filter((celex) => citedCelexes.has(celex)).length,
     };
   }
 
@@ -768,12 +960,16 @@ class JsonLegalCacheStore {
     // natural query (for example "digital services act obligations"). Only
     // multi-word contiguous aliases qualify, avoiding the huge candidate sets
     // produced by broad title OR searches.
-    for (const key of containedAliasKeys(parsed.normalized)) {
-      for (const record of this.byAlias.get(key) || []) addMatch(record);
+    if (!requestsHistoricalLaw(parsed)) {
+      for (const key of containedAliasKeys(parsed.normalized)) {
+        for (const record of this.byAlias.get(key) || []) addMatch(record);
+      }
     }
 
-    if (this.miniSearch) {
-      const boostDocument = buildDocumentBoost(parsed);
+    if (this.rankingProfile === "baseline" && this.miniSearch) {
+      const boostDocument = buildDocumentBoost(parsed, this.citationCounts, {
+        useGlobalPriors: false,
+      });
       let hits = this.miniSearch.search(parsed.rewrittenQuery, { combineWith: "AND", boostDocument });
       // A broad OR over three or more terms can materialize tens of thousands
       // of title hits (and keep V8's high-water heap resident) before the FTS
@@ -790,7 +986,7 @@ class JsonLegalCacheStore {
       }
     }
 
-    if (this.database) {
+    if (this.rankingProfile === "baseline" && this.database) {
       const terms = parsed.terms || [];
       let hits = this.searchExcerpts(buildFtsExpression(terms, "AND"));
       if (hits.length === 0) {
@@ -798,6 +994,116 @@ class JsonLegalCacheStore {
       }
       for (const hit of hits) {
         addMatch(getDeterministicMatch(this.byCelex, normalizeCelexLookupKey(hit.celex)));
+      }
+    }
+
+    if (this.rankingProfile !== "baseline") {
+      const deterministic = matched.map((record) => record.celex);
+      const retrievalQuery = parsed.terms.join(" ") || parsed.rewrittenQuery;
+      const { candidateLimit, coverageExponent, rrfK, sourceWeights } = this.rankingConfig;
+      const candidates = new Map();
+      const sourceIds = { title: [], eurovoc: [], excerpt: [] };
+      let candidateOrdinal = 0;
+      const expandWithOr = (index, hits) => {
+        if (parsed.terms.length < 2 || hits.length >= candidateLimit) return hits;
+        const seenIds = new Set(hits.map((hit) => normalizeCelexLookupKey(hit.id)));
+        const expanded = [...hits];
+        for (const hit of index.search(retrievalQuery, { combineWith: "OR" })) {
+          const celex = normalizeCelexLookupKey(hit.id);
+          if (!celex || seenIds.has(celex)) continue;
+          seenIds.add(celex);
+          expanded.push(hit);
+          if (expanded.length >= candidateLimit) break;
+        }
+        return expanded;
+      };
+      const addCandidates = (source, hits, idForHit, coverageForHit = () => 1) => {
+        const limited = hits.slice(0, candidateLimit);
+        let effectiveRank = 0;
+        let previousScore = null;
+        limited.forEach((hit, index) => {
+          // MiniSearch returns a numeric relevance score. Equal-scoring hits
+          // should share a rank: otherwise an arbitrary index-order difference
+          // can be larger than the deliberately small status/citation prior.
+          // SQLite FTS rows carry no score, so they retain ordinal ranks.
+          const hitScore = Number.isFinite(hit.score) ? hit.score : null;
+          if (hitScore == null || previousScore == null || Math.abs(hitScore - previousScore) > 1e-12) {
+            effectiveRank = index + 1;
+          }
+          previousScore = hitScore;
+          const celex = normalizeCelexLookupKey(idForHit(hit));
+          const record = getDeterministicMatch(this.byCelex, celex);
+          if (!record) return;
+          sourceIds[source].push(celex);
+          let candidate = candidates.get(celex);
+          if (!candidate) {
+            candidate = { record, ordinal: candidateOrdinal++, fusionScore: 0, sources: {} };
+            candidates.set(celex, candidate);
+          }
+          const coverage = Math.max(0, Math.min(1, coverageForHit(hit)));
+          candidate.sources[source] = { rank: effectiveRank, coverage };
+          candidate.fusionScore += sourceWeights[source] * (coverage ** coverageExponent) / (rrfK + effectiveRank);
+        });
+      };
+
+      if (this.miniSearch && retrievalQuery) {
+        let hits = this.miniSearch.search(retrievalQuery, { combineWith: "AND" });
+        hits = expandWithOr(this.miniSearch, hits);
+        addCandidates("title", hits, (hit) => hit.id, (hit) => {
+          const matched = new Set(hit.queryTerms || []).size;
+          return parsed.terms.length === 0 ? 1 : matched / parsed.terms.length;
+        });
+      }
+
+      if (this.eurovocSearch && retrievalQuery) {
+        let hits = this.eurovocSearch.search(retrievalQuery, { combineWith: "AND" });
+        hits = expandWithOr(this.eurovocSearch, hits);
+        addCandidates("eurovoc", hits, (hit) => hit.id, (hit) => {
+          const matched = new Set(hit.queryTerms || []).size;
+          return parsed.terms.length === 0 ? 1 : matched / parsed.terms.length;
+        });
+      }
+
+      if (this.database) {
+        const terms = parsed.terms || [];
+        let hits = this.searchExcerpts(buildFtsExpression(terms, "AND"));
+        if (hits.length === 0) hits = this.searchExcerpts(buildFtsExpression(terms, "OR"));
+        addCandidates("excerpt", hits, (hit) => hit.celex);
+      } else if (this.excerptMiniSearch && retrievalQuery) {
+        let hits = this.excerptMiniSearch.search(retrievalQuery, { combineWith: "AND" });
+        if (hits.length === 0 && parsed.terms.length < 3) {
+          hits = this.excerptMiniSearch.search(retrievalQuery, { combineWith: "OR" });
+        }
+        addCandidates("excerpt", hits, (hit) => hit.id);
+      }
+
+      const ranked = [...candidates.values()]
+        .map((candidate) => ({
+          ...candidate,
+          finalScore: candidate.fusionScore * documentPrior(
+            parsed,
+            candidate.record,
+            this.citationCounts,
+            this.rankingConfig
+          ),
+        }))
+        .sort((left, right) => right.finalScore - left.finalScore || left.ordinal - right.ordinal);
+      for (const candidate of ranked) addMatch(candidate.record);
+
+      if (typeof options.onDiagnostics === "function") {
+        options.onDiagnostics({
+          retrievalQuery,
+          deterministic,
+          sources: sourceIds,
+          union: [...candidates.keys()],
+          ranked: ranked.map((candidate) => ({
+            celex: candidate.record.celex,
+            ordinal: candidate.ordinal,
+            fusionScore: candidate.fusionScore,
+            finalScore: candidate.finalScore,
+            sources: candidate.sources,
+          })),
+        });
       }
     }
 
@@ -888,6 +1194,7 @@ class JsonLegalCacheStore {
     this.excerptSearchStatement = null;
     this.definitionSearchStatement = null;
     this.definitionOccurrenceStatement = null;
+    this.definitionRepresentativeStatement = null;
     this.definitionUsageStatement = null;
   }
 }
@@ -900,6 +1207,7 @@ module.exports = {
   JsonLegalCacheStore,
   SQLITE_SCHEMA_VERSION,
   containedAliasKeys,
+  documentPrior,
   normalizeCelexLookupKey,
   normalizeDefinitionTerm,
   normalizeEliLookupKey,

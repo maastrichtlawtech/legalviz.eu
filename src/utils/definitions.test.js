@@ -110,6 +110,27 @@ describe("injectDefinitionTooltips", () => {
     expect(result).toContain(">personal data</span>");
   });
 
+  it("does not nest a shorter definition inside an active multi-word definition", () => {
+    const defs = [
+      { term: "data", definition: "information" },
+      { term: "personal data", definition: "data about a person" },
+    ];
+    const result = injectDefinitionTooltips("<p>This concerns personal data.</p>", defs, {
+      activeTerm: "personal data",
+    });
+
+    expect(result.match(/\bclass="[^"]*\bdefined-term\b/g)).toHaveLength(1);
+    expect(result).toContain(">personal data</span>");
+  });
+
+  it("leaves definition terms inside links as links only", () => {
+    const html = '<p>See the <a href="#controller">controller</a>.</p>';
+    const result = injectDefinitionTooltips(html, DEFINITIONS);
+
+    expect(result).toBe(html);
+    expect(result).not.toContain('role="button"');
+  });
+
   it("handles inflected languages (Polish)", () => {
     const defs = [{ term: "dane osobowe", definition: "informacje dotyczące osoby fizycznej" }];
     const html = "<p>Przetwarzanie danych osobowych wymaga podstawy prawnej.</p>";

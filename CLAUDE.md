@@ -57,7 +57,7 @@ Nearly every expensive operation — Formex parsing, TF‑IDF recital mapping, C
 
 | When you change… | Bump | In |
 |---|---|---|
-| Parser output (fields, shape, bug fix) | `PARSER_VERSION` | `backend/shared/formex-parser/fmxParser.mjs` |
+| Parser output (fields, shape, bug fix) — **either** parser, see below | `PARSER_VERSION` | `backend/shared/formex-parser/fmxParser.mjs` |
 | Citation graph edge/artifact shape | `GRAPH_VERSION` | `backend/search/citation-graph-store.js` (shared by builder and store) |
 | Offline CJEU detail shape (declarations, `articleRefs`) | `CASE_LAW_CACHE_FILE` → `case-law-cache-vN.json` (keep the offline legacy-migration path) | `backend/shared/law-queries.js` |
 | Recital-title prompt/output format | `CACHE_VERSION` | `backend/shared/recital-title-service.js` |
@@ -69,6 +69,8 @@ Nearly every expensive operation — Formex parsing, TF‑IDF recital mapping, C
 | Precomputed data republished as a new GitHub Release (`data-vN`) | `DATA_RELEASE_TAG` → `data-vN` | `backend/Dockerfile` |
 
 The data caches are the one entry above that isn't a code constant: they ship as **GitHub Release assets** (they're far too large to commit), so republishing them means creating a new `data-vN` release **and** bumping `DATA_RELEASE_TAG` in `backend/Dockerfile` in the same commit. Skip the bump and every deploy keeps fetching the old data no matter what you rebuilt. The Dockerfile fetches **every** asset from that one tag, so a new release must carry the full set — re-upload the unchanged ones alongside the changed one, or the Docker build 404s.
+
+`PARSER_VERSION` lives in the Formex parser but versions **both** parsers' output. `eurlex-html-parser.js` reads a different document format, yet imports its cross-reference grammar (`extractCrossRefsFromText` and friends) straight from `fmxParser.mjs` — so a change there changes what HTML laws yield too, and both parsers stamp the same constant onto their result. Bump it for a fix in *either* file; there is deliberately no second constant to keep in sync.
 
 `PARSER_VERSION` is **shared with the frontend** (imported into `src/utils/formexApi.js`), so bumping it re-parses the browser IndexedDB cache too. When you bump `CASE_LAW_CACHE_FILE`, also update `CASE_LAW_CACHE_VERSION` in `article-digest-service.js` **and** `case-law-digest-service.js` — they are kept in lock-step so digests regenerate when enrichment shape changes.
 

@@ -136,6 +136,24 @@ describe("parseFmxToCombined — DGA", () => {
   });
 });
 
+describe("parseFmxToCombined — title qualifiers", () => {
+  it("does not mistake recast for a law's short title", () => {
+    const xml = `
+      <ACT>
+        <BIB.INSTANCE><LG.DOC>EN</LG.DOC></BIB.INSTANCE>
+        <TITLE><TI>
+          <P><HT TYPE="UC">DIRECTIVE</HT> (EU) 2024/1275.</P>
+          <P>of the European Parliament and of the Council</P>
+          <P>on the energy performance of buildings</P>
+          <P>(recast)</P>
+        </TI></TITLE>
+        <ENACTING.TERMS />
+      </ACT>`;
+
+    expect(parseFmxToCombined(xml).title).toBe("Directive (EU) 2024/1275");
+  });
+});
+
 // ---------------------------------------------------------------------------
 // parseFmxToCombined — GDPR
 // ---------------------------------------------------------------------------

@@ -1430,12 +1430,16 @@ export function parseFmxToCombined(xmlText) {
   }
   const titleText = titleParts.join(" ");
 
-  // Extract short title from parentheses (e.g. "General Data Protection Regulation")
+  // Extract a genuine short title from parentheses (e.g. "General Data
+  // Protection Regulation"). Drafting qualifiers such as "recast" are part
+  // of the official title, but are not names of the act.
   let shortTitle = "";
   for (const part of titleParts) {
     const m = part.match(/\(([^)]{5,80})\)/);
-    if (m && !lang.eea.test(m[1])) {
-      shortTitle = m[1];
+    const candidate = m?.[1]?.trim() || "";
+    const isDraftingQualifier = /^(?:recast|codification|codified version)$/i.test(candidate);
+    if (candidate && !lang.eea.test(candidate) && !isDraftingQualifier) {
+      shortTitle = candidate;
       break;
     }
   }
@@ -1452,7 +1456,8 @@ export function parseFmxToCombined(xmlText) {
   }
   mainTitle = mainTitle.toLowerCase()
     .replace(/(?:^|\s)\S/g, a => a.toUpperCase())
-    .replace(/\b(Eu|Ec|Eec|Euratom)\b/gi, m => m.toUpperCase());
+    .replace(/\b(Eu|Ec|Eec|Euratom)\b/gi, m => m.toUpperCase())
+    .replace(/[.;:]$/, "");
 
   const title = shortTitle && mainTitle && !mainTitle.includes(shortTitle)
     ? `${shortTitle} — ${mainTitle}`

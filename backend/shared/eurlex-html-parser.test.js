@@ -53,6 +53,7 @@ test("parseEurlexHtmlToCombined extracts title, recitals, articles, and definiti
   assert.equal(parsed.definitions.length, 2);
   assert.equal(parsed.definitions[0].term, "user");
   assert.match(parsed.definitions[0].definition, /natural person using a service/i);
+  assert.equal(parsed.definitions[0].sourceArticle, "2");
 });
 
 test("parseEurlexHtmlToCombined retains unnumbered legacy decision measures", async () => {

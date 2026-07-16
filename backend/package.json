@@ -13,6 +13,7 @@
     "stats": "node --env-file-if-exists=../.env --env-file-if-exists=.env bin/stats.js",
     "build:search-cache": "node search/search-build.js",
     "build:citation-graph": "node search/citation-graph-build.js",
+    "build:definition-index": "node search/definition-index-build.js",
     "build:search-eurovoc": "node search/fetch-eurovoc.js",
     "eval:search": "node --expose-gc search/eval/run.js",
     "build:sqlite-data": "node search/build-sqlite-data.js",

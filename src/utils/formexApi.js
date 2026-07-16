@@ -905,6 +905,33 @@ export async function searchLaws(query, { limit = 10, noRewrite = false, signal 
   return res.json();
 }
 
+export async function searchDefinitions(query, { limit = 10, signal } = {}) {
+  const params = new URLSearchParams({
+    q: String(query || "").trim(),
+    limit: String(limit),
+  });
+  const url = `${API_BASE}/api/definitions/search?${params.toString()}`;
+  const res = await apiFetch(url, { signal });
+
+  if (!res.ok) {
+    await readApiError(res, `Definition search failed (${res.status})`);
+  }
+
+  return res.json();
+}
+
+export async function fetchDefinitionComparison(term, { signal } = {}) {
+  const params = new URLSearchParams({ term: String(term || "").trim() });
+  const url = `${API_BASE}/api/definitions/compare?${params.toString()}`;
+  const res = await apiFetch(url, { signal });
+
+  if (!res.ok) {
+    await readApiError(res, `Definition comparison failed (${res.status})`);
+  }
+
+  return res.json();
+}
+
 /**
  * Bulk CELEX → EuroVoc topics lookup. Returns a `{ CELEX: string[] }` map;
  * CELEX ids without known topics are simply omitted. Used to backfill topics

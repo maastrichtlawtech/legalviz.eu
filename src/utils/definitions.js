@@ -108,7 +108,7 @@ export function injectDefinitionTooltips(html, definitions, options = {}) {
             parts[i] = part.replace(termPattern, (match) => {
                 const escapedDef = escapeHtml(definition);
                 const escapedTerm = escapeHtml(term);
-                return `<span class="defined-term" data-term="${escapedTerm}" data-definition="${escapedDef}">${match}</span>`;
+                return `<span class="defined-term" data-term="${escapedTerm}" data-definition="${escapedDef}" role="button" tabindex="0" aria-haspopup="dialog">${match}</span>`;
             });
         }
 

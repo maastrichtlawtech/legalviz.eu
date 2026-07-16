@@ -127,7 +127,7 @@ function formatStructuredTitle(text, langConfig) {
     .replace(/\b(Eu|Ec|Eec|Euratom|Ue|We)\b/gi, (match) => match.toUpperCase());
 }
 
-function parseStructuredHtmlDefinitions(articleHtml, langConfig, parser) {
+function parseStructuredHtmlDefinitions(articleHtml, langConfig, parser, sourceArticle) {
   const definitions = [];
   const doc = parser.parseFromString(articleHtml, "text/html");
   const tables = doc.querySelectorAll("table");
@@ -147,6 +147,7 @@ function parseStructuredHtmlDefinitions(articleHtml, langConfig, parser) {
         definitions.push({
           term: normalizeText(match[1]),
           definition: normalizeText(text.replace(match[0], "")),
+          sourceArticle,
         });
       }
     }
@@ -321,7 +322,12 @@ function parseStructuredHtmlToCombined(document, langCode, langConfig, injectCro
 
   const definitionsArticle = articles.find((article) => article.article_title && langConfig?.definition?.test(article.article_title));
   const definitions = definitionsArticle
-    ? parseStructuredHtmlDefinitions(definitionsArticle.article_html, langConfig, parser)
+    ? parseStructuredHtmlDefinitions(
+      definitionsArticle.article_html,
+      langConfig,
+      parser,
+      definitionsArticle.article_number
+    )
     : [];
 
   recitals.sort((left, right) => {
@@ -356,6 +362,7 @@ function parseDefinitions(article) {
         return {
           term: normalizeText(quoted[1]),
           definition: normalizeText(quoted[2]).replace(/;$/, ""),
+          sourceArticle: article.article_number,
         };
       }
 
@@ -364,6 +371,7 @@ function parseDefinitions(article) {
         return {
           term: normalizeText(means[1]).replace(/^["“'‘]|["”'’]$/g, ""),
           definition: normalizeText(means[2]).replace(/;$/, ""),
+          sourceArticle: article.article_number,
         };
       }
 

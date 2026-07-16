@@ -6,7 +6,7 @@ const GRAPH_VERSION = 2;
 const DEFAULT_CITATION_GRAPH_PATH = path.join(__dirname, "data", "citation-graph.json");
 const DEFAULT_SQLITE_DATA_PATH = path.join(__dirname, "data", "data.sqlite");
 // Keep in lock-step with SQLITE_SCHEMA_VERSION in build-sqlite-data.js / legal-cache-store.js.
-const SQLITE_SCHEMA_VERSION = 2;
+const SQLITE_SCHEMA_VERSION = 3;
 
 // Columns are aliased to the edge field names so rows drop straight into the same
 // distinctSources/publicCitation helpers the JSON path uses.

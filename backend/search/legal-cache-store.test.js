@@ -480,6 +480,55 @@ test("SQLite excerpt search handles punctuation and reads case-law details", () 
   store.close();
 });
 
+test("definition search and comparison work in JSON and SQLite stores", () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "legal-cache-definitions-"));
+  const searchPath = path.join(tempDir, "search.json");
+  const caseLawPath = path.join(tempDir, "case-law.json");
+  const definitionsPath = path.join(tempDir, "definitions.json");
+  const sqlitePath = path.join(tempDir, "data.sqlite");
+  fs.writeFileSync(searchPath, JSON.stringify({ records: [
+    { celex: "32022L2555", title: "NIS 2 Directive", type: "directive", date: "2022-12-14", eli: "http://data.europa.eu/eli/dir/2022/2555/oj" },
+    { celex: "32022L2557", title: "CER Directive", type: "directive", date: "2022-12-14", eli: "http://data.europa.eu/eli/dir/2022/2557/oj" },
+  ] }), "utf8");
+  fs.writeFileSync(caseLawPath, "{}", "utf8");
+  fs.writeFileSync(definitionsPath, JSON.stringify({ occurrences: [
+    { normalizedTerm: "risk", term: "risk", definition: "the potential for loss", definitionHash: "a", celex: "32022L2555", sourceArticle: "6" },
+    { normalizedTerm: "risk", term: "risk", definition: "a possible harmful event", definitionHash: "b", celex: "32022L2557", sourceArticle: "3" },
+  ] }), "utf8");
+  buildSqliteData({
+    searchCachePath: searchPath, caseLawCachePath: caseLawPath, definitionsPath,
+    citationGraphPath: path.join(tempDir, "absent-graph.json"), outputPath: sqlitePath, log: () => {},
+  });
+
+  const stores = [
+    new JsonLegalCacheStore(searchPath, { preferJson: true, definitionsPath }),
+    new JsonLegalCacheStore(searchPath, { sqlitePath, requireSqlite: true }),
+  ];
+  for (const store of stores) {
+    assert.equal(store.load(), true);
+    const results = store.searchDefinitions("risk");
+    assert.equal(results.length, 1);
+    assert.equal(results[0].lawCount, 2);
+    assert.equal(results[0].wordingCount, 2);
+    assert.equal(results[0].representativeSource.celex, "32022L2555");
+    const comparison = store.compareDefinitions(" ‘RISK’ ");
+    assert.equal(comparison.occurrences.length, 2);
+    assert.equal(comparison.wordings.length, 2);
+    assert.equal(comparison.occurrences[0].law.title, "NIS 2 Directive");
+    store.close();
+  }
+});
+
+test("definition methods distinguish an unavailable optional index", () => {
+  const store = new JsonLegalCacheStore(fixturePath, {
+    preferJson: true,
+    definitionsPath: path.join(os.tmpdir(), `missing-definitions-${process.pid}.json`),
+  });
+  assert.equal(store.load(), true);
+  assert.equal(store.getDefinitionsStatus().ready, false);
+  assert.throws(() => store.searchDefinitions("risk"), { code: "definition_index_unavailable" });
+});
+
 test("legal cache store searchLaws keeps a title match ahead of an excerpt-only match for the same term", () => {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "legal-cache-store-excerpt-boost-"));
   const tempPath = path.join(tempDir, "excerpt-boost.json");

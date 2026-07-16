@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { RelatedCaseLaw } from "../RelatedCaseLaw.jsx";
 import { CrossReferences } from "../CrossReferences.jsx";
 import { CitedByPanel } from "../CitedByPanel.jsx";
+import { DefinitionComparisonPanel } from "./DefinitionComparisonPanel.jsx";
 
 // Count the references badge shows for an article: forward + external + back.
 function countReferences(crossReferences, articleNumber) {
@@ -121,6 +122,7 @@ export function LawViewerContextRail({
   onOpenExternalReference,
   isExternalReferencePending,
   onOpenLaw,
+  definitionComparison,
   t,
 }) {
   const [tab, setTab] = useState("recitals");
@@ -133,6 +135,18 @@ export function LawViewerContextRail({
     { id: "references", label: t("lawViewer.tabReferences"), count: refsCount },
     { id: "citedBy", label: t("lawViewer.tabCitedBy"), count: null },
   ];
+
+  if (definitionComparison?.term) {
+    return (
+      <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white px-4 py-3 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+        <DefinitionComparisonPanel
+          {...definitionComparison}
+          currentCelex={celex}
+          t={t}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">

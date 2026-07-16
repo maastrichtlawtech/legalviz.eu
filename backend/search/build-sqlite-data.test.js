@@ -60,8 +60,11 @@ test("buildSqliteData emits a verified manifest with source and table counts", (
     caseLaw: 1,
     citations: 0,
     citationSources: 0,
+    definitionTerms: 0,
+    definitionOccurrences: 0,
   });
   assert.equal(manifest.source.citationGraph, null);
+  assert.equal(manifest.source.definitions, null);
   assert.deepEqual(manifest.integrity, {
     sqlite: "ok",
     orphanLawMappings: 0,
@@ -70,6 +73,37 @@ test("buildSqliteData emits a verified manifest with source and table counts", (
   assert.equal(manifest.source.search.sha256, sha256(searchPath));
   assert.equal(manifest.source.caseLaw.sha256, sha256(caseLawPath));
   assert.equal(manifest.artifact.sha256, sha256(outputPath));
+});
+
+test("buildSqliteData optionally folds definitions into searchable tables", () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "sqlite-data-definitions-"));
+  const searchPath = path.join(tempDir, "search.json");
+  const caseLawPath = path.join(tempDir, "case-law.json");
+  const definitionsPath = path.join(tempDir, "definitions.json");
+  const outputPath = path.join(tempDir, "data.sqlite");
+  const manifestPath = path.join(tempDir, "manifest.json");
+  fs.writeFileSync(searchPath, JSON.stringify({ records: [] }), "utf8");
+  fs.writeFileSync(caseLawPath, "{}", "utf8");
+  fs.writeFileSync(definitionsPath, JSON.stringify({
+    generatedAt: "2026-07-16T00:00:00.000Z",
+    occurrences: [
+      { term: "risk", definition: "the potential for loss", celex: "32022L2555", sourceArticle: "Article 6", definitionHash: "same" },
+      { term: "Risk", definition: "the potential for loss", celex: "32022L2557", article: "3", wordingHash: "same" },
+    ],
+  }), "utf8");
+
+  const result = buildSqliteData({
+    searchCachePath: searchPath, caseLawCachePath: caseLawPath,
+    citationGraphPath: path.join(tempDir, "absent-graph.json"), definitionsPath,
+    outputPath, manifestPath, log: () => {},
+  });
+  const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+  assert.equal(result.definitionTerms, 1);
+  assert.equal(result.definitionOccurrences, 2);
+  assert.equal(manifest.source.definitions.terms, 1);
+  assert.equal(manifest.source.definitions.occurrences, 2);
+  assert.equal(manifest.tables.definitionTerms, 1);
+  assert.equal(manifest.tables.definitionOccurrences, 2);
 });
 
 test("buildSqliteData folds the citation graph into indexed tables and dedups source titles", () => {

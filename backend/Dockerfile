@@ -35,6 +35,7 @@ COPY search/build-sqlite-data.js search/search-ranking.js ./search/
 #   search/data/search-cache.json.gz    -> title/alias index + FTS5 excerpts
 #   search/data/case-law-cache.json.gz  -> folded into data.sqlite
 #   search/data/citation-graph.json.gz  -> folded into data.sqlite
+#   search/data/definitions.json.gz     -> optional definition search index
 # Placed before `COPY . .` so this (large) layer stays cached across code
 # changes and only re-runs when DATA_RELEASE_TAG is bumped for a new data build.
 ARG DATA_RELEASE_REPO=maastrichtlawtech/legalviz.eu
@@ -51,6 +52,11 @@ RUN mkdir -p search/data \
               -o "search/data/$asset" \
               "https://github.com/${DATA_RELEASE_REPO}/releases/download/${DATA_RELEASE_TAG}/$asset"; \
        done \
+    && (curl -fSL --retry 3 --retry-delay 2 \
+          -o /tmp/definitions.json.gz \
+          "https://github.com/${DATA_RELEASE_REPO}/releases/download/${DATA_RELEASE_TAG}/definitions.json.gz" \
+        && mv /tmp/definitions.json.gz search/data/definitions.json.gz \
+        || echo "Optional definitions asset is not present in $DATA_RELEASE_TAG") \
     && node search/build-sqlite-data.js \
     && ls -lh search/data/data.sqlite search/data/data.sqlite.manifest.json
 

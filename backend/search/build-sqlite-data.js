@@ -15,8 +15,9 @@ const DEFAULT_SQLITE_DATA_PATH = path.join(__dirname, "data", "data.sqlite");
 // whose name IS the cache version (CASE_LAW_CACHE_FILE) and must keep its suffix.
 const DEFAULT_CASE_LAW_CACHE_PATH = path.join(__dirname, "data", "case-law-cache.json");
 const DEFAULT_CITATION_GRAPH_PATH = path.join(__dirname, "data", "citation-graph.json");
+const DEFAULT_DEFINITIONS_PATH = path.join(__dirname, "data", "definitions.json");
 // Keep in lock-step with SQLITE_SCHEMA_VERSION in legal-cache-store.js.
-const SQLITE_SCHEMA_VERSION = 2;
+const SQLITE_SCHEMA_VERSION = 3;
 
 // Normalized form of a cited article, matching how the store compares them, so the
 // (target_celex, target_article_key) index can serve the lookup directly rather than
@@ -29,6 +30,66 @@ function textOrNull(value) {
   if (value == null) return null;
   const text = String(value);
   return text === "" ? null : text;
+}
+
+function normalizeDefinitionTerm(value) {
+  return String(value || "")
+    .normalize("NFKC")
+    .replace(/[‘’‛`]/g, "'")
+    .replace(/[‐‑‒–—]/g, "-")
+    .replace(/\s+/g, " ")
+    .replace(/^[\s'"“”]+|[\s'"“”.,;:]+$/g, "")
+    .toLocaleLowerCase("en");
+}
+
+function definitionRows(payload) {
+  const occurrences = Array.isArray(payload?.occurrences)
+    ? payload.occurrences
+    : (Array.isArray(payload?.definitions) ? payload.definitions : []);
+  const rows = [];
+  for (const item of occurrences) {
+    const term = String(item?.term || item?.displayTerm || "").trim();
+    const normalizedTerm = normalizeDefinitionTerm(item?.normalizedTerm || term);
+    const definition = String(item?.definition || item?.text || "").trim();
+    const celex = String(item?.celex || "").trim().toUpperCase();
+    if (!normalizedTerm || !term || !definition || !celex) continue;
+    rows.push({
+      normalizedTerm, term, definition, celex,
+      sourceArticle: textOrNull(item.sourceArticle ?? item.article),
+      definitionHash: String(item.definitionHash || item.wordingHash || "").trim()
+        || crypto.createHash("sha256").update(definition.normalize("NFKC").replace(/\s+/g, " ").trim()).digest("hex"),
+    });
+  }
+  return rows;
+}
+
+function definitionTermRows(payload, occurrences) {
+  const supplied = Array.isArray(payload?.terms)
+    ? payload.terms
+    : (Array.isArray(payload?.groups) ? payload.groups : []);
+  const suppliedByTerm = new Map();
+  for (const item of supplied) {
+    const normalizedTerm = normalizeDefinitionTerm(item?.normalizedTerm || item?.term || item?.displayTerm);
+    if (normalizedTerm) suppliedByTerm.set(normalizedTerm, item);
+  }
+  const grouped = new Map();
+  for (const row of occurrences) {
+    const group = grouped.get(row.normalizedTerm) || [];
+    group.push(row);
+    grouped.set(row.normalizedTerm, group);
+  }
+  const keys = new Set([...suppliedByTerm.keys(), ...grouped.keys()]);
+  return [...keys].map((normalizedTerm) => {
+    const item = suppliedByTerm.get(normalizedTerm) || {};
+    const members = grouped.get(normalizedTerm) || [];
+    const displayTerm = String(item.displayTerm || item.term || members[0]?.term || normalizedTerm).trim();
+    const sampleDefinition = String(item.sampleDefinition || item.definition || members[0]?.definition || "").trim();
+    const lawCount = Number.isSafeInteger(item.lawCount)
+      ? item.lawCount : new Set(members.map((row) => row.celex)).size;
+    const wordingCount = Number.isSafeInteger(item.wordingCount)
+      ? item.wordingCount : new Set(members.map((row) => row.definitionHash)).size;
+    return { normalizedTerm, displayTerm, sampleDefinition, lawCount, wordingCount };
+  }).filter((row) => row.displayTerm && row.sampleDefinition);
 }
 
 function sha256File(filePath) {
@@ -77,6 +138,7 @@ function buildSqliteData({
   searchCachePath = DEFAULT_SEARCH_CACHE_PATH,
   caseLawCachePath = DEFAULT_CASE_LAW_CACHE_PATH,
   citationGraphPath = DEFAULT_CITATION_GRAPH_PATH,
+  definitionsPath = DEFAULT_DEFINITIONS_PATH,
   outputPath = DEFAULT_SQLITE_DATA_PATH,
   manifestPath = `${outputPath}.manifest.json`,
   log = console.warn,
@@ -96,9 +158,20 @@ function buildSqliteData({
       log(`[build-sqlite-data] No citation graph at ${citationGraphPath} — citation tables will be empty`);
     }
   }
+  let definitionsAsset = null;
+  if (definitionsPath) {
+    try {
+      definitionsAsset = readJsonAsset(definitionsPath);
+    } catch (error) {
+      if (!/not found/.test(String(error?.message))) throw error;
+      log(`[build-sqlite-data] No definitions index at ${definitionsPath} — definition tables will be empty`);
+    }
+  }
   const searchPayload = searchAsset.payload;
   const caseLawPayload = caseLawAsset.payload;
   const citationEdges = Array.isArray(citationAsset?.payload?.edges) ? citationAsset.payload.edges : [];
+  const definitionOccurrences = definitionRows(definitionsAsset?.payload);
+  const definitionTerms = definitionTermRows(definitionsAsset?.payload, definitionOccurrences);
   const records = Array.isArray(searchPayload.records) ? searchPayload.records : [];
   const caseLawEntries = Object.entries(caseLawPayload).filter(([rawCelex, details]) => (
     String(rawCelex || "").trim() && details && typeof details === "object"
@@ -172,6 +245,24 @@ function buildSqliteData({
       -- Serves both cited-by lookups: act-level uses the target_celex prefix,
       -- article-level uses both columns.
       CREATE INDEX citations_target ON citations (target_celex, target_article_key);
+      CREATE TABLE definition_occurrences (
+        id INTEGER PRIMARY KEY,
+        normalized_term TEXT NOT NULL,
+        term TEXT NOT NULL,
+        definition TEXT NOT NULL,
+        definition_hash TEXT NOT NULL,
+        celex TEXT NOT NULL,
+        source_article TEXT
+      ) STRICT;
+      CREATE INDEX definition_occurrences_term ON definition_occurrences (normalized_term);
+      CREATE VIRTUAL TABLE definition_terms USING fts5(
+        normalized_term,
+        display_term,
+        sample_definition,
+        law_count UNINDEXED,
+        wording_count UNINDEXED,
+        tokenize='unicode61 remove_diacritics 2'
+      );
     `);
 
     const insertMetadata = database.prepare("INSERT INTO metadata (key, value) VALUES (?, ?)");
@@ -192,6 +283,16 @@ function buildSqliteData({
         target_celex, target_article, target_article_key, target_paragraph, target_point, raw
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
+    const insertDefinitionOccurrence = database.prepare(`
+      INSERT INTO definition_occurrences
+        (normalized_term, term, definition, definition_hash, celex, source_article)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `);
+    const insertDefinitionTerm = database.prepare(`
+      INSERT INTO definition_terms
+        (normalized_term, display_term, sample_definition, law_count, wording_count)
+      VALUES (?, ?, ?, ?, ?)
+    `);
 
     let expectedExcerptCount = 0;
     let skippedCitationEdges = 0;
@@ -200,6 +301,7 @@ function buildSqliteData({
       insertMetadata.run("generated_at", String(searchPayload.generatedAt || ""));
       insertMetadata.run("search_record_count", String(records.length));
       insertMetadata.run("case_law_count", String(caseLawEntries.length));
+      insertMetadata.run("definitions_available", definitionsAsset ? "1" : "0");
 
       records.forEach((record, ordinal) => {
         const excerpt = typeof record?.excerpt === "string" ? record.excerpt : "";
@@ -259,6 +361,16 @@ function buildSqliteData({
       }
       for (const [celex, title] of citationSourceTitles) insertCitationSource.run(celex, title);
       insertMetadata.run("citation_edge_count", String(citationEdges.length - skippedCitationEdges));
+      for (const row of definitionOccurrences) {
+        insertDefinitionOccurrence.run(
+          row.normalizedTerm, row.term, row.definition, row.definitionHash, row.celex, row.sourceArticle
+        );
+      }
+      for (const row of definitionTerms) {
+        insertDefinitionTerm.run(
+          row.normalizedTerm, row.displayTerm, row.sampleDefinition, row.lawCount, row.wordingCount
+        );
+      }
       database.exec("COMMIT");
     } catch (error) {
       database.exec("ROLLBACK");
@@ -305,6 +417,14 @@ function buildSqliteData({
 
     const citationCount = database.prepare("SELECT COUNT(*) AS count FROM citations").get().count;
     const citationSourceCount = database.prepare("SELECT COUNT(*) AS count FROM citation_sources").get().count;
+    const definitionTermCount = database.prepare("SELECT COUNT(*) AS count FROM definition_terms").get().count;
+    const definitionOccurrenceCount = database.prepare("SELECT COUNT(*) AS count FROM definition_occurrences").get().count;
+    if (definitionTermCount !== definitionTerms.length || definitionOccurrenceCount !== definitionOccurrences.length) {
+      throw new Error(
+        `SQLite definition count mismatch: terms ${definitionTermCount}/${definitionTerms.length}, ` +
+        `occurrences ${definitionOccurrenceCount}/${definitionOccurrences.length}`
+      );
+    }
     const expectedCitationCount = citationEdges.length - skippedCitationEdges;
     if (citationCount !== expectedCitationCount) {
       throw new Error(`SQLite citation count mismatch: wrote ${citationCount}, expected ${expectedCitationCount}`);
@@ -351,6 +471,14 @@ function buildSqliteData({
           graphVersion: citationAsset.payload?.graphVersion ?? null,
           generatedAt: citationAsset.payload?.generatedAt || null,
         } : null,
+        definitions: definitionsAsset ? {
+          file: path.basename(definitionsAsset.path),
+          bytes: definitionsAsset.bytes,
+          sha256: definitionsAsset.sha256,
+          terms: definitionTerms.length,
+          occurrences: definitionOccurrences.length,
+          generatedAt: definitionsAsset.payload?.generatedAt || null,
+        } : null,
       },
       artifact: {
         file: path.basename(outputPath),
@@ -364,6 +492,8 @@ function buildSqliteData({
         caseLaw: caseLawCount,
         citations: citationCount,
         citationSources: citationSourceCount,
+        definitionTerms: definitionTermCount,
+        definitionOccurrences: definitionOccurrenceCount,
       },
       integrity: {
         sqlite: integrity,
@@ -380,6 +510,8 @@ function buildSqliteData({
       laws: lawCount,
       excerpts: excerptCount,
       caseLaw: caseLawCount,
+      definitionTerms: definitionTermCount,
+      definitionOccurrences: definitionOccurrenceCount,
       bytes: outputBytes,
       sha256: outputSha256,
     };
@@ -399,6 +531,7 @@ function parseArgs(argv) {
     if (token === "--search" && value) options.searchCachePath = path.resolve(value);
     else if (token === "--case-law" && value) options.caseLawCachePath = path.resolve(value);
     else if (token === "--citation-graph" && value) options.citationGraphPath = path.resolve(value);
+    else if (token === "--definitions" && value) options.definitionsPath = path.resolve(value);
     else if (token === "--output" && value) options.outputPath = path.resolve(value);
     else if (token === "--manifest" && value) options.manifestPath = path.resolve(value);
     else continue;
@@ -423,10 +556,12 @@ if (require.main === module) {
 module.exports = {
   DEFAULT_CASE_LAW_CACHE_PATH,
   DEFAULT_CITATION_GRAPH_PATH,
+  DEFAULT_DEFINITIONS_PATH,
   SQLITE_SCHEMA_VERSION,
   articleKey,
   buildSqliteData,
   isPartialCaseLawEntry,
+  normalizeDefinitionTerm,
   readJson,
   readJsonAsset,
   sha256File,

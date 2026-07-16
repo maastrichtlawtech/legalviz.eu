@@ -13,7 +13,8 @@ const {
 const BUILTIN_SEARCH_CACHE_PATH = path.join(__dirname, "data", "search-cache.json");
 const DEFAULT_SEARCH_CACHE_PATH = process.env.SEARCH_CACHE_PATH || BUILTIN_SEARCH_CACHE_PATH;
 const DEFAULT_SQLITE_DATA_PATH = path.join(__dirname, "data", "data.sqlite");
-const SQLITE_SCHEMA_VERSION = 2;
+const DEFAULT_DEFINITIONS_PATH = path.join(__dirname, "data", "definitions.json");
+const SQLITE_SCHEMA_VERSION = 3;
 
 const SUPPLEMENTAL_RECORDS = [
   {
@@ -54,6 +55,26 @@ function mergeSupplementalRecords(records) {
 function normalizeCelexLookupKey(celex) {
   const normalized = String(celex || "").trim().toUpperCase();
   return normalized || null;
+}
+
+function normalizeDefinitionTerm(value) {
+  return String(value || "")
+    .normalize("NFKC")
+    .replace(/[‘’‛`]/g, "'")
+    .replace(/[‐‑‒–—]/g, "-")
+    .replace(/\s+/g, " ")
+    .replace(/^[\s'"“”]+|[\s'"“”.,;:]+$/g, "")
+    .toLocaleLowerCase("en");
+}
+
+function readOptionalJson(inputPath) {
+  const gzPath = `${inputPath}.gz`;
+  const resolved = fs.existsSync(inputPath) ? inputPath : (fs.existsSync(gzPath) ? gzPath : null);
+  if (!resolved) return null;
+  const raw = resolved.endsWith(".gz")
+    ? zlib.gunzipSync(fs.readFileSync(resolved)).toString("utf8")
+    : fs.readFileSync(resolved, "utf8");
+  return JSON.parse(raw);
 }
 
 function normalizeEliLookupKey(eli) {
@@ -260,6 +281,10 @@ class JsonLegalCacheStore {
         ? DEFAULT_SQLITE_DATA_PATH
         : null);
     this.requireSqlite = options.requireSqlite ?? Boolean(configuredSqlitePath);
+    this.definitionsPath = options.definitionsPath
+      || (cachePath === BUILTIN_SEARCH_CACHE_PATH
+        ? DEFAULT_DEFINITIONS_PATH
+        : path.join(path.dirname(cachePath), "definitions.json"));
     this.payload = null;
     this.records = [];
     this.loadedAt = null;
@@ -271,6 +296,11 @@ class JsonLegalCacheStore {
     this.miniSearch = null;
     this.database = null;
     this.excerptSearchStatement = null;
+    this.definitionSearchStatement = null;
+    this.definitionOccurrenceStatement = null;
+    this.definitionTerms = [];
+    this.definitionOccurrences = [];
+    this.definitionsAvailable = false;
     this.source = null;
   }
 
@@ -294,6 +324,9 @@ class JsonLegalCacheStore {
     this.byOfficialReference = new Map();
     this.byAlias = new Map();
     this.miniSearch = null;
+    this.definitionTerms = [];
+    this.definitionOccurrences = [];
+    this.definitionsAvailable = false;
     this.source = null;
   }
 
@@ -380,8 +413,29 @@ class JsonLegalCacheStore {
         ORDER BY bm25(law_excerpts), mapping.ordinal
         LIMIT 200
       `);
+      this.definitionSearchStatement = database.prepare(`
+        SELECT normalized_term, display_term, sample_definition, law_count, wording_count
+        FROM definition_terms
+        WHERE definition_terms MATCH ?
+        ORDER BY (normalized_term = ?) DESC, bm25(definition_terms), normalized_term
+        LIMIT ?
+      `);
+      this.definitionOccurrenceStatement = database.prepare(`
+        SELECT normalized_term, term, definition, definition_hash, celex, source_article
+        FROM definition_occurrences
+        WHERE normalized_term = ?
+        ORDER BY celex, source_article, id
+      `);
+      this.definitionsAvailable = database.prepare(
+        "SELECT value FROM metadata WHERE key = 'definitions_available'"
+      ).get()?.value === "1";
       this.payload = null;
       this.indexRecords(records, { includeExcerpt: false });
+      // indexRecords resets only law indexes; preserve the SQLite availability
+      // discovered above after it has initialized common store state.
+      this.definitionsAvailable = database.prepare(
+        "SELECT value FROM metadata WHERE key = 'definitions_available'"
+      ).get()?.value === "1";
       this.source = "sqlite";
       return true;
     } catch (error) {
@@ -392,6 +446,9 @@ class JsonLegalCacheStore {
 
   loadFromJson() {
     try {
+      this.definitionTerms = [];
+      this.definitionOccurrences = [];
+      this.definitionsAvailable = false;
       // The full-corpus cache is far too large to commit, so a fresh deploy
       // fetches search-cache.json.gz as a GitHub Release asset at build time
       // (see backend/Dockerfile). Prefer the raw file when present (a local
@@ -414,6 +471,23 @@ class JsonLegalCacheStore {
 
       this.payload = parsed;
       this.indexRecords(records, { includeExcerpt: true });
+      try {
+        const definitions = readOptionalJson(this.definitionsPath);
+        if (definitions) {
+          this.definitionOccurrences = Array.isArray(definitions.occurrences)
+            ? definitions.occurrences : (Array.isArray(definitions.definitions) ? definitions.definitions : []);
+          this.definitionTerms = Array.isArray(definitions.terms)
+            ? definitions.terms : (Array.isArray(definitions.groups) ? definitions.groups : []);
+          if (this.definitionTerms.length === 0 && this.definitionOccurrences.length > 0) {
+            this.definitionTerms = this.buildDefinitionTerms(this.definitionOccurrences);
+          }
+          this.definitionsAvailable = true;
+        }
+      } catch (error) {
+        // A bad optional definitions artifact must not take down ordinary law
+        // search. Definition endpoints remain explicitly unavailable instead.
+        this.definitionsAvailable = false;
+      }
       this.source = "json";
       return true;
     } catch (error) {
@@ -436,6 +510,136 @@ class JsonLegalCacheStore {
       loadedAt: this.loadedAt,
       count: this.records.length,
       error: this.loadError,
+    };
+  }
+
+  getDefinitionsStatus() {
+    return {
+      ready: this.definitionsAvailable,
+      source: this.source,
+      path: this.source === "sqlite" ? this.sqlitePath : this.definitionsPath,
+      terms: this.database
+        ? (this.definitionsAvailable ? this.database.prepare("SELECT COUNT(*) AS count FROM definition_terms").get().count : 0)
+        : this.definitionTerms.length,
+    };
+  }
+
+  requireDefinitions() {
+    if (this.definitionsAvailable) return;
+    const error = new Error("Definition index is not loaded");
+    error.code = "definition_index_unavailable";
+    throw error;
+  }
+
+  buildDefinitionTerms(occurrences) {
+    const groups = new Map();
+    for (const item of occurrences) {
+      const normalizedTerm = normalizeDefinitionTerm(item?.normalizedTerm || item?.term);
+      if (!normalizedTerm) continue;
+      const members = groups.get(normalizedTerm) || [];
+      members.push(item);
+      groups.set(normalizedTerm, members);
+    }
+    return [...groups].map(([normalizedTerm, members]) => ({
+      normalizedTerm,
+      displayTerm: members[0]?.term || normalizedTerm,
+      sampleDefinition: members[0]?.definition || members[0]?.text || "",
+      lawCount: new Set(members.map((item) => normalizeCelexLookupKey(item.celex)).filter(Boolean)).size,
+      wordingCount: new Set(members.map((item) => item.definitionHash || item.wordingHash || item.definition)).size,
+    }));
+  }
+
+  definitionOccurrenceRows(normalizedTerm) {
+    const rows = this.database
+      ? this.definitionOccurrenceStatement.all(normalizedTerm)
+      : this.definitionOccurrences.filter((item) => (
+        normalizeDefinitionTerm(item?.normalizedTerm || item?.term) === normalizedTerm
+      )).map((item) => ({
+        normalized_term: normalizedTerm,
+        term: item.term,
+        definition: item.definition || item.text,
+        definition_hash: item.definitionHash || item.wordingHash || null,
+        celex: normalizeCelexLookupKey(item.celex),
+        source_article: item.sourceArticle ?? item.article ?? null,
+      }));
+    return rows.map((row) => {
+      const law = this.getByCelex(row.celex);
+      return {
+        term: row.term,
+        definition: row.definition,
+        definitionHash: row.definition_hash,
+        celex: row.celex,
+        sourceArticle: row.source_article,
+        title: law?.title || null,
+        date: law?.date || null,
+        type: law?.type || null,
+        eli: law?.eli || null,
+        inForce: law?.inForce ?? null,
+        law: law ? {
+          title: law.title,
+          date: law.date || null,
+          type: law.type || null,
+          eli: law.eli || null,
+          inForce: law.inForce ?? null,
+        } : null,
+      };
+    });
+  }
+
+  searchDefinitions(query, options = {}) {
+    this.requireDefinitions();
+    const normalized = normalizeDefinitionTerm(query);
+    if (!normalized) return [];
+    const limit = Math.max(1, Math.min(Number.parseInt(options.limit || "10", 10) || 10, 50));
+    let rows;
+    if (this.database) {
+      const tokens = normalized.match(/[\p{L}\p{N}]+/gu) || [];
+      if (tokens.length === 0) return [];
+      const expression = tokens.map((token) => `"${token.replace(/"/g, '""')}"*`).join(" AND ");
+      rows = this.definitionSearchStatement.all(expression, normalized, limit);
+    } else {
+      rows = this.definitionTerms
+        .map((item) => ({
+          normalized_term: normalizeDefinitionTerm(item.normalizedTerm || item.term || item.displayTerm),
+          display_term: item.displayTerm || item.term,
+          sample_definition: item.sampleDefinition || item.definition || "",
+          law_count: item.lawCount,
+          wording_count: item.wordingCount,
+        }))
+        .filter((row) => row.normalized_term.includes(normalized)
+          || normalizeDefinitionTerm(row.sample_definition).includes(normalized))
+        .sort((a, b) => Number(b.normalized_term === normalized) - Number(a.normalized_term === normalized)
+          || a.normalized_term.localeCompare(b.normalized_term))
+        .slice(0, limit);
+    }
+    return rows.map((row) => ({
+      term: row.display_term,
+      normalizedTerm: row.normalized_term,
+      sampleDefinition: row.sample_definition,
+      lawCount: Number(row.law_count) || 0,
+      wordingCount: Number(row.wording_count) || 0,
+      representativeSource: this.definitionOccurrenceRows(row.normalized_term)[0] || null,
+    }));
+  }
+
+  compareDefinitions(term) {
+    this.requireDefinitions();
+    const normalizedTerm = normalizeDefinitionTerm(term);
+    const occurrences = this.definitionOccurrenceRows(normalizedTerm);
+    const grouped = new Map();
+    for (const occurrence of occurrences) {
+      const hash = occurrence.definitionHash || occurrence.definition;
+      const group = grouped.get(hash) || { definitionHash: occurrence.definitionHash, definition: occurrence.definition, occurrences: [] };
+      group.occurrences.push(occurrence);
+      grouped.set(hash, group);
+    }
+    return {
+      term: occurrences[0]?.term || String(term || "").trim(),
+      normalizedTerm,
+      lawCount: new Set(occurrences.map((item) => item.celex)).size,
+      wordingCount: grouped.size,
+      occurrences,
+      wordings: [...grouped.values()],
     };
   }
 
@@ -602,6 +806,8 @@ class JsonLegalCacheStore {
     }
     this.database = null;
     this.excerptSearchStatement = null;
+    this.definitionSearchStatement = null;
+    this.definitionOccurrenceStatement = null;
   }
 }
 
@@ -609,10 +815,12 @@ module.exports = {
   buildCanonicalEliFromReference,
   DEFAULT_SEARCH_CACHE_PATH,
   DEFAULT_SQLITE_DATA_PATH,
+  DEFAULT_DEFINITIONS_PATH,
   JsonLegalCacheStore,
   SQLITE_SCHEMA_VERSION,
   containedAliasKeys,
   normalizeCelexLookupKey,
+  normalizeDefinitionTerm,
   normalizeEliLookupKey,
   normalizeOfficialReferenceLookupKey,
 };

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { X } from "lucide-react";
+import { GitCompare, X } from "lucide-react";
 
 const VIEWPORT_MARGIN = 8;
 const ANCHOR_GAP = 8;
@@ -25,13 +25,16 @@ function matchesSheetQuery() {
  * outside the EUR-Lex DOM keeps its tables, overflow rules, and stacking
  * contexts from clipping or restyling the popup.
  */
-export function DefinitionTooltip({ t }) {
+export function DefinitionTooltip({ t, onCompareDefinition }) {
   // { term, definition, anchor } — anchor is the hovered/tapped span.
   const [active, setActive] = useState(null);
   const [isSheet, setIsSheet] = useState(matchesSheetQuery);
   const [position, setPosition] = useState(null);
   const tooltipRef = useRef(null);
+  const compareButtonRef = useRef(null);
   const closeTimerRef = useRef(null);
+  const focusCompareOnOpenRef = useRef(false);
+  const returnFocusRef = useRef(null);
 
   const cancelScheduledClose = useCallback(() => {
     if (closeTimerRef.current) {
@@ -101,7 +104,24 @@ export function DefinitionTooltip({ t }) {
     };
 
     const handleKeyDown = (event) => {
-      if (event.key === "Escape") close();
+      if (event.key === "Escape") {
+        close();
+        returnFocusRef.current?.focus?.();
+        returnFocusRef.current = null;
+        return;
+      }
+      if (event.key !== "Enter" && event.key !== " ") return;
+      const el = findTerm(event.target);
+      if (!el) return;
+      event.preventDefault();
+      returnFocusRef.current = el;
+      focusCompareOnOpenRef.current = true;
+      openFromElement(el);
+    };
+
+    const handleFocusIn = (event) => {
+      const el = findTerm(event.target);
+      if (el) openFromElement(el);
     };
 
     // Any scroll invalidates the anchored position; the sheet is
@@ -115,6 +135,7 @@ export function DefinitionTooltip({ t }) {
     document.addEventListener("mouseout", handleMouseOut);
     document.addEventListener("click", handleClick);
     document.addEventListener("keydown", handleKeyDown);
+    document.addEventListener("focusin", handleFocusIn);
     window.addEventListener("scroll", handleScroll, { capture: true, passive: true });
     window.addEventListener("resize", close);
     return () => {
@@ -122,11 +143,18 @@ export function DefinitionTooltip({ t }) {
       document.removeEventListener("mouseout", handleMouseOut);
       document.removeEventListener("click", handleClick);
       document.removeEventListener("keydown", handleKeyDown);
+      document.removeEventListener("focusin", handleFocusIn);
       window.removeEventListener("scroll", handleScroll, { capture: true });
       window.removeEventListener("resize", close);
       cancelScheduledClose();
     };
   }, [cancelScheduledClose, close, isSheet, scheduleClose]);
+
+  useEffect(() => {
+    if (!active || !focusCompareOnOpenRef.current) return;
+    focusCompareOnOpenRef.current = false;
+    window.requestAnimationFrame(() => compareButtonRef.current?.focus());
+  }, [active]);
 
   // Anchored placement: measure the rendered popup, center it on the term,
   // clamp to the viewport, and flip below when there is no room above.
@@ -175,6 +203,7 @@ export function DefinitionTooltip({ t }) {
             {active.term}
           </div>
           <button
+            ref={onCompareDefinition ? null : compareButtonRef}
             type="button"
             onClick={close}
             aria-label={t("common.close")}
@@ -186,6 +215,20 @@ export function DefinitionTooltip({ t }) {
         <div className="mt-1 max-h-[45vh] overflow-y-auto text-sm leading-6 text-gray-700 dark:text-gray-300">
           {active.definition}
         </div>
+        {onCompareDefinition ? (
+          <button
+            ref={compareButtonRef}
+            type="button"
+            onClick={() => {
+              onCompareDefinition({ term: active.term, definition: active.definition });
+              close();
+            }}
+            className="mt-4 inline-flex items-center gap-2 rounded-lg bg-eu-blue px-3 py-2 text-sm font-medium text-white transition hover:opacity-90 dark:bg-eu-blue-bright dark:text-gray-950"
+          >
+            <GitCompare size={16} aria-hidden="true" />
+            {t("definitionComparison.compareAcrossLaws")}
+          </button>
+        ) : null}
       </div>,
       document.body
     );
@@ -194,7 +237,8 @@ export function DefinitionTooltip({ t }) {
   return createPortal(
     <div
       ref={tooltipRef}
-      role="tooltip"
+      role={onCompareDefinition ? "dialog" : "tooltip"}
+      aria-label={onCompareDefinition ? active.term : undefined}
       className="fixed z-50 w-max max-w-sm rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-lg dark:border-gray-700 dark:bg-gray-900"
       style={{
         left: position?.left ?? 0,
@@ -210,6 +254,20 @@ export function DefinitionTooltip({ t }) {
       <div className="mt-1 max-h-60 overflow-y-auto text-sm leading-6 text-gray-700 dark:text-gray-300">
         {active.definition}
       </div>
+      {onCompareDefinition ? (
+        <button
+          ref={compareButtonRef}
+          type="button"
+          onClick={() => {
+            onCompareDefinition({ term: active.term, definition: active.definition });
+            close();
+          }}
+          className="mt-3 inline-flex items-center gap-1.5 text-xs font-medium text-eu-blue hover:underline dark:text-eu-blue-bright"
+        >
+          <GitCompare size={14} aria-hidden="true" />
+          {t("definitionComparison.compareAcrossLaws")}
+        </button>
+      ) : null}
     </div>,
     document.body
   );

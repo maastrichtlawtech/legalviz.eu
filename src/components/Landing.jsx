@@ -69,6 +69,22 @@ export function Landing({ forcedLocale = null }) {
   }, [locale, localizePath, markLawOpened, navigate]);
 
   const handleSearchNavigate = useCallback(async (item) => {
+    if (item.search_kind === "definition") {
+      const source = item.representativeSource || {};
+      if (!source.celex) return;
+      const sourceArticle = source.article ?? source.sourceArticle;
+      const targetLaw = buildImportedLawCandidate({
+        celex: source.celex,
+        title: source.title || source.law?.title,
+        officialReference: inferOfficialReferenceFromCelex(source.celex),
+      });
+      const route = getCanonicalLawRoute(targetLaw, sourceArticle ? "article" : null, sourceArticle || null, locale);
+      const separator = route.includes("?") ? "&" : "?";
+      const term = item.normalizedTerm || item.term;
+      navigate(`${route}${separator}definition=${encodeURIComponent(term)}`);
+      return;
+    }
+
     if (item.search_kind === "law") {
       const officialReference = inferOfficialReferenceFromCelex(item.celex);
       const targetLaw = buildImportedLawCandidate({
@@ -147,6 +163,7 @@ export function Landing({ forcedLocale = null }) {
               activeLanguage={formexLang}
               searchableLawCount={searchableLawCount}
               triggerVariant="hero"
+              searchModes={["laws", "matches", "definitions"]}
             />
           </div>
         </Motion.div>

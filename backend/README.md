@@ -55,6 +55,14 @@ To enable reverse-citation queries, also build the citation graph from the local
 npm run build:citation-graph
 ```
 
+To enable cross-law definition search, build the resumable English definition
+index from the same local FMX and HTML corpus before building SQLite:
+
+```bash
+npm run build:definition-index
+npm run build:sqlite-data
+```
+
 ## CLI
 
 The `eurlex` command exposes the same functionality as the API server so you can work with EU legislation locally without running the server.
@@ -195,6 +203,8 @@ cat input.xml | parse-fmx > output.json
 | `GET` | `/api/laws/:celex/articles/:n/case-law-digest?lang=ENG` | Cached static digest of CJEU case law interpreting one article. Zero-case results are cached without an LLM call. |
 | `GET` | `/api/laws/by-reference?actType=...&year=...&number=...` | Fetch law by official reference |
 | `GET` | `/api/search?q=keyword&limit=10` | Search law metadata |
+| `GET` | `/api/definitions/search?q=term&limit=10` | Search extracted legal definitions |
+| `GET` | `/api/definitions/compare?term=risk` | Compare a term's definitions across laws |
 | `GET` | `/api/topics?celex=32016R0679,32024R1689` | Bulk EuroVoc topics for up to 200 CELEX ids (`{ topics: { CELEX: string[] } }`) |
 | `GET` | `/api/resolve-reference?actType=...&year=...&number=...` | Resolve legal reference to CELEX |
 | `GET` | `/api/resolve-url?url=...` | Resolve EUR-Lex URL to CELEX |
@@ -521,8 +531,9 @@ Important: restart the API server after rebuilding the cache, because the cache 
 
 ### Precomputed runtime store
 
-`npm run build:sqlite-data` converts `search-cache.json(.gz)` and
-`case-law-cache.json(.gz)` into `search/data/data.sqlite`. It writes a
+`npm run build:sqlite-data` converts `search-cache.json(.gz)`,
+`case-law-cache.json(.gz)`, and the optional `definitions.json(.gz)` into
+`search/data/data.sqlite`. It writes a
 temporary database, validates its schema, row counts, and integrity, then
 renames it atomically. The build also emits `data.sqlite.manifest.json` with
 source and artifact SHA-256 checksums, schema version, table counts, and mapping

@@ -7,7 +7,7 @@ import { ThemeToggle } from "./ThemeToggle.jsx";
 import { LanguageSelector } from "./LanguageSelector.jsx";
 import { searchContent, searchIndex as searchWithIndex, buildSearchIndex } from "../utils/nlp.js";
 import { useI18n } from "../i18n/useI18n.js";
-import { searchLaws as searchLawsApi } from "../utils/formexApi.js";
+import { searchDefinitions as searchDefinitionsApi, searchLaws as searchLawsApi } from "../utils/formexApi.js";
 import { buildImportedLawCandidate, getCanonicalLawRoute, parseCelexQuery } from "../utils/lawRouting.js";
 import { inferOfficialReferenceFromCelex, saveLawMeta } from "../utils/library.js";
 import { cleanLawTitle, extractShortLawTitle, formatOfficialReference } from "../utils/lawDisplay.js";
@@ -72,7 +72,7 @@ export function SearchBox({
     if (Array.isArray(searchModes) && searchModes.length > 0) {
       return searchModes;
     }
-    return typeof onSearchOpen === "function" ? ["laws", "matches"] : ["current"];
+    return typeof onSearchOpen === "function" ? ["laws", "matches", "definitions"] : ["current"];
   }, [onSearchOpen, searchModes]);
   const persistedState = useMemo(() => readPersistedState(), [readPersistedState]);
   const [query, setQuery] = useState(() => String(persistedState?.query || ""));
@@ -93,6 +93,8 @@ export function SearchBox({
   const [isLawSearchLoading, setIsLawSearchLoading] = useState(false);
   const [lawSearchError, setLawSearchError] = useState("");
   const [lastLawSearchQuery, setLastLawSearchQuery] = useState("");
+  const [isDefinitionSearchLoading, setIsDefinitionSearchLoading] = useState(false);
+  const [lastDefinitionSearchQuery, setLastDefinitionSearchQuery] = useState("");
   const [isSmallViewport, setIsSmallViewport] = useState(() => {
     if (typeof window === "undefined" || typeof window.matchMedia !== "function") return false;
     return window.matchMedia("(max-width: 639px)").matches;
@@ -104,17 +106,20 @@ export function SearchBox({
   const resultsRef = useRef(null);
   const lawSearchAbortRef = useRef(null);
   const lawSearchDebounceRef = useRef(null);
+  const definitionSearchAbortRef = useRef(null);
+  const definitionSearchDebounceRef = useRef(null);
   const pendingSearchRef = useRef(null);
-  const hasGlobalSearch = availableModes.includes("laws") || availableModes.includes("matches");
+  const hasGlobalSearch = availableModes.includes("laws") || availableModes.includes("matches") || availableModes.includes("definitions");
   const globalEntryCount = (effectiveGlobalLists?.articles?.length || 0)
     + (effectiveGlobalLists?.recitals?.length || 0)
     + (effectiveGlobalLists?.annexes?.length || 0);
   const isCurrentMode = searchMode === "current";
   const isLawMode = searchMode === "laws";
   const isMatchesMode = searchMode === "matches";
+  const isDefinitionsMode = searchMode === "definitions";
   const isCurrentBusy = isCurrentMode && isBuildingCurrent;
   const isMatchesBusy = isMatchesMode && (isBuildingGlobal || isSearchLoading);
-  const isBusy = isLawMode ? isLawSearchLoading : isCurrentBusy || isMatchesBusy;
+  const isBusy = isLawMode ? isLawSearchLoading : isDefinitionsMode ? isDefinitionSearchLoading : isCurrentBusy || isMatchesBusy;
 
   useEffect(() => {
     if (!availableModes.includes(searchMode)) {
@@ -279,6 +284,65 @@ export function SearchBox({
     }, LAW_SEARCH_DEBOUNCE_MS);
   }, [runLawSearch]);
 
+  const runDefinitionSearch = useCallback((nextQuery) => {
+    const trimmedQuery = String(nextQuery || "").trim();
+    definitionSearchAbortRef.current?.abort();
+    setLawSearchError("");
+
+    if (trimmedQuery.length < 2) {
+      setResults([]);
+      setLastDefinitionSearchQuery("");
+      setIsDefinitionSearchLoading(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    definitionSearchAbortRef.current = controller;
+    setIsDefinitionSearchLoading(true);
+    setLastDefinitionSearchQuery(trimmedQuery);
+
+    searchDefinitionsApi(trimmedQuery, { limit: 12, signal: controller.signal })
+      .then((payload) => {
+        const nextResults = Array.isArray(payload?.results)
+          ? payload.results.map((item, index) => ({
+            ...item,
+            search_kind: "definition",
+            id: item.normalizedTerm || item.term || index,
+          }))
+          : [];
+        setResults(nextResults);
+        setSelectedIndex(-1);
+      })
+      .catch((error) => {
+        if (error?.name === "AbortError") return;
+        console.error("Failed to search definitions", error);
+        setResults([]);
+        setLawSearchError(error?.message || t("search.definitionApiUnavailable"));
+      })
+      .finally(() => {
+        if (definitionSearchAbortRef.current === controller) {
+          definitionSearchAbortRef.current = null;
+          setIsDefinitionSearchLoading(false);
+        }
+      });
+  }, [t]);
+
+  const scheduleDefinitionSearch = useCallback((nextQuery) => {
+    if (definitionSearchDebounceRef.current) {
+      clearTimeout(definitionSearchDebounceRef.current);
+      definitionSearchDebounceRef.current = null;
+    }
+    if (String(nextQuery || "").trim().length < 2) {
+      runDefinitionSearch(nextQuery);
+      return;
+    }
+    setIsDefinitionSearchLoading(true);
+    definitionSearchDebounceRef.current = setTimeout(() => {
+      definitionSearchDebounceRef.current = null;
+      runDefinitionSearch(nextQuery);
+    }, LAW_SEARCH_DEBOUNCE_MS);
+  }, [runDefinitionSearch]);
+
   const executeSearch = useCallback((mode, nextQuery) => {
     if (mode === "laws") {
       pendingSearchRef.current = null;
@@ -293,6 +357,12 @@ export function SearchBox({
       }
       pendingSearchRef.current = null;
       runCurrentSearch(nextQuery);
+      return;
+    }
+
+    if (mode === "definitions") {
+      pendingSearchRef.current = null;
+      scheduleDefinitionSearch(nextQuery);
       return;
     }
 
@@ -335,6 +405,7 @@ export function SearchBox({
     onSearchOpen,
     runCurrentSearch,
     runGlobalMatchSearch,
+    scheduleDefinitionSearch,
     scheduleLawSearch,
     searchableLawCount,
   ]);
@@ -395,10 +466,37 @@ export function SearchBox({
 
   useEffect(() => () => {
     lawSearchAbortRef.current?.abort();
+    definitionSearchAbortRef.current?.abort();
     if (lawSearchDebounceRef.current) {
       clearTimeout(lawSearchDebounceRef.current);
     }
+    if (definitionSearchDebounceRef.current) {
+      clearTimeout(definitionSearchDebounceRef.current);
+    }
   }, []);
+
+  // Prevent a delayed response from the mode the user just left replacing
+  // the results for the newly selected mode.
+  useEffect(() => {
+    if (!isLawMode) {
+      lawSearchAbortRef.current?.abort();
+      lawSearchAbortRef.current = null;
+      if (lawSearchDebounceRef.current) {
+        clearTimeout(lawSearchDebounceRef.current);
+        lawSearchDebounceRef.current = null;
+      }
+      setIsLawSearchLoading(false);
+    }
+    if (!isDefinitionsMode) {
+      definitionSearchAbortRef.current?.abort();
+      definitionSearchAbortRef.current = null;
+      if (definitionSearchDebounceRef.current) {
+        clearTimeout(definitionSearchDebounceRef.current);
+        definitionSearchDebounceRef.current = null;
+      }
+      setIsDefinitionSearchLoading(false);
+    }
+  }, [isDefinitionsMode, isLawMode]);
 
   useEffect(() => {
     if (typeof window === "undefined" || typeof window.matchMedia !== "function") return undefined;
@@ -499,7 +597,7 @@ export function SearchBox({
   useEffect(() => {
     if (selectedIndex >= 0 && resultsRef.current) {
       const selectedEl = resultsRef.current.querySelector(`[data-result-index="${selectedIndex}"]`);
-      if (selectedEl) {
+      if (selectedEl?.scrollIntoView) {
         selectedEl.scrollIntoView({ block: "nearest", behavior: "smooth" });
       }
     }
@@ -519,7 +617,8 @@ export function SearchBox({
       setIsOpen(true);
     }
 
-    if (isLawMode && q.trim() !== lastLawSearchQuery) {
+    if ((isLawMode && q.trim() !== lastLawSearchQuery)
+      || (isDefinitionsMode && q.trim() !== lastDefinitionSearchQuery)) {
       setResults([]);
       return;
     }
@@ -589,6 +688,8 @@ export function SearchBox({
     ? t("search.searchingCurrentLaw", { law: currentLawLabel || t("search.currentLawFallback") })
     : isLawMode
       ? t("search.searchingLaws")
+      : isDefinitionsMode
+        ? t("search.searchingDefinitions")
       : t("search.searchingMatches", {
         count: searchableLawCount,
         lawWord: searchableLawCount === 1 ? t("search.law") : t("search.laws"),
@@ -602,6 +703,8 @@ export function SearchBox({
     ? t("search.searchingCurrentLaw", { law: currentLawLabel || t("search.currentLawFallback") })
     : isLawMode
       ? t("search.scopeLaws")
+      : isDefinitionsMode
+        ? t("search.searchingDefinitions")
       : t("search.searchingMatches", {
         count: searchableLawCount,
         lawWord: searchableLawCount === 1 ? t("search.law") : t("search.laws"),
@@ -613,6 +716,8 @@ export function SearchBox({
       ? t("search.segCurrent")
       : mode === "laws"
         ? t("search.segLaws")
+        : mode === "definitions"
+          ? t("search.segDefinitions")
         : t("search.segMatches")
   );
 
@@ -652,6 +757,8 @@ export function SearchBox({
       ? t("search.placeholderCurrentLaw", { law: currentLawLabel || t("search.currentLawFallback") })
       : isLawMode
         ? t("search.placeholderLaws")
+        : isDefinitionsMode
+          ? t("search.placeholderDefinitions")
         : t("search.placeholderMatches");
   const heroSearchPlaceholder = isSmallViewport
     ? t("landing.searchPlaceholderMobile")
@@ -875,7 +982,34 @@ export function SearchBox({
                                     : "hover:bg-eu-blue-soft/60 dark:hover:bg-eu-blue-soft-dark/60"
                                 }`}
                               >
-                                {item.search_kind === "law" ? (
+                                {item.search_kind === "definition" ? (
+                                  <>
+                                    <div className="flex w-full min-w-0 items-center gap-2.5">
+                                      <span className="flex-shrink-0 rounded-md border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-800 dark:border-amber-800 dark:bg-amber-900/40 dark:text-amber-200">
+                                        {t("search.segDefinitions")}
+                                      </span>
+                                      <span className="min-w-0 flex-1 truncate font-display text-base font-bold text-eu-navy group-hover:text-eu-blue dark:text-white dark:group-hover:text-eu-blue-bright">
+                                        {item.term}
+                                      </span>
+                                    </div>
+                                    {item.sampleDefinition ? (
+                                      <p className="text-sm leading-relaxed text-gray-500 line-clamp-2 dark:text-gray-300">
+                                        {item.sampleDefinition}
+                                      </p>
+                                    ) : null}
+                                    <p className="text-[11px] font-medium text-gray-400 dark:text-gray-500">
+                                      {t("search.definitionLawCount", {
+                                        count: item.lawCount || 0,
+                                        lawWord: Number(item.lawCount) === 1 ? t("search.law") : t("search.laws"),
+                                      })}
+                                      {" · "}
+                                      {t("search.definitionWordingCount", {
+                                        count: item.wordingCount || 0,
+                                        wordingWord: Number(item.wordingCount) === 1 ? t("search.wording") : t("search.wordings"),
+                                      })}
+                                    </p>
+                                  </>
+                                ) : item.search_kind === "law" ? (
                                   <>
                                     <div className="flex w-full min-w-0 items-baseline gap-2">
                                       <span className={`min-w-0 flex-1 truncate font-display font-bold ${dense ? "text-[14px]" : "text-[15px]"} ${
@@ -982,7 +1116,19 @@ export function SearchBox({
                 </div>
               ) : (
                 <div className="flex flex-col items-center justify-center py-16 text-gray-400">
-                  {isLawMode && lastLawSearchQuery.length < 2 ? (
+                  {isDefinitionsMode && lastDefinitionSearchQuery.length < 2 ? (
+                    <>
+                      <Search size={48} className="opacity-10 mb-4" />
+                      <p className="text-sm text-center max-w-sm">{t("search.typeDefinitions")}</p>
+                    </>
+                  ) : isDefinitionsMode ? (
+                    <>
+                      <Search size={48} className="opacity-20 mb-4" />
+                      <p className="text-sm text-center max-w-sm">
+                        {t("search.noResultsDefinitions", { query: lastDefinitionSearchQuery })}
+                      </p>
+                    </>
+                  ) : isLawMode && lastLawSearchQuery.length < 2 ? (
                     <>
                       <Search size={48} className="opacity-10 mb-4" />
                       <p className="text-sm text-center max-w-sm">
@@ -1121,6 +1267,27 @@ export function TopBar({
   const { locale, localizePath, t } = useI18n();
 
   const onNavigate = async (item) => {
+    if (item.search_kind === "definition") {
+      const source = item.representativeSource || {};
+      if (!source.celex) return;
+      const sourceArticle = source.article ?? source.sourceArticle;
+      const targetLaw = buildImportedLawCandidate({
+        celex: source.celex,
+        title: source.title || source.law?.title,
+        officialReference: inferOfficialReferenceFromCelex(source.celex),
+      });
+      const route = getCanonicalLawRoute(
+        targetLaw,
+        sourceArticle ? "article" : null,
+        sourceArticle || null,
+        locale,
+      );
+      const separator = route.includes("?") ? "&" : "?";
+      const term = item.normalizedTerm || item.term;
+      navigate(`${route}${separator}definition=${encodeURIComponent(term)}`);
+      return;
+    }
+
     if (item.search_kind === "law") {
       const officialReference = inferOfficialReferenceFromCelex(item.celex);
       const targetLaw = buildImportedLawCandidate({

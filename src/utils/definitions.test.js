@@ -28,6 +28,13 @@ describe("injectDefinitionTooltips", () => {
     expect(result).not.toContain("title=");
   });
 
+  it("makes injected definition terms keyboard accessible", () => {
+    const result = injectDefinitionTooltips("<p>The controller acts.</p>", DEFINITIONS);
+    expect(result).toContain('role="button"');
+    expect(result).toContain('tabindex="0"');
+    expect(result).toContain('aria-haspopup="dialog"');
+  });
+
   it("returns html unchanged when definitions array is empty", () => {
     const html = "<p>Some text.</p>";
     expect(injectDefinitionTooltips(html, [])).toBe(html);

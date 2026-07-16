@@ -33,7 +33,7 @@ import {
  * Bump this whenever the parser output changes (new fields, bug fixes, etc.)
  * so that cached parsed results are automatically re-parsed from raw XML.
  */
-export const PARSER_VERSION = 16;
+export const PARSER_VERSION = 17;
 
 // ---------------------------------------------------------------------------
 // FMX → HTML conversion helpers
@@ -1682,7 +1682,7 @@ export function parseFmxToCombined(xmlText) {
           if (termMatch) {
             const term = termMatch[1].trim();
             const definition = text.slice(termMatch[0].length).trim();
-            definitions.push({ term, definition });
+            definitions.push({ term, definition, sourceArticle: artNum });
           }
         } else {
           // Term-first languages: 'term' meansVerb definition
@@ -1693,13 +1693,13 @@ export function parseFmxToCombined(xmlText) {
           if (termMatch) {
             const term = termMatch[1].trim();
             const definition = text.replace(termMatch[0], "").trim();
-            definitions.push({ term, definition });
+            definitions.push({ term, definition, sourceArticle: artNum });
           } else {
             const fbMatch = text.match(fallbackDefRegex);
             if (fbMatch) {
               const term = fbMatch[1].trim();
               const definition = text.slice(fbMatch[0].length).trim();
-              if (term && definition) definitions.push({ term, definition });
+              if (term && definition) definitions.push({ term, definition, sourceArticle: artNum });
             }
           }
         }

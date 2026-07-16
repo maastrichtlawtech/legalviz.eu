@@ -101,6 +101,7 @@ describe("parseFmxToCombined — DGA", () => {
     const def = result.definitions[0];
     expect(def).toHaveProperty("term");
     expect(def).toHaveProperty("definition");
+    expect(def).toHaveProperty("sourceArticle", "2");
     expect(def.term.length).toBeGreaterThan(0);
   });
 

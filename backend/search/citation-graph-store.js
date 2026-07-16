@@ -266,9 +266,10 @@ class CitationGraphStore {
     };
   }
 
-  getActCitations(celex) {
+  getActCitations(celex, options = {}) {
     this.assertReady();
     const targetCelex = normalize(celex);
+    const citingLawsLimit = Math.max(1, Math.min(Number.parseInt(options.citingLawsLimit, 10) || 10, 50));
     const edges = this.edgesForAct(targetCelex);
     const actOnly = edges.filter((edge) => edge.targetArticle == null || String(edge.targetArticle).trim() === "");
     const article = edges.filter((edge) => edge.targetArticle != null && String(edge.targetArticle).trim() !== "");
@@ -282,13 +283,37 @@ class CitationGraphStore {
     const articles = [...byArticle.entries()]
       .sort(([a], [b]) => a.localeCompare(b, "en", { numeric: true }))
       .map(([citedArticle, articleEdges]) => ({ article: citedArticle, ...countsFor(articleEdges) }));
+    // Top citing acts: legislation only (a judgment is a single source, so a
+    // "top" ranking is meaningless there — the case-law endpoints cover them),
+    // ranked by how many distinct provisions of the citing act reference this one.
+    const bySourceCelex = new Map();
+    for (const edge of edges) {
+      if (edge.kind !== "legislation") continue;
+      const key = normalize(edge.sourceCelex);
+      if (!key) continue;
+      const entries = bySourceCelex.get(key) || [];
+      entries.push(edge);
+      bySourceCelex.set(key, entries);
+    }
+    const rankedCitingLaws = [...bySourceCelex.entries()]
+      .map(([sourceCelex, lawEdges]) => ({
+        celex: sourceCelex,
+        title: lawEdges.find((edge) => edge.sourceTitle)?.sourceTitle || null,
+        provisions: distinctSources(lawEdges).length,
+      }))
+      .sort((a, b) => b.provisions - a.provisions
+        || a.celex.localeCompare(b.celex, "en", { numeric: true }));
+    const citingLaws = {
+      total: rankedCitingLaws.length,
+      laws: rankedCitingLaws.slice(0, citingLawsLimit),
+    };
     // `actOnly`, `article`, and `totals` each count *distinct source provisions*
     // within their own edge subset, so they intentionally do NOT sum: a single
     // provision that cites both the act generally and a specific article is
     // counted once in `actOnly` and once in `article`, but only once in
     // `totals` (which dedups across every edge). Treat `totals` as the
     // authoritative distinct-source count; do not derive it from the parts.
-    return { celex: targetCelex, actOnly: countsFor(actOnly), article: countsFor(article), articles, totals: countsFor(edges) };
+    return { celex: targetCelex, actOnly: countsFor(actOnly), article: countsFor(article), articles, citingLaws, totals: countsFor(edges) };
   }
 }
 

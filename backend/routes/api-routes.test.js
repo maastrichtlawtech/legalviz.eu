@@ -255,6 +255,30 @@ test('GET article cited-by rejects pagination outside its bounds', async () => {
   assert.equal(res.payload.code, 'invalid_pagination');
 });
 
+test('GET act cited-by passes the validated citing-laws limit to the citation graph', async () => {
+  const calls = [];
+  const { app } = registerTestRoutes({
+    citationGraphStore: {
+      isReady: () => true,
+      getActCitations: (celex, options) => {
+        calls.push({ celex, options });
+        return { celex, citingLaws: { total: 0, laws: [] }, totals: { total: 0 } };
+      },
+    },
+  });
+  const handler = app.routes.get('/api/laws/:celex/cited-by');
+  const res = createResponseRecorder();
+  await handler({ params: { celex: '32016R0679' }, query: { citingLaws: '25' } }, res);
+
+  assert.equal(res.statusCode, 200);
+  assert.deepEqual(calls, [{ celex: '32016R0679', options: { citingLawsLimit: 25 } }]);
+
+  const invalid = createResponseRecorder();
+  await handler({ params: { celex: '32016R0679' }, query: { citingLaws: '51' } }, invalid);
+  assert.equal(invalid.statusCode, 400);
+  assert.equal(invalid.payload.code, 'invalid_pagination');
+});
+
 test('GET act cited-by maps an unavailable graph to 503', async () => {
   const { app } = registerTestRoutes({
     citationGraphStore: { isReady: () => false, getStatus: () => ({ ready: false, reason: 'missing' }) },

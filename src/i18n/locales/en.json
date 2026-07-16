@@ -352,6 +352,7 @@
     "corrShort": "Corr.",
     "amendShort": "Amend.",
     "citedTimes": "cited {count}×",
+    "citedByCounts": "{provisions} provisions · {judgments} judgments",
     "amendmentsEmpty": "No amendments or corrigenda yet.",
     "implementingEmpty": "None adopted yet.",
     "linkedEmpty": "No linked legislation yet.",

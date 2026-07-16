@@ -2,9 +2,10 @@ import { useState } from "react";
 import { ExternalLink, Loader2 } from "lucide-react";
 import { buildEurlexCelexUrl } from "../utils/url.js";
 import { formatMetaDate } from "../utils/formatMetaDate.js";
+import { buildLawDisplayLabel } from "../utils/lawDisplay.js";
 import { Pill } from "./ui/Pill.jsx";
 
-function MetaCard({ title, count, emptyText, rows, cap = 4, t }) {
+function MetaCard({ title, count, subtitle, emptyText, rows, cap = 4, t }) {
   const [expanded, setExpanded] = useState(false);
   const items = rows || [];
   const visible = expanded ? items : items.slice(0, cap);
@@ -15,6 +16,9 @@ function MetaCard({ title, count, emptyText, rows, cap = 4, t }) {
         <span className="text-[13px] font-semibold text-gray-900 dark:text-gray-100">{title}</span>
         <span className="font-mono text-[11px] text-gray-400 dark:text-gray-500">{count}</span>
       </div>
+      {subtitle ? (
+        <div className="mb-1 text-[11px] text-gray-400 dark:text-gray-500">{subtitle}</div>
+      ) : null}
       {items.length === 0 ? (
         <div className="border-t border-gray-100 pt-2 text-xs italic text-gray-400 dark:border-gray-800 dark:text-gray-500">
           {emptyText}
@@ -66,17 +70,24 @@ function ActRow({ act, currentLang, locale, variant, pillLabel }) {
 }
 
 /**
- * Overview metadata cards: amendment history, implementing/delegated acts and
- * linked legislation. Consumes the shared useLawMetadata result (no fetching of
- * its own) plus the crossreference-derived linked-law overview.
+ * Overview metadata cards: amendment history, implementing/delegated acts,
+ * linked legislation and reverse citations. Consumes the shared useLawMetadata
+ * result (no fetching of its own) plus the crossreference-derived linked-law
+ * overview.
+ *
+ * `citedBy` is the act-level citation-graph payload; when it is null (graph
+ * unavailable or the fetch failed) the card is omitted entirely rather than
+ * rendered empty.
  */
 export function MetadataPanel({
   amendments,
   implementing,
   externalLawOverview = [],
+  citedBy = null,
   currentLang = "EN",
   locale = "en",
   onOpenExternalLaw,
+  onOpenCitedLaw,
   isExternalReferencePending,
   t,
 }) {
@@ -125,8 +136,33 @@ export function MetadataPanel({
     );
   });
 
+  const citingLaws = citedBy?.citingLaws?.laws || [];
+  const citedByRows = citingLaws.map((law) => {
+    const { label, fullTitle } = buildLawDisplayLabel(law);
+    return (
+      <button
+        key={law.celex}
+        type="button"
+        title={fullTitle || undefined}
+        onClick={() => onOpenCitedLaw?.(law.celex, { label: law.title })}
+        className="flex w-full items-baseline gap-2 border-t border-gray-100 py-2 text-left text-xs dark:border-gray-800"
+      >
+        <span className="min-w-0 flex-1 leading-snug text-gray-700 dark:text-gray-300">{label}</span>
+        <span className="shrink-0 whitespace-nowrap text-[11px] text-gray-400 dark:text-gray-500">
+          {t("lawOverview.citedTimes", { count: law.provisions })}
+        </span>
+      </button>
+    );
+  });
+  const citedBySubtitle = citedBy
+    ? t("lawOverview.citedByCounts", {
+        provisions: citedBy.totals?.provisions ?? 0,
+        judgments: citedBy.totals?.judgments ?? 0,
+      })
+    : null;
+
   return (
-    <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+    <div className={`mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 ${citedBy ? "lg:grid-cols-4" : "lg:grid-cols-3"}`}>
       <MetaCard
         title={t("amendmentHistory.title")}
         count={amendmentRows.length}
@@ -148,6 +184,16 @@ export function MetadataPanel({
         rows={linkedRows}
         t={t}
       />
+      {citedBy ? (
+        <MetaCard
+          title={t("citedBy.title")}
+          count={citedBy.citingLaws?.total ?? citedByRows.length}
+          subtitle={citedBySubtitle}
+          emptyText={t("citedBy.empty")}
+          rows={citedByRows}
+          t={t}
+        />
+      ) : null}
     </div>
   );
 }

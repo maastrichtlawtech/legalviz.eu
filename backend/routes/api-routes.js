@@ -158,7 +158,8 @@ function registerApiRoutes(app, deps) {
       if (!validateCelex(celex)) {
         return res.status(400).json({ error: 'Invalid CELEX format', code: 'invalid_celex' });
       }
-      res.json(requireCitationGraph(citationGraphStore).getActCitations(celex));
+      const citingLawsLimit = parsePaginationValue(req.query.citingLaws, 'citingLaws', { defaultValue: 10, min: 1, max: 50 });
+      res.json(requireCitationGraph(citationGraphStore).getActCitations(celex, { citingLawsLimit }));
     } catch (err) {
       safeErrorResponse(res, err, 'Failed to fetch citation counts');
     }
@@ -685,7 +686,7 @@ function registerApiRoutes(app, deps) {
         'GET /api/laws/:celex/info': 'Get metadata only',
         'GET /api/laws/by-reference?actType=directive&year=2018&number=1972&lang=ENG': 'Resolve an official reference and fetch the matching FMX',
         'GET /api/laws/:celex/case-law': 'List CJEU judgments that interpret this law',
-        'GET /api/laws/:celex/cited-by': 'Get reverse-citation counts for an act',
+        'GET /api/laws/:celex/cited-by?citingLaws=10': 'Get reverse-citation counts and top citing laws for an act',
         'GET /api/laws/:celex/articles/:n/cited-by?limit=50&offset=0': 'List provisions and judgments citing an article',
         'GET /api/laws/:celex/recital-titles?lang=ENG': 'Get cached AI-generated short titles for recitals',
         'GET /api/laws/:celex/summary': 'Get cached static summary of what this law does (English only)',

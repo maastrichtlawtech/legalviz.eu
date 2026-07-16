@@ -480,10 +480,10 @@ The offline citation graph provides reverse lookups across the locally harvested
 ```bash
 npm run build:citation-graph
 curl "http://localhost:3000/api/laws/32016R0679/articles/6/cited-by?limit=50&offset=0"
-curl "http://localhost:3000/api/laws/32016R0679/cited-by"
+curl "http://localhost:3000/api/laws/32016R0679/cited-by?citingLaws=10"
 ```
 
-The article endpoint returns paginated citing provisions and judgments. The act endpoint returns aggregate counts split between act-only and article-specific citations. The MCP endpoint exposes the same data through `get_citing_provisions`; omit its `article` argument to request act-level counts. If the artifact has not been built or cannot be loaded, these queries return `503` with `code=citation_graph_unavailable`.
+The article endpoint returns paginated citing provisions and judgments. The act endpoint returns aggregate counts split between act-only and article-specific citations, plus `citingLaws` — the top citing acts (legislation only) ranked by how many distinct provisions cite the target, capped by the `citingLaws` query parameter (default 10, max 50). The MCP endpoint exposes the same data through `get_citing_provisions`; omit its `article` argument to request act-level counts. If the artifact has not been built or cannot be loaded, these queries return `503` with `code=citation_graph_unavailable`.
 
 The default artifact is `search/data/citation-graph.json`. Restart the API after rebuilding it, because it is loaded once at startup. Like the search and case-law caches, the graph is **not committed** — a fresh deploy fetches `citation-graph.json.gz` as a **GitHub Release asset** at Docker build time (see `backend/Dockerfile`, `DATA_RELEASE_TAG`); the store gunzips it at startup when the raw file is absent, and a local rebuild still wins. To publish a new build: rebuild the graph against the current corpus and case-law cache, `gzip -k` the artifact, upload `citation-graph.json.gz` to the `DATA_RELEASE_TAG` release, and redeploy.
 

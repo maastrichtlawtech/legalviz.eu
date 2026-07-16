@@ -329,6 +329,7 @@ export function LawViewer() {
                   onPrint={() => printState.setPrintModalOpen(true)}
                   externalLawOverview={derived.externalLawOverview}
                   onOpenExternalLaw={interactions.handleOpenExternalLaw}
+                  onOpenCitedLaw={interactions.handleOpenLawByCelex}
                   isExternalReferencePending={interactions.isExternalReferencePending}
                   locale={locale}
                   t={t}

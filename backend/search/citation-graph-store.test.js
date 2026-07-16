@@ -88,8 +88,42 @@ test("act query separates act-only references from article references", () => {
     actOnly: { provisions: 1, judgments: 0, total: 1 },
     article: { provisions: 1, judgments: 1, total: 2 },
     articles: [{ article: "6", provisions: 1, judgments: 1, total: 2 }],
+    citingLaws: {
+      total: 2,
+      laws: [
+        { celex: "32024R0001", title: "A", provisions: 1 },
+        { celex: "32024R0002", title: "B", provisions: 1 },
+      ],
+    },
     totals: { provisions: 2, judgments: 1, total: 3 },
   });
+});
+
+test("act query ranks citing laws by distinct provisions and honours the limit", () => {
+  const rankedEdges = [
+    // 32024R0005 cites from two distinct provisions (article 1 twice, recital 3 once).
+    { kind: "legislation", sourceCelex: "32024R0005", sourceTitle: "Busy citer", sourceUnitType: "article", sourceUnit: "1", targetCelex: "32016R0679", targetArticle: "6", targetParagraph: null, targetPoint: null },
+    { kind: "legislation", sourceCelex: "32024R0005", sourceTitle: "Busy citer", sourceUnitType: "article", sourceUnit: "1", targetCelex: "32016R0679", targetArticle: "17", targetParagraph: null, targetPoint: null },
+    { kind: "legislation", sourceCelex: "32024R0005", sourceTitle: null, sourceUnitType: "recital", sourceUnit: "recital_3", targetCelex: "32016R0679", targetArticle: null, targetParagraph: null, targetPoint: null },
+    { kind: "legislation", sourceCelex: "32024R0004", sourceTitle: "Single citer", sourceUnitType: "article", sourceUnit: "9", targetCelex: "32016R0679", targetArticle: "6", targetParagraph: null, targetPoint: null },
+    // Judgments never appear in citingLaws.
+    { kind: "judgment", sourceCelex: "62020CJ0001", sourceTitle: "Case", sourceUnitType: "judgment", sourceUnit: "62020CJ0001", targetCelex: "32016R0679", targetArticle: "6", targetParagraph: null, targetPoint: null },
+  ];
+  const store = new CitationGraphStore(writeGraph({ graphVersion: GRAPH_VERSION, edges: rankedEdges }));
+  assert.equal(store.load(), true);
+
+  const result = store.getActCitations("32016R0679");
+  assert.deepEqual(result.citingLaws, {
+    total: 2,
+    laws: [
+      { celex: "32024R0005", title: "Busy citer", provisions: 2 },
+      { celex: "32024R0004", title: "Single citer", provisions: 1 },
+    ],
+  });
+
+  const limited = store.getActCitations("32016R0679", { citingLawsLimit: 1 });
+  assert.equal(limited.citingLaws.total, 2);
+  assert.deepEqual(limited.citingLaws.laws, [{ celex: "32024R0005", title: "Busy citer", provisions: 2 }]);
 });
 
 test("act query dedups a provision citing both the act and an article across subsets", () => {

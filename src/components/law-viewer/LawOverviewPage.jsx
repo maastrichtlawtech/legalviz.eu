@@ -90,6 +90,7 @@ export function LawOverviewPage({
   onPrint,
   externalLawOverview = [],
   onOpenExternalLaw,
+  onOpenCitedLaw,
   isExternalReferencePending,
   locale = "en",
   t,
@@ -205,9 +206,11 @@ export function LawOverviewPage({
         amendments={meta.amendments}
         implementing={meta.implementing}
         externalLawOverview={externalLawOverview}
+        citedBy={meta.citedBy}
         currentLang={formexLang}
         locale={locale}
         onOpenExternalLaw={onOpenExternalLaw}
+        onOpenCitedLaw={onOpenCitedLaw}
         isExternalReferencePending={isExternalReferencePending}
         t={t}
       />

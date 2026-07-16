@@ -16,6 +16,12 @@ const {
   pairedBootstrap,
   parseArgs: parseComparisonArgs,
 } = require("./eval/compare-ranking");
+const {
+  generateConfigurations,
+  haltonPoint,
+  radicalInverse,
+  stratifiedFolds,
+} = require("./eval/optimize-ranking");
 
 test("search evaluation dataset has unique, valid categorized cases", () => {
   const cases = loadEvaluationCases();
@@ -112,4 +118,26 @@ test("paired ranking comparison reports deterministic confidence intervals and w
   assert.equal(parseComparisonArgs(["--sqlite", "data.sqlite"]).split, "holdout");
   assert.equal(parseComparisonArgs(["--sqlite", "data.sqlite", "--enable-rewrites"]).disableRewrites, false);
   assert.throws(() => parseComparisonArgs(["--sqlite", "data.sqlite", "--split", "all"]), /--split/);
+});
+
+test("ranking optimiser samples deterministically and stratifies every case once", () => {
+  assert.equal(radicalInverse(1, 2), 0.5);
+  assert.deepEqual(haltonPoint(1, 3), [0.5, 1 / 3, 0.2]);
+  const configurations = generateConfigurations(16);
+  assert.equal(configurations.length, 17);
+  assert.equal(configurations[0].name, "current");
+  assert.ok(configurations.every((configuration) => configuration.rrfK >= 5 && configuration.rrfK <= 80));
+
+  const cases = [
+    { id: "a", category: "topic" },
+    { id: "b", category: "topic" },
+    { id: "c", category: "topic" },
+    { id: "d", category: "concept" },
+    { id: "e", category: "concept" },
+    { id: "f", category: "current" },
+  ];
+  const folds = stratifiedFolds(cases, 3, 42);
+  assert.deepEqual([...folds.flat()].sort((left, right) => left - right), [0, 1, 2, 3, 4, 5]);
+  assert.deepEqual(folds, stratifiedFolds(cases, 3, 42));
+  assert.ok(Math.max(...folds.map((fold) => fold.length)) - Math.min(...folds.map((fold) => fold.length)) <= 1);
 });

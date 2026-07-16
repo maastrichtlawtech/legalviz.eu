@@ -139,9 +139,12 @@ const CANDIDATE_LIMIT = 200;
 const SOURCE_WEIGHTS = { title: 1.1, eurovoc: 1.1, excerpt: 0.5 };
 const COVERAGE_EXPONENT = 2;
 
-function citationBoost(count) {
+function citationBoost(count, {
+  citationLogScale = CITATION_LOG_SCALE,
+  maxCitationBoost = MAX_CITATION_BOOST,
+} = {}) {
   const citations = Math.max(0, Number(count) || 0);
-  return Math.min(MAX_CITATION_BOOST, 1 + CITATION_LOG_SCALE * Math.log1p(citations));
+  return Math.min(maxCitationBoost, 1 + citationLogScale * Math.log1p(citations));
 }
 
 function requestsHistoricalLaw(parsed) {
@@ -292,6 +295,11 @@ function buildDocumentBoost(parsed, citationCounts = new Map(), {
   useGlobalPriors = true,
   useStatusPrior = true,
   useCitationPrior = true,
+  inForceBoost = IN_FORCE_BOOST,
+  noLongerInForceBoost = NO_LONGER_IN_FORCE_BOOST,
+  citationLogScale = CITATION_LOG_SCALE,
+  maxCitationBoost = MAX_CITATION_BOOST,
+  maxGlobalPrior = MAX_GLOBAL_PRIOR,
 } = {}) {
   const query = String(parsed.originalQuery || "").toLowerCase();
   const mentionsAct = /\bact\b/.test(query);
@@ -311,15 +319,18 @@ function buildDocumentBoost(parsed, citationCounts = new Map(), {
     if (useGlobalPriors) {
       let statusBoost = 1;
       if (useStatusPrior) {
-        if (historicalIntent && stored?.inForce === false) statusBoost = IN_FORCE_BOOST;
-        else if (historicalIntent && stored?.inForce === true) statusBoost = NO_LONGER_IN_FORCE_BOOST;
-        else if (stored?.inForce === true) statusBoost = IN_FORCE_BOOST;
-        else if (stored?.inForce === false) statusBoost = NO_LONGER_IN_FORCE_BOOST;
+        if (historicalIntent && stored?.inForce === false) statusBoost = inForceBoost;
+        else if (historicalIntent && stored?.inForce === true) statusBoost = noLongerInForceBoost;
+        else if (stored?.inForce === true) statusBoost = inForceBoost;
+        else if (stored?.inForce === false) statusBoost = noLongerInForceBoost;
       }
       const authorityBoost = useCitationPrior
-        ? citationBoost(citationCounts.get(normalizeCelexLookupKey(id)))
+        ? citationBoost(citationCounts.get(normalizeCelexLookupKey(id)), {
+          citationLogScale,
+          maxCitationBoost,
+        })
         : 1;
-      boost *= Math.min(MAX_GLOBAL_PRIOR, statusBoost * authorityBoost);
+      boost *= Math.min(maxGlobalPrior, statusBoost * authorityBoost);
     }
     return boost;
   };
@@ -352,6 +363,11 @@ class JsonLegalCacheStore {
       sourceWeights: { ...SOURCE_WEIGHTS, ...(options.rankingConfig?.sourceWeights || {}) },
       useStatusPrior: options.rankingConfig?.useStatusPrior ?? true,
       useCitationPrior: options.rankingConfig?.useCitationPrior ?? true,
+      inForceBoost: options.rankingConfig?.inForceBoost ?? IN_FORCE_BOOST,
+      noLongerInForceBoost: options.rankingConfig?.noLongerInForceBoost ?? NO_LONGER_IN_FORCE_BOOST,
+      citationLogScale: options.rankingConfig?.citationLogScale ?? CITATION_LOG_SCALE,
+      maxCitationBoost: options.rankingConfig?.maxCitationBoost ?? MAX_CITATION_BOOST,
+      maxGlobalPrior: options.rankingConfig?.maxGlobalPrior ?? MAX_GLOBAL_PRIOR,
     };
     this.payload = null;
     this.records = [];
@@ -658,6 +674,7 @@ class JsonLegalCacheStore {
     }
 
     if (this.rankingProfile !== "baseline") {
+      const deterministic = matched.map((record) => record.celex);
       const retrievalQuery = parsed.terms.join(" ") || parsed.rewrittenQuery;
       const { candidateLimit, coverageExponent, rrfK, sourceWeights } = this.rankingConfig;
       const candidates = new Map();
@@ -743,7 +760,7 @@ class JsonLegalCacheStore {
             parsed,
             candidate.record,
             this.citationCounts,
-            { useStatusPrior: this.rankingConfig.useStatusPrior, useCitationPrior: this.rankingConfig.useCitationPrior }
+            this.rankingConfig
           ),
         }))
         .sort((left, right) => right.finalScore - left.finalScore || left.ordinal - right.ordinal);
@@ -752,10 +769,12 @@ class JsonLegalCacheStore {
       if (typeof options.onDiagnostics === "function") {
         options.onDiagnostics({
           retrievalQuery,
+          deterministic,
           sources: sourceIds,
           union: [...candidates.keys()],
           ranked: ranked.map((candidate) => ({
             celex: candidate.record.celex,
+            ordinal: candidate.ordinal,
             fusionScore: candidate.fusionScore,
             finalScore: candidate.finalScore,
             sources: candidate.sources,
@@ -859,6 +878,7 @@ module.exports = {
   JsonLegalCacheStore,
   SQLITE_SCHEMA_VERSION,
   containedAliasKeys,
+  documentPrior,
   normalizeCelexLookupKey,
   normalizeEliLookupKey,
   normalizeOfficialReferenceLookupKey,

@@ -37,6 +37,42 @@ node search/eval/tune-ranking.js --sqlite search/data/data.sqlite
 Add `--ablations-only` to run only the selected configuration and the
 single-signal removal checks.
 
+For a broader deterministic optimisation, cache candidate graphs once and run
+a seven-dimensional Halton search with stratified cross-validation:
+
+```bash
+node search/eval/optimize-ranking.js \
+  --sqlite search/data/data.sqlite \
+  --samples 2048 \
+  --folds 5 \
+  --repeats 5
+```
+
+This searches reciprocal-rank `k`, coverage exponent, EuroVoc/title and
+excerpt/title ratios, current/historical status boosts, and citation log scale.
+It never evaluates holdout cases. The offline reranker first asserts exact
+top-10 parity with live search under the current configuration.
+
+### Optimisation result (data-v9, 2026-07-16)
+
+A 2,048-point Halton search (2,049 configurations including current) with five
+repeats of stratified five-fold cross-validation did not justify changing the
+selected constants:
+
+- current full-development objective: 0.8436;
+- nominal optimiser winner: 0.8467;
+- repeated nested-CV objective for fold-selected configurations: 0.8135;
+- current fixed configuration on the same cases: 0.8436;
+- winner-versus-current development nDCG@10 delta: +0.0014, paired 95% CI
+  [-0.0178, +0.0192];
+- winner recall@1 was 72.5% versus current 75.0%.
+
+The nominal winner's single post-selection holdout check kept recall@1 at 60%
+and changed nDCG@10 by +0.0135, with paired 95% CI [-0.0075, +0.0467]. The
+interval includes no improvement. The result is therefore an optimisation
+plateau plus selection overfit, not evidence for replacing the simpler current
+configuration. Holdout was not used to choose or refine another candidate.
+
 The tuning script cannot load holdout cases. Its objective combines nDCG@10,
 recall@1, recall@5, and pairwise accuracy; use it to select a candidate, then
 confirm that candidate once on holdout with `run.js`.

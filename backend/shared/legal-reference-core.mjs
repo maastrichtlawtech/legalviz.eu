@@ -363,9 +363,14 @@ function isArticleOfActBridge(gap, connectorWord = 'of') {
   // also commonly insert the closed parenthetical "as the case may be" before
   // the final "of"; accepting that phrase is still considerably narrower than
   // allowing arbitrary prose between an article and an act.
-  if (!new RegExp(`(?:^|\\W)(?:${connectorWord})(?:\\s+the)?$`, 'i').test(trimmed)) return false;
+  // Instrument names are often prefixed by their institutional author, which
+  // is not part of EXTERNAL_LAW_RE's match: "Article 2 of Council Directive
+  // 91/271/EEC" therefore leaves "of Council" in this bridge. Accept only the
+  // closed set of EU-author forms that can immediately introduce an act.
+  const issuer = '(?:Council|Commission|European\\s+Parliament(?:\\s+and\\s+(?:the\\s+)?Council)?)';
+  if (!new RegExp(`(?:^|\\W)(?:${connectorWord})(?:\\s+the)?(?:\\s+${issuer})?$`, 'i').test(trimmed)) return false;
   const body = trimmed
-    .replace(new RegExp(`(?:${connectorWord})(?:\\s+the)?$`, 'i'), ' ')
+    .replace(new RegExp(`(?:${connectorWord})(?:\\s+the)?(?:\\s+${issuer})?$`, 'i'), ' ')
     .replace(/\bas\s+the\s+case\s+may\s+be\b/gi, ' ')
     .replace(/\([^)]*\)/g, ' ')
     .replace(new RegExp(`\\b(?:${connectorWord}|and|or|to|point|points|paragraph|paragraphs|subparagraph|subparagraphs|indent|indents|thereof|Articles?|Artikels?|Art[ií]culos?|Articolo|Articoli|Artigos?|Artikelen?)\\b`, 'gi'), ' ')

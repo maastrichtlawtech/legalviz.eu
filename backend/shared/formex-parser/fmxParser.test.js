@@ -840,6 +840,16 @@ describe("injectCrossRefLinks", () => {
     expect(result).toContain('data-ref-point="g"');
   });
 
+  it("links abbreviated paragraphs through an institutional act author", () => {
+    const html = "<p>as defined in Article 2(1), (2) and (3) of Council Directive 91/271/EEC.</p>";
+    const result = injectCrossRefLinks(html, lang);
+    const linkedParagraphs = [...result.matchAll(/data-ref-paragraph="(\d+)"/g)].map((match) => match[1]);
+    expect(linkedParagraphs).toEqual(["1", "2", "3"]);
+    expect(result).not.toContain('href="#article-2"');
+    // Three provision links plus the independently clickable act name.
+    expect(result.match(/data-ref-year="1991"/g)).toHaveLength(4);
+  });
+
   it("links both coordinated internal articles (not just the first)", () => {
     const html = "<p>governed by Article 5 and Article 6 of this Regulation.</p>";
     const result = injectCrossRefLinks(html, lang);
@@ -879,6 +889,18 @@ describe("extractCrossRefsFromText — multi-article citations", () => {
     expect(refs).toHaveLength(11);
     expect(refs.map((r) => r.articleNumber)).toContain("12");
     expect(refs.map((r) => r.articleNumber)).toContain("22");
+  });
+
+  it("binds abbreviated paragraphs to a Council Directive", () => {
+    const refs = extractCrossRefsFromText(
+      "as defined in Article 2(1), (2) and (3) of Council Directive 91/271/EEC",
+      lang,
+    ).filter((ref) => ref.type === "external" && ref.actCelex === "31991L0271");
+    expect(refs.map((ref) => [ref.articleNumber, ref.paragraph])).toEqual([
+      ["2", "1"],
+      ["2", "2"],
+      ["2", "3"],
+    ]);
   });
 
   it("keeps distinct articles of the same act as separate edges (dedup key)", () => {

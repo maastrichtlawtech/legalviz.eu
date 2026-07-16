@@ -33,7 +33,7 @@ import {
  * Bump this whenever the parser output changes (new fields, bug fixes, etc.)
  * so that cached parsed results are automatically re-parsed from raw XML.
  */
-export const PARSER_VERSION = 18;
+export const PARSER_VERSION = 19;
 
 // ---------------------------------------------------------------------------
 // FMX → HTML conversion helpers

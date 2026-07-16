@@ -73,8 +73,9 @@ function isLikelyArticleTitle(text) {
   if (isArticleHeading(text) || isAnnexHeading(text)) return false;
   if (/^\d+\./.test(text)) return false;
   if (/^\([a-z0-9ivxlcdm]+\)/i.test(text)) return false;
+  if (/^[-\u2010-\u2015]/.test(text)) return false;
   if (text.length > 180) return false;
-  return !/[.;!?]$/.test(text);
+  return !/[.:;!?]$/.test(text);
 }
 
 function parseDivisionMarker(text) {
@@ -549,6 +550,7 @@ function parseArticles(paragraphs) {
       currentArticle = {
         article_number: articleNumberMatch ? articleNumberMatch[1] : String(articles.length + 1),
         article_title: "",
+        titleCandidatePending: true,
         division: {
           chapter: { ...currentChapter },
           section: currentSection.number ? { ...currentSection } : null,
@@ -560,11 +562,14 @@ function parseArticles(paragraphs) {
 
     if (!currentArticle) continue;
 
-    if (!currentArticle.article_title && isLikelyArticleTitle(paragraph) && !isLikelyDivisionTitle(paragraph)) {
+    if (currentArticle.titleCandidatePending
+        && isLikelyArticleTitle(paragraph) && !isLikelyDivisionTitle(paragraph)) {
       currentArticle.article_title = paragraph;
+      currentArticle.titleCandidatePending = false;
       continue;
     }
 
+    currentArticle.titleCandidatePending = false;
     currentArticle.bodyParagraphs.push(paragraph);
   }
 

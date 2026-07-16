@@ -56,6 +56,30 @@ test("parseEurlexHtmlToCombined extracts title, recitals, articles, and definiti
   assert.equal(parsed.definitions[0].sourceArticle, "2");
 });
 
+test("legacy TXT_TE parsing does not promote operative clauses to article titles", async () => {
+  const html = `<!DOCTYPE html><html lang="EN"><head>
+    <meta name="DC.description" content="Council Directive 91/271/EEC">
+  </head><body><div id="TexteOnly"><TXT_TE>
+    <p>Article 2</p>
+    <p>For the purpose of this Directive:</p>
+    <p>1. "urban waste water" means domestic waste water;</p>
+    <p>Article 3</p>
+    <p>- at the latest by 31 December 2000 for those with a p.e. of more than 15000, and</p>
+    <p>1. Member States shall ensure that all agglomerations are provided with collecting systems.</p>
+    <p>Article 4</p>
+    <p>1. Member States shall ensure that urban waste water is treated.</p>
+    <p>For the Council</p>
+  </TXT_TE></div></body></html>`;
+  const parsed = await parseEurlexHtmlToCombined(html, "ENG");
+
+  assert.equal(parsed.articles[0].article_title, "");
+  assert.match(parsed.articles[0].article_html, /For the purpose of this Directive:/);
+  assert.equal(parsed.articles[1].article_title, "");
+  assert.match(parsed.articles[1].article_html, /at the latest by 31 December 2000/);
+  assert.equal(parsed.articles[2].article_title, "");
+  assert.match(parsed.articles[2].article_html, /For the Council/);
+});
+
 test("HTML definitions retain their point and exact cross-reference provenance", async () => {
   const html = SAMPLE_HTML.replace(
     "any data processed for billing",

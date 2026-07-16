@@ -22,6 +22,7 @@ let container;
 let root;
 
 beforeEach(() => {
+  globalThis.IS_REACT_ACT_ENVIRONMENT = true;
   vi.useFakeTimers();
   container = document.createElement("div");
   document.body.appendChild(container);
@@ -35,6 +36,7 @@ afterEach(() => {
   vi.useRealTimers();
   searchDefinitions.mockReset();
   searchLaws.mockClear();
+  delete globalThis.IS_REACT_ACT_ENVIRONMENT;
 });
 
 function renderSearchBox(onNavigate = vi.fn()) {
@@ -83,7 +85,9 @@ describe("SearchBox — definitions mode", () => {
         term: "energy poverty",
         normalizedTerm: "energy poverty",
         sampleDefinition: "a household's lack of access to essential energy services",
-        lawCount: 3,
+        lawCount: 4,
+        substantiveLawCount: 3,
+        importCount: 1,
         wordingCount: 2,
         representativeSource: { celex: "32023L1791", article: "2" },
       }],
@@ -97,7 +101,35 @@ describe("SearchBox — definitions mode", () => {
 
     expect(searchDefinitions).toHaveBeenCalledWith("energy poverty", expect.objectContaining({ limit: 12 }));
     expect(document.body.textContent).toContain("energy poverty");
-    expect(document.body.textContent).toContain("3 laws · 2 wordings");
+    expect(document.body.textContent).toContain("3 laws");
+    expect(document.body.textContent).not.toContain("2 wordings");
+    expect(document.body.textContent).toContain("Different definitions");
+    expect(document.body.textContent).toContain("1 imported by reference");
+    expect(document.body.textContent).toContain("Opens at: 32023L1791 · Article 2");
+    expect(document.body.querySelectorAll("mark").length).toBeGreaterThan(0);
+  });
+
+  it("identifies a definition reused with the same wording", async () => {
+    searchDefinitions.mockResolvedValue({
+      results: [{
+        term: "technical specification",
+        normalizedTerm: "technical specification",
+        sampleDefinition: "a document that prescribes technical requirements",
+        lawCount: 6,
+        substantiveLawCount: 4,
+        importCount: 2,
+        wordingCount: 1,
+        representativeSource: { celex: "32022L2555", sourceArticle: "6" },
+      }],
+    });
+    renderSearchBox();
+    const input = openDefinitionsMode();
+    typeInto(input, "technical specification");
+    await act(async () => vi.advanceTimersByTimeAsync(300));
+
+    expect(document.body.textContent).toContain("Same extracted wording");
+    expect(document.body.textContent).toContain("2 imported by reference");
+    expect(document.body.textContent).toContain("32022L2555 · Article 6");
   });
 
   it("supports keyboard selection of a definition result", async () => {
@@ -116,6 +148,11 @@ describe("SearchBox — definitions mode", () => {
     typeInto(input, "risk");
     await act(async () => vi.advanceTimersByTimeAsync(300));
 
+    // Older servers did not distinguish substantive definitions from imports.
+    // Keep their count usable, but do not infer equivalence from wordingCount.
+    expect(document.body.textContent).toContain("2 laws");
+    expect(document.body.textContent).not.toContain("Same extracted wording");
+
     act(() => window.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true })));
     act(() => window.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })));
 
@@ -123,5 +160,32 @@ describe("SearchBox — definitions mode", () => {
       search_kind: "definition",
       normalizedTerm: "risk",
     }));
+  });
+
+  it("discovers terms with different substantive definitions without a query", async () => {
+    searchDefinitions.mockResolvedValue({
+      results: [{
+        term: "incident",
+        normalizedTerm: "incident",
+        sampleDefinition: "an event compromising service availability",
+        lawCount: 2,
+        substantiveLawCount: 2,
+        importCount: 0,
+        wordingCount: 2,
+        representativeSource: { celex: "32022L2555", sourceArticle: "6" },
+      }],
+    });
+    renderSearchBox();
+    openDefinitionsMode();
+    const button = Array.from(document.body.querySelectorAll("button"))
+      .find((element) => element.textContent === "Different definitions");
+
+    await act(async () => button.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+
+    expect(searchDefinitions).toHaveBeenCalledWith("", expect.objectContaining({
+      filter: "different",
+      limit: 12,
+    }));
+    expect(document.body.textContent).toContain("incident");
   });
 });

@@ -10,7 +10,7 @@ function escapeHtml(value) {
     .replace(/'/g, "&#39;");
 }
 
-export function useProcessedLawHtml({ data, selected, selectedEntry = null }) {
+export function useProcessedLawHtml({ data, selected, selectedEntry = null, activeDefinitionTerm = "" }) {
   return useMemo(() => {
     let selectedHtml = selectedEntry
       ? selectedEntry.article_html || selectedEntry.recital_html || selectedEntry.annex_html || ""
@@ -34,6 +34,7 @@ export function useProcessedLawHtml({ data, selected, selectedEntry = null }) {
     return injectDefinitionTooltips(selectedHtml, data.definitions, {
       skipDefinitionsArticle: skipDefinitions,
       langCode: data.langCode,
+      activeTerm: activeDefinitionTerm,
     });
-  }, [data.articles, data.definitions, data.langCode, selected, selectedEntry]);
+  }, [activeDefinitionTerm, data.articles, data.definitions, data.langCode, selected, selectedEntry]);
 }

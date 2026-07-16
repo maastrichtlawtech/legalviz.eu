@@ -56,6 +56,18 @@ test("parseEurlexHtmlToCombined extracts title, recitals, articles, and definiti
   assert.equal(parsed.definitions[0].sourceArticle, "2");
 });
 
+test("HTML definitions retain their point and exact cross-reference provenance", async () => {
+  const html = SAMPLE_HTML.replace(
+    "any data processed for billing",
+    "traffic data as defined in Article 4 of Regulation (EU) 2016/679",
+  );
+  const parsed = await parseEurlexHtmlToCombined(html, "ENG");
+  const definition = parsed.definitions.find((entry) => entry.term === "traffic data");
+  assert.equal(definition.sourcePoint, "b");
+  assert.equal(definition.references[0].actCelex, "32016R0679");
+  assert.equal(definition.references[0].articleNumber, "4");
+});
+
 test("parseEurlexHtmlToCombined retains unnumbered legacy decision measures", async () => {
   const html = `<!DOCTYPE html><html lang="EN"><head><meta name="DC.description" content="Council Decision" /></head><body><div id="TexteOnly"><p><TXT_TE>
     <p>****</p><p>COUNCIL DECISION</p><p>OF 25 JUNE 1979</p>

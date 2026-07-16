@@ -33,7 +33,7 @@ import {
  * Bump this whenever the parser output changes (new fields, bug fixes, etc.)
  * so that cached parsed results are automatically re-parsed from raw XML.
  */
-export const PARSER_VERSION = 17;
+export const PARSER_VERSION = 18;
 
 // ---------------------------------------------------------------------------
 // FMX → HTML conversion helpers
@@ -1675,6 +1675,17 @@ export function parseFmxToCombined(xmlText) {
         if (!txtEl) continue;
         const text = allText(txtEl);
         if (!text) continue;
+        const sourcePoint = allText(item.querySelector("NO\\.P") || item.querySelector("NP > NO")) || null;
+        const makeDefinition = (term, definition) => ({
+          term,
+          definition,
+          sourceArticle: artNum,
+          sourcePoint,
+          references: [
+            ...extractCrossRefsFromText(definition, lang),
+            ...extractOjRefsFromElement(txtEl),
+          ],
+        });
 
         if (lang.definitionFormat === "verb_first") {
           // Verb-first languages (GA, IT, ES, PT): meansVerb 'term' definition
@@ -1682,7 +1693,7 @@ export function parseFmxToCombined(xmlText) {
           if (termMatch) {
             const term = termMatch[1].trim();
             const definition = text.slice(termMatch[0].length).trim();
-            definitions.push({ term, definition, sourceArticle: artNum });
+            definitions.push(makeDefinition(term, definition));
           }
         } else {
           // Term-first languages: 'term' meansVerb definition
@@ -1693,13 +1704,13 @@ export function parseFmxToCombined(xmlText) {
           if (termMatch) {
             const term = termMatch[1].trim();
             const definition = text.replace(termMatch[0], "").trim();
-            definitions.push({ term, definition, sourceArticle: artNum });
+            definitions.push(makeDefinition(term, definition));
           } else {
             const fbMatch = text.match(fallbackDefRegex);
             if (fbMatch) {
               const term = fbMatch[1].trim();
               const definition = text.slice(fbMatch[0].length).trim();
-              if (term && definition) definitions.push({ term, definition, sourceArticle: artNum });
+              if (term && definition) definitions.push(makeDefinition(term, definition));
             }
           }
         }
@@ -1783,7 +1794,10 @@ export function parseFmxToCombined(xmlText) {
   // Shared with the EUR-Lex HTML parser so both source formats enforce the same
   // invariant (and defensively covers article.paragraphs[].html).
   enforceInternalReferenceIntegrity({ articles, recitals, annexes, crossReferences });
-  repairCorroboratedTruncatedInstrumentIdentifiers(Object.values(crossReferences).flat());
+  repairCorroboratedTruncatedInstrumentIdentifiers([
+    ...Object.values(crossReferences).flat(),
+    ...definitions.flatMap((entry) => entry.references || []),
+  ]);
 
   return { title, articles, recitals, annexes, definitions, langCode, crossReferences, parserVersion: PARSER_VERSION };
 }

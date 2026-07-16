@@ -58,11 +58,29 @@ export function injectDefinitionTooltips(html, definitions, options = {}) {
     const INFLECTED_LANGS = new Set(["PL", "CS", "SK", "HR", "SL", "LT", "LV", "ET", "BG", "EL", "HU", "RO", "FI"]);
     const useInflection = INFLECTED_LANGS.has(options.langCode);
 
+    const activeTerm = String(options.activeTerm || "").trim().toLocaleLowerCase();
+
     // Check if this is the definitions article (contains a "Definitions" heading in any EU language)
     if (options.skipDefinitionsArticle) {
         const isDefinitionsArticle = /<p[^>]*class="[^"]*oj-sti-art[^"]*"[^>]*>\s*(?:Definitions?|Definicj[ea]|Begriffsbestimmungen?|D[eé]finitions?|Definicion[e]?s?|Definizion[ei]|Defini[cç][oõ]es?|Definities?|Definitioner?|M[aä][aä]ritelm[iä]|Definice?|Definície?|Fogalomm?eghat[aá]roz[aá]sok?|Defini[tț]ii|Opredelitve?|Apibr[eė][zž]im?ai|Defin[iī]cijas?|M[oõ]isted?|Artikolu|Sainmh[ií]nithe?|Definizzjonijiet?|Ορισμο[ίι]|\u041e\u043f\u0440\u0435\u0434\u0435\u043b\u0435\u043d\u0438\u044f)\s*<\/p>/i.test(html);
         if (isDefinitionsArticle) {
-            return html;
+            if (!activeTerm) return html;
+            const activeDefinition = definitions.find((entry) => (
+                String(entry?.term || "").trim().toLocaleLowerCase() === activeTerm
+            ));
+            const marker = String(activeDefinition?.sourcePoint || "").trim();
+            if (!marker) return html;
+            const markerPattern = escapeRegex(escapeHtml(marker));
+            return html.replace(
+                new RegExp(`(<li\\b[^>]*\\bdata-marker=["']${markerPattern}["'][^>]*)(>)`, "i"),
+                (match, opening, close) => {
+                    if (/\bclass=["'][^"']*\bdefinition-comparison-active\b/i.test(opening)) return match;
+                    if (/\bclass=["']/i.test(opening)) {
+                        return `${opening.replace(/\bclass=(["'])/i, "class=$1definition-comparison-active ")}${close}`;
+                    }
+                    return `${opening} class="definition-comparison-active"${close}`;
+                }
+            );
         }
     }
 
@@ -108,7 +126,9 @@ export function injectDefinitionTooltips(html, definitions, options = {}) {
             parts[i] = part.replace(termPattern, (match) => {
                 const escapedDef = escapeHtml(definition);
                 const escapedTerm = escapeHtml(term);
-                return `<span class="defined-term" data-term="${escapedTerm}" data-definition="${escapedDef}" role="button" tabindex="0" aria-haspopup="dialog">${match}</span>`;
+                const activeClass = activeTerm && term.trim().toLocaleLowerCase() === activeTerm
+                    ? " defined-term--active" : "";
+                return `<span class="defined-term${activeClass}" data-term="${escapedTerm}" data-definition="${escapedDef}" role="button" tabindex="0" aria-haspopup="dialog">${match}</span>`;
             });
         }
 

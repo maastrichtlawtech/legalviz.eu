@@ -8,11 +8,25 @@ let root;
 
 const messages = {
   "definitionComparison.article": "Article {article}",
+  "definitionComparison.point": "point {point}",
   "definitionComparison.current": "Current",
   "definitionComparison.sameWording": "Same wording",
   "definitionComparison.differentWording": "Different wording",
+  "definitionComparison.sameDefinition": "Same definition",
+  "definitionComparison.differentDefinition": "Different definition",
+  "definitionComparison.selectedSource": "Selected source",
+  "definitionComparison.definitionsInActs": "Definitions in these acts",
+  "definitionComparison.importedByReference": "Imported by reference",
+  "definitionComparison.imported": "Imported",
+  "definitionComparison.otherExtracted": "Other extracted definitions",
+  "definitionComparison.unclassified": "Needs review",
+  "definitionComparison.importsFrom": "Imports from {source}",
+  "definitionComparison.alsoReferences": "Also references {source}",
+  "definitionComparison.import": "import",
+  "definitionComparison.imports": "imports",
   "definitionComparison.openSource": "Open source",
   "definitionComparison.summary": "{laws} {lawWord} · {wordings} {wordingWord}",
+  "definitionComparison.provenanceSummary": "{laws} {lawWord} · {wordings} {wordingWord} · {imports} {importWord}",
   "definitionComparison.empty": "Empty",
   "common.close": "Close",
   "search.law": "law",
@@ -66,10 +80,58 @@ describe("DefinitionComparisonPanel", () => {
     const titles = [...container.querySelectorAll(".truncate.text-xs")].map((node) => node.textContent);
     expect(titles).toEqual(["NIS 2 Directive", "CER Directive"]);
     expect(container.textContent).toContain("Current");
-    expect(container.textContent).toContain("Same wording");
+    expect(container.textContent).toContain("Same definition");
 
     const sourceButtons = [...container.querySelectorAll("button")].filter((button) => button.textContent.includes("Open source"));
     act(() => sourceButtons[0].click());
-    expect(onOpenSource).toHaveBeenCalledWith("32022L2555", "6");
+    expect(onOpenSource).toHaveBeenCalledWith("32022L2555", "6", null);
+  });
+
+  it("separates imported definitions and identifies the selected source", () => {
+    act(() => {
+      root.render(
+        <DefinitionComparisonPanel
+          term="controller"
+          currentCelex="32016R0679"
+          selectedSource="32022R2065:3"
+          comparison={{
+            term: "controller",
+            substantiveLawCount: 1,
+            wordingCount: 1,
+            importCount: 1,
+            occurrences: [
+              {
+                occurrenceId: "authority",
+                celex: "32016R0679",
+                sourceArticle: "4",
+                definition: "the natural or legal person which determines the purposes and means of processing",
+                definitionHash: "gdpr",
+                classification: "substantive",
+                title: "General Data Protection Regulation",
+              },
+              {
+                occurrenceId: "import",
+                celex: "32022R2065",
+                sourceArticle: "3",
+                definition: "controller means controller as defined in Article 4 of Regulation (EU) 2016/679",
+                definitionHash: "referral",
+                classification: "imported",
+                title: "Digital Services Act",
+                referenceEdges: [{ targetCelex: "32016R0679", targetArticle: "4" }],
+              },
+            ],
+          }}
+          onClose={() => {}}
+          t={t}
+        />
+      );
+    });
+
+    expect(container.textContent).toContain("1 law · 1 wording · 1 import");
+    expect(container.textContent).toContain("Definitions in these acts");
+    expect(container.textContent).toContain("Imported by reference");
+    expect(container.textContent).toContain("Imports from 32016R0679 · Article 4");
+    expect(container.textContent).toContain("Selected source");
+    expect(container.querySelector('[data-definition-source="32022R2065:3"]')).toBeTruthy();
   });
 });

@@ -62,6 +62,7 @@ test("buildSqliteData emits a verified manifest with source and table counts", (
     citationSources: 0,
     definitionTerms: 0,
     definitionOccurrences: 0,
+    definitionUsageEdges: 0,
   });
   assert.equal(manifest.source.citationGraph, null);
   assert.equal(manifest.source.definitions, null);
@@ -100,10 +101,12 @@ test("buildSqliteData optionally folds definitions into searchable tables", () =
   const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
   assert.equal(result.definitionTerms, 1);
   assert.equal(result.definitionOccurrences, 2);
+  assert.equal(result.definitionUsageEdges, 0);
   assert.equal(manifest.source.definitions.terms, 1);
   assert.equal(manifest.source.definitions.occurrences, 2);
   assert.equal(manifest.tables.definitionTerms, 1);
   assert.equal(manifest.tables.definitionOccurrences, 2);
+  assert.equal(manifest.tables.definitionUsageEdges, 0);
 });
 
 test("buildSqliteData folds the citation graph into indexed tables and dedups source titles", () => {

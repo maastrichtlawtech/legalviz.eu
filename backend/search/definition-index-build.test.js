@@ -7,11 +7,14 @@ const path = require("node:path");
 const {
   buildDefinitionIndex,
   buildDefinitionShard,
+  classifyDefinition,
+  compactOccurrence,
   dedupeCorpusFiles,
   definitionHash,
   normalizeDefinition,
   normalizeTerm,
   parseCliArgs,
+  INDEX_VERSION,
 } = require("./definition-index-build");
 
 test("definition normalization is conservative and stable", () => {
@@ -19,6 +22,29 @@ test("definition normalization is conservative and stable", () => {
   assert.equal(normalizeDefinition("A   lack of affordable energy. "), "A lack of affordable energy");
   assert.equal(definitionHash("The same wording."), definitionHash("The  same wording"));
   assert.notEqual(definitionHash("The same wording"), definitionHash("Different wording"));
+});
+
+test("compact occurrences resolve definition references and assemble definition-level edges", () => {
+  const imported = compactOccurrence("32024R0001", { langCode: "EN" }, {
+    term: "risk",
+    definition: "risk as defined in Article 6 of Directive (EU) 2022/2555",
+    sourceArticle: "2",
+    sourcePoint: "(1)",
+    references: [{ type: "external", actCelex: "32022L2555", articleNumber: "6", raw: "Article 6 of Directive (EU) 2022/2555", start: 19, end: 61 }],
+  });
+  assert.equal(imported.classification, "imported");
+  assert.equal(imported.sourcePoint, "1");
+  assert.equal(imported.referenceEdges[0].edgeType, "definition_import");
+  assert.equal(imported.referenceEdges[0].targetArticle, "6");
+
+  const target = compactOccurrence("32022L2555", { langCode: "EN" }, {
+    term: "risk", definition: "the potential for loss", sourceArticle: "6",
+  });
+  const artifact = require("./definition-index-build").assembleArtifact([
+    { occurrences: [imported, target], failures: [], stats: {} },
+  ], () => new Date("2026-01-01T00:00:00.000Z"));
+  assert.equal(artifact.usageEdges[0].resolution, "definition");
+  assert.equal(artifact.usageEdges[0].targetOccurrenceId, target.occurrenceId);
 });
 
 test("FMX wins when a CELEX exists in both corpus trees", () => {
@@ -46,10 +72,40 @@ test("definition shard preserves source article provenance", async () => {
   });
   assert.equal(shard.stats.definitions, 1);
   assert.deepEqual(shard.occurrences[0], {
-    celex: "32024R0001", lang: "EN", sourceArticle: "2", term: "risk",
+    occurrenceId: shard.occurrences[0].occurrenceId,
+    celex: "32024R0001", lang: "EN", sourceArticle: "2", sourcePoint: null, term: "risk",
     normalizedTerm: "risk", definition: "the potential for loss;",
     definitionHash: definitionHash("the potential for loss;"),
+    classification: "substantive", classificationReason: null, referenceEdges: [],
   });
+});
+
+test("definition classification distinguishes imports from referenced local wording", () => {
+  const resolved = [{ targetCelex: "32016R0679", targetArticle: "4", end: 58 }];
+  assert.equal(classifyDefinition(
+    "personal data", "personal data as defined in Article 4 of Regulation (EU) 2016/679", resolved, "EN"
+  ).classification, "imported");
+  assert.equal(classifyDefinition(
+    "cyber threat", "a cyber threat as defined in Article 2 of Regulation (EU) 2019/881", resolved, "EN"
+  ).classification, "imported");
+  assert.equal(classifyDefinition(
+    "renewable gas", "renewable gas as defined in Article 2 of Regulation (EU) 2020/1, which meets the threshold", resolved, "EN"
+  ).classification, "hybrid");
+  assert.equal(classifyDefinition(
+    "low-carbon fuels",
+    "recycled carbon fuels as defined in Article 2 of Directive (EU) 2018/2001, plus locally specified synthetic fuels that meet a separate greenhouse gas threshold and methodology under Article 29a of Directive (EU) 2018/2001",
+    [
+      { targetCelex: "32018L2001", targetArticle: "2", start: 36, end: 75 },
+      { targetCelex: "32018L2001", targetArticle: "29a", start: 177, end: 225 },
+    ],
+    "EN"
+  ).classification, "hybrid");
+  assert.equal(classifyDefinition(
+    "service", "a service referred to in Article 5", resolved, "EN"
+  ).classification, "hybrid");
+  assert.equal(classifyDefinition(
+    "service", "service as defined in that Regulation", [{ targetCelex: null, end: 37 }], "EN"
+  ).classification, "unclassified");
 });
 
 test("resumable build reads its checkpoint and only runs pending laws", async () => {
@@ -62,7 +118,7 @@ test("resumable build reads its checkpoint and only runs pending laws", async ()
     failures: [], occurrences: [],
   };
   await fs.writeFile(checkpointPath, JSON.stringify({
-    indexVersion: 1,
+    indexVersion: INDEX_VERSION,
     processedCelex: ["32020R0001"],
     shards: [completedShard],
   }));

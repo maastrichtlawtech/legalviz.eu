@@ -148,6 +148,7 @@ function parseStructuredHtmlDefinitions(articleHtml, langConfig, parser, sourceA
           term: normalizeText(match[1]),
           definition: normalizeText(text.replace(match[0], "")),
           sourceArticle,
+          sourcePoint: normalizeText(cells[0].textContent) || null,
         });
       }
     }
@@ -354,15 +355,19 @@ function parseDefinitions(article) {
 
   return article.bodyParagraphs
     .map((paragraph) => normalizeText(paragraph))
-    .map((paragraph) => paragraph.match(/^\(([a-z])\)\s+(.*)$/i)?.[2] || null)
+    .map((paragraph) => {
+      const match = paragraph.match(/^\(([a-z0-9]+)\)\s+(.*)$/i);
+      return match ? { entryText: match[2], sourcePoint: match[1] } : null;
+    })
     .filter(Boolean)
-    .map((entryText) => {
+    .map(({ entryText, sourcePoint }) => {
       const quoted = entryText.match(/^["“'‘]?([^"”'’]+)["”'’]?\s+means\s+(.+)$/i);
       if (quoted) {
         return {
           term: normalizeText(quoted[1]),
           definition: normalizeText(quoted[2]).replace(/;$/, ""),
           sourceArticle: article.article_number,
+          sourcePoint,
         };
       }
 
@@ -372,6 +377,7 @@ function parseDefinitions(article) {
           term: normalizeText(means[1]).replace(/^["“'‘]|["”'’]$/g, ""),
           definition: normalizeText(means[2]).replace(/;$/, ""),
           sourceArticle: article.article_number,
+          sourcePoint,
         };
       }
 
@@ -1085,6 +1091,10 @@ async function parseEurlexHtmlToCombined(htmlText, lang = "ENG") {
   // Populate the crossReferences map (empty as built by each branch) so the
   // CrossReferences panel works for HTML laws, not just FMX ones.
   const withCrossReferences = (parsed) => {
+    parsed.definitions = (parsed.definitions || []).map((entry) => ({
+      ...entry,
+      references: extractCrossRefsFromText(entry.definition || "", langConfig),
+    }));
     parsed.crossReferences = buildHtmlCrossReferences({
       articles: parsed.articles,
       recitals: parsed.recitals,
@@ -1093,7 +1103,10 @@ async function parseEurlexHtmlToCombined(htmlText, lang = "ENG") {
       langConfig,
     });
     const checked = enforceInternalReferenceIntegrity(parsed);
-    repairCorroboratedTruncatedInstrumentIdentifiers(Object.values(checked.crossReferences).flat());
+    repairCorroboratedTruncatedInstrumentIdentifiers([
+      ...Object.values(checked.crossReferences).flat(),
+      ...checked.definitions.flatMap((entry) => entry.references || []),
+    ]);
     return checked;
   };
 
@@ -1263,7 +1276,14 @@ async function parseEurlexHtmlToCombined(htmlText, lang = "ENG") {
     langCode,
     crossReferences,
   });
-  repairCorroboratedTruncatedInstrumentIdentifiers(Object.values(parsed.crossReferences).flat());
+  parsed.definitions = parsed.definitions.map((entry) => ({
+    ...entry,
+    references: extractCrossRefsFromText(entry.definition || "", langConfig),
+  }));
+  repairCorroboratedTruncatedInstrumentIdentifiers([
+    ...Object.values(parsed.crossReferences).flat(),
+    ...parsed.definitions.flatMap((entry) => entry.references || []),
+  ]);
   return parsed;
 }
 

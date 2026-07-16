@@ -72,6 +72,25 @@ describe("injectDefinitionTooltips", () => {
     expect(result).not.toContain('class="defined-term"');
   });
 
+  it("highlights the selected entry in a definitions article", () => {
+    const html = '<p class="oj-sti-art">Definitions</p><ol><li class="fmx-list-item" data-marker="(1)">\u2018controller\u2019 means a person</li><li class="fmx-list-item" data-marker="(2)">\u2018processor\u2019 means another person</li></ol>';
+    const result = injectDefinitionTooltips(html, [
+      { term: "controller", definition: "a person", sourcePoint: "(1)" },
+      { term: "processor", definition: "another person", sourcePoint: "(2)" },
+    ], { skipDefinitionsArticle: true, activeTerm: "controller" });
+
+    expect(result).toContain('class="definition-comparison-active fmx-list-item" data-marker="(1)"');
+    expect(result).not.toContain('class="definition-comparison-active fmx-list-item" data-marker="(2)"');
+  });
+
+  it("strongly highlights the compared term in ordinary text", () => {
+    const result = injectDefinitionTooltips("<p>Controller duties.</p>", DEFINITIONS, {
+      activeTerm: "controller",
+    });
+
+    expect(result).toContain('class="defined-term defined-term--active"');
+  });
+
   it("does NOT skip articles that just mention 'definition' in text", () => {
     const html = "<p>This is about the definition of scope.</p>";
     const result = injectDefinitionTooltips(html, DEFINITIONS, { skipDefinitionsArticle: true });

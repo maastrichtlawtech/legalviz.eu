@@ -133,6 +133,30 @@
   color: #3b82f6;
 }
 
+.defined-term--active {
+  border-bottom-color: #d6a400;
+  background: color-mix(in srgb, #ffcc00 22%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, #ffcc00 18%, transparent);
+}
+
+.definition-comparison-active {
+  margin-inline: -0.75rem;
+  padding-inline: 0.75rem;
+  border-radius: 0.75rem;
+  background: color-mix(in srgb, #ffcc00 13%, transparent);
+  box-shadow: inset 3px 0 0 #d6a400;
+}
+
+:root.dark .defined-term--active {
+  border-bottom-color: #ffdd55;
+  background: color-mix(in srgb, #ffcc00 16%, transparent);
+}
+
+:root.dark .definition-comparison-active {
+  background: color-mix(in srgb, #ffcc00 10%, transparent);
+  box-shadow: inset 3px 0 0 #ffdd55;
+}
+
 :root.dark .defined-term {
   border-bottom-color: #9ca3af;
 }

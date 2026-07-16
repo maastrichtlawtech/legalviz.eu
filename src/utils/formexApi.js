@@ -905,11 +905,12 @@ export async function searchLaws(query, { limit = 10, noRewrite = false, signal 
   return res.json();
 }
 
-export async function searchDefinitions(query, { limit = 10, signal } = {}) {
+export async function searchDefinitions(query, { limit = 10, filter = "", signal } = {}) {
   const params = new URLSearchParams({
     q: String(query || "").trim(),
     limit: String(limit),
   });
+  if (filter) params.set("filter", filter);
   const url = `${API_BASE}/api/definitions/search?${params.toString()}`;
   const res = await apiFetch(url, { signal });
 

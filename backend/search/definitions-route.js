@@ -10,9 +10,13 @@ function createDefinitionSearchHandler(store) {
   return function definitionSearchHandler(req, res) {
     try {
       const query = String(req.query.q || "").trim();
-      if (!query) return res.status(400).json({ error: 'Query parameter "q" required' });
-      const results = store.searchDefinitions(query, { limit: req.query.limit });
-      return res.json({ query, count: results.length, results });
+      const filter = String(req.query.filter || "").trim();
+      if (filter && !["different", "reused"].includes(filter)) {
+        return res.status(400).json({ error: 'Query parameter "filter" must be "different" or "reused"' });
+      }
+      if (!query && !filter) return res.status(400).json({ error: 'Query parameter "q" or "filter" required' });
+      const results = store.searchDefinitions(query, { limit: req.query.limit, filter });
+      return res.json({ query, filter: filter || null, count: results.length, results });
     } catch (error) {
       if (error.code === "definition_index_unavailable") return unavailable(res, store);
       console.error("[Definitions] Failed to search definitions:", error.message);

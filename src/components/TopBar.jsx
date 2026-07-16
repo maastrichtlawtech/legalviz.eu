@@ -11,6 +11,7 @@ import { searchDefinitions as searchDefinitionsApi, searchLaws as searchLawsApi 
 import { buildImportedLawCandidate, getCanonicalLawRoute, parseCelexQuery } from "../utils/lawRouting.js";
 import { inferOfficialReferenceFromCelex, saveLawMeta } from "../utils/library.js";
 import { cleanLawTitle, extractShortLawTitle, formatOfficialReference } from "../utils/lawDisplay.js";
+import { DefinitionSearchResult } from "./search/DefinitionSearchResult.jsx";
 
 // Law search hits the network per query, so wait for a typing pause before
 // firing to avoid a request per keystroke (which trips the API rate limiter).
@@ -95,6 +96,7 @@ export function SearchBox({
   const [lastLawSearchQuery, setLastLawSearchQuery] = useState("");
   const [isDefinitionSearchLoading, setIsDefinitionSearchLoading] = useState(false);
   const [lastDefinitionSearchQuery, setLastDefinitionSearchQuery] = useState("");
+  const [definitionDiscoveryFilter, setDefinitionDiscoveryFilter] = useState("");
   const [isSmallViewport, setIsSmallViewport] = useState(() => {
     if (typeof window === "undefined" || typeof window.matchMedia !== "function") return false;
     return window.matchMedia("(max-width: 639px)").matches;
@@ -284,12 +286,13 @@ export function SearchBox({
     }, LAW_SEARCH_DEBOUNCE_MS);
   }, [runLawSearch]);
 
-  const runDefinitionSearch = useCallback((nextQuery) => {
+  const runDefinitionSearch = useCallback((nextQuery, discoveryFilter = "") => {
     const trimmedQuery = String(nextQuery || "").trim();
     definitionSearchAbortRef.current?.abort();
     setLawSearchError("");
+    setDefinitionDiscoveryFilter(discoveryFilter);
 
-    if (trimmedQuery.length < 2) {
+    if (trimmedQuery.length < 2 && !discoveryFilter) {
       setResults([]);
       setLastDefinitionSearchQuery("");
       setIsDefinitionSearchLoading(false);
@@ -301,7 +304,7 @@ export function SearchBox({
     setIsDefinitionSearchLoading(true);
     setLastDefinitionSearchQuery(trimmedQuery);
 
-    searchDefinitionsApi(trimmedQuery, { limit: 12, signal: controller.signal })
+    searchDefinitionsApi(trimmedQuery, { limit: 12, filter: discoveryFilter, signal: controller.signal })
       .then((payload) => {
         const nextResults = Array.isArray(payload?.results)
           ? payload.results.map((item, index) => ({
@@ -880,7 +883,7 @@ export function SearchBox({
                       </div>
                     ) : query && (
                       <button
-                        onClick={() => { setQuery(""); setResults([]); focusModalInput(); }}
+                        onClick={() => { setQuery(""); setResults([]); setDefinitionDiscoveryFilter(""); focusModalInput(); }}
                         className="absolute right-0 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600"
                         title={t("search.clear")}
                       >
@@ -942,6 +945,40 @@ export function SearchBox({
             )}
 
             <div className="flex-1 overflow-y-auto p-2 scroll-smooth bg-gray-50/30 dark:bg-gray-950/50">
+              {isDefinitionsMode ? (
+                <div className="flex flex-wrap items-center gap-1.5 px-2 pb-1 pt-1" aria-label={t("search.definitionDiscoveryLabel")}>
+                  {[
+                    { id: "", label: t("search.definitionDiscoveryAll") },
+                    { id: "different", label: t("search.definitionDiscoveryDifferent") },
+                    { id: "reused", label: t("search.definitionDiscoveryReused") },
+                  ].map((entry) => (
+                    <button
+                      key={entry.id || "all"}
+                      type="button"
+                      aria-pressed={definitionDiscoveryFilter === entry.id}
+                      onClick={() => {
+                        setQuery("");
+                        if (entry.id) runDefinitionSearch("", entry.id);
+                        else {
+                          definitionSearchAbortRef.current?.abort();
+                          setDefinitionDiscoveryFilter("");
+                          setResults([]);
+                          setLastDefinitionSearchQuery("");
+                          setIsDefinitionSearchLoading(false);
+                        }
+                        focusModalInput();
+                      }}
+                      className={`rounded-full border px-2.5 py-1 text-[11px] font-medium transition ${
+                        definitionDiscoveryFilter === entry.id
+                          ? "border-eu-blue bg-eu-blue-soft text-eu-blue dark:border-eu-blue-bright dark:bg-eu-blue-soft-dark dark:text-eu-blue-bright"
+                          : "border-gray-200 bg-white text-gray-500 hover:text-gray-800 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-400 dark:hover:text-gray-200"
+                      }`}
+                    >
+                      {entry.label}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
               {lawSearchError ? (
                 <div className="flex flex-col items-center justify-center py-16 text-gray-400">
                   <Search size={48} className="opacity-10 mb-4" />
@@ -983,32 +1020,7 @@ export function SearchBox({
                                 }`}
                               >
                                 {item.search_kind === "definition" ? (
-                                  <>
-                                    <div className="flex w-full min-w-0 items-center gap-2.5">
-                                      <span className="flex-shrink-0 rounded-md border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-800 dark:border-amber-800 dark:bg-amber-900/40 dark:text-amber-200">
-                                        {t("search.segDefinitions")}
-                                      </span>
-                                      <span className="min-w-0 flex-1 truncate font-display text-base font-bold text-eu-navy group-hover:text-eu-blue dark:text-white dark:group-hover:text-eu-blue-bright">
-                                        {item.term}
-                                      </span>
-                                    </div>
-                                    {item.sampleDefinition ? (
-                                      <p className="text-sm leading-relaxed text-gray-500 line-clamp-2 dark:text-gray-300">
-                                        {item.sampleDefinition}
-                                      </p>
-                                    ) : null}
-                                    <p className="text-[11px] font-medium text-gray-400 dark:text-gray-500">
-                                      {t("search.definitionLawCount", {
-                                        count: item.lawCount || 0,
-                                        lawWord: Number(item.lawCount) === 1 ? t("search.law") : t("search.laws"),
-                                      })}
-                                      {" · "}
-                                      {t("search.definitionWordingCount", {
-                                        count: item.wordingCount || 0,
-                                        wordingWord: Number(item.wordingCount) === 1 ? t("search.wording") : t("search.wordings"),
-                                      })}
-                                    </p>
-                                  </>
+                                  <DefinitionSearchResult item={item} query={query} t={t} />
                                 ) : item.search_kind === "law" ? (
                                   <>
                                     <div className="flex w-full min-w-0 items-baseline gap-2">
@@ -1284,7 +1296,9 @@ export function TopBar({
       );
       const separator = route.includes("?") ? "&" : "?";
       const term = item.normalizedTerm || item.term;
-      navigate(`${route}${separator}definition=${encodeURIComponent(term)}`);
+      const params = new URLSearchParams({ definition: term });
+      params.set("definitionSource", `${String(source.celex).toUpperCase()}:${String(sourceArticle ?? "")}${source.sourcePoint ? `:${String(source.sourcePoint)}` : ""}`);
+      navigate(`${route}${separator}${params.toString()}`);
       return;
     }
 

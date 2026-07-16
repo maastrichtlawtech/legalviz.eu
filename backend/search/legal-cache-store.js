@@ -14,7 +14,7 @@ const BUILTIN_SEARCH_CACHE_PATH = path.join(__dirname, "data", "search-cache.jso
 const DEFAULT_SEARCH_CACHE_PATH = process.env.SEARCH_CACHE_PATH || BUILTIN_SEARCH_CACHE_PATH;
 const DEFAULT_SQLITE_DATA_PATH = path.join(__dirname, "data", "data.sqlite");
 const DEFAULT_DEFINITIONS_PATH = path.join(__dirname, "data", "definitions.json");
-const SQLITE_SCHEMA_VERSION = 3;
+const SQLITE_SCHEMA_VERSION = 4;
 
 const SUPPLEMENTAL_RECORDS = [
   {
@@ -298,6 +298,7 @@ class JsonLegalCacheStore {
     this.excerptSearchStatement = null;
     this.definitionSearchStatement = null;
     this.definitionOccurrenceStatement = null;
+    this.definitionUsageStatement = null;
     this.definitionTerms = [];
     this.definitionOccurrences = [];
     this.definitionsAvailable = false;
@@ -414,17 +415,26 @@ class JsonLegalCacheStore {
         LIMIT 200
       `);
       this.definitionSearchStatement = database.prepare(`
-        SELECT normalized_term, display_term, sample_definition, law_count, wording_count
+        SELECT normalized_term, display_term, sample_definition, law_count,
+               substantive_law_count, import_count, wording_count
         FROM definition_terms
         WHERE definition_terms MATCH ?
         ORDER BY (normalized_term = ?) DESC, bm25(definition_terms), normalized_term
         LIMIT ?
       `);
       this.definitionOccurrenceStatement = database.prepare(`
-        SELECT normalized_term, term, definition, definition_hash, celex, source_article
+        SELECT occurrence_id, normalized_term, term, definition, definition_hash, celex,
+               source_article, source_point, classification, classification_reason
         FROM definition_occurrences
         WHERE normalized_term = ?
         ORDER BY celex, source_article, id
+      `);
+      this.definitionUsageStatement = database.prepare(`
+        SELECT edge_type, source_occurrence_id, target_celex, target_article, target_paragraph,
+               target_point, target_occurrence_id, raw, resolution
+        FROM definition_usage_edges
+        WHERE source_occurrence_id = ?
+        ORDER BY id
       `);
       this.definitionsAvailable = database.prepare(
         "SELECT value FROM metadata WHERE key = 'definitions_available'"
@@ -478,7 +488,7 @@ class JsonLegalCacheStore {
             ? definitions.occurrences : (Array.isArray(definitions.definitions) ? definitions.definitions : []);
           this.definitionTerms = Array.isArray(definitions.terms)
             ? definitions.terms : (Array.isArray(definitions.groups) ? definitions.groups : []);
-          if (this.definitionTerms.length === 0 && this.definitionOccurrences.length > 0) {
+          if (this.definitionOccurrences.length > 0) {
             this.definitionTerms = this.buildDefinitionTerms(this.definitionOccurrences);
           }
           this.definitionsAvailable = true;
@@ -540,13 +550,21 @@ class JsonLegalCacheStore {
       members.push(item);
       groups.set(normalizedTerm, members);
     }
-    return [...groups].map(([normalizedTerm, members]) => ({
-      normalizedTerm,
-      displayTerm: members[0]?.term || normalizedTerm,
-      sampleDefinition: members[0]?.definition || members[0]?.text || "",
-      lawCount: new Set(members.map((item) => normalizeCelexLookupKey(item.celex)).filter(Boolean)).size,
-      wordingCount: new Set(members.map((item) => item.definitionHash || item.wordingHash || item.definition)).size,
-    }));
+    return [...groups].map(([normalizedTerm, members]) => {
+      const substantive = members.filter((item) => {
+        const classification = item.classification || "substantive";
+        return classification === "substantive" || classification === "hybrid";
+      });
+      return {
+        normalizedTerm,
+        displayTerm: members[0]?.term || normalizedTerm,
+        sampleDefinition: substantive[0]?.definition || substantive[0]?.text || members[0]?.definition || members[0]?.text || "",
+        lawCount: new Set(members.map((item) => normalizeCelexLookupKey(item.celex)).filter(Boolean)).size,
+        substantiveLawCount: new Set(substantive.map((item) => normalizeCelexLookupKey(item.celex)).filter(Boolean)).size,
+        importCount: members.filter((item) => item.classification === "imported").length,
+        wordingCount: new Set(substantive.map((item) => item.definitionHash || item.wordingHash || item.definition)).size,
+      };
+    });
   }
 
   definitionOccurrenceRows(normalizedTerm) {
@@ -559,17 +577,39 @@ class JsonLegalCacheStore {
         term: item.term,
         definition: item.definition || item.text,
         definition_hash: item.definitionHash || item.wordingHash || null,
+        occurrence_id: item.occurrenceId || null,
         celex: normalizeCelexLookupKey(item.celex),
         source_article: item.sourceArticle ?? item.article ?? null,
+        source_point: item.sourcePoint ?? item.point ?? null,
+        classification: item.classification || "substantive",
+        classification_reason: item.classificationReason || null,
       }));
     return rows.map((row) => {
       const law = this.getByCelex(row.celex);
+      const referenceEdges = this.database
+        ? (row.occurrence_id ? this.definitionUsageStatement.all(row.occurrence_id) : [])
+        : (this.definitionOccurrences.find((item) => item.occurrenceId === row.occurrence_id)?.referenceEdges || []);
       return {
+        occurrenceId: row.occurrence_id,
         term: row.term,
         definition: row.definition,
         definitionHash: row.definition_hash,
         celex: row.celex,
         sourceArticle: row.source_article,
+        sourcePoint: row.source_point,
+        classification: row.classification || "substantive",
+        classificationReason: row.classification_reason,
+        referenceEdges: referenceEdges.map((edge) => ({
+          edgeType: edge.edge_type || edge.edgeType,
+          sourceOccurrenceId: edge.source_occurrence_id || edge.sourceOccurrenceId,
+          targetCelex: edge.target_celex || edge.targetCelex || null,
+          targetArticle: edge.target_article || edge.targetArticle || null,
+          targetParagraph: edge.target_paragraph || edge.targetParagraph || null,
+          targetPoint: edge.target_point || edge.targetPoint || null,
+          targetOccurrenceId: edge.target_occurrence_id || edge.targetOccurrenceId || null,
+          raw: edge.raw || null,
+          resolution: edge.resolution || "unresolved",
+        })),
         title: law?.title || null,
         date: law?.date || null,
         type: law?.type || null,
@@ -589,14 +629,30 @@ class JsonLegalCacheStore {
   searchDefinitions(query, options = {}) {
     this.requireDefinitions();
     const normalized = normalizeDefinitionTerm(query);
-    if (!normalized) return [];
+    const filter = ["different", "reused"].includes(options.filter) ? options.filter : null;
+    if (!normalized && !filter) return [];
     const limit = Math.max(1, Math.min(Number.parseInt(options.limit || "10", 10) || 10, 50));
     let rows;
     if (this.database) {
-      const tokens = normalized.match(/[\p{L}\p{N}]+/gu) || [];
-      if (tokens.length === 0) return [];
-      const expression = tokens.map((token) => `"${token.replace(/"/g, '""')}"*`).join(" AND ");
-      rows = this.definitionSearchStatement.all(expression, normalized, limit);
+      if (!normalized) {
+        const predicate = filter === "different" ? "wording_count > 1" : "import_count > 0";
+        const order = filter === "different"
+          ? "wording_count DESC, substantive_law_count DESC, normalized_term"
+          : "import_count DESC, law_count DESC, normalized_term";
+        rows = this.database.prepare(`
+          SELECT normalized_term, display_term, sample_definition, law_count,
+                 substantive_law_count, import_count, wording_count
+          FROM definition_terms
+          WHERE ${predicate}
+          ORDER BY ${order}
+          LIMIT ?
+        `).all(limit);
+      } else {
+        const tokens = normalized.match(/[\p{L}\p{N}]+/gu) || [];
+        if (tokens.length === 0) return [];
+        const expression = tokens.map((token) => `"${token.replace(/"/g, '""')}"*`).join(" AND ");
+        rows = this.definitionSearchStatement.all(expression, normalized, limit);
+      }
     } else {
       rows = this.definitionTerms
         .map((item) => ({
@@ -604,30 +660,51 @@ class JsonLegalCacheStore {
           display_term: item.displayTerm || item.term,
           sample_definition: item.sampleDefinition || item.definition || "",
           law_count: item.lawCount,
+          substantive_law_count: item.substantiveLawCount ?? item.lawCount,
+          import_count: item.importCount ?? 0,
           wording_count: item.wordingCount,
         }))
-        .filter((row) => row.normalized_term.includes(normalized)
-          || normalizeDefinitionTerm(row.sample_definition).includes(normalized))
-        .sort((a, b) => Number(b.normalized_term === normalized) - Number(a.normalized_term === normalized)
-          || a.normalized_term.localeCompare(b.normalized_term))
+        .filter((row) => normalized
+          ? (row.normalized_term.includes(normalized)
+            || normalizeDefinitionTerm(row.sample_definition).includes(normalized))
+          : (filter === "different" ? Number(row.wording_count) > 1 : Number(row.import_count) > 0))
+        .sort((a, b) => normalized
+          ? (Number(b.normalized_term === normalized) - Number(a.normalized_term === normalized)
+            || a.normalized_term.localeCompare(b.normalized_term))
+          : filter === "different"
+            ? (Number(b.wording_count) - Number(a.wording_count)
+              || Number(b.substantive_law_count) - Number(a.substantive_law_count)
+              || a.normalized_term.localeCompare(b.normalized_term))
+            : (Number(b.import_count) - Number(a.import_count)
+              || Number(b.law_count) - Number(a.law_count)
+              || a.normalized_term.localeCompare(b.normalized_term)))
         .slice(0, limit);
     }
-    return rows.map((row) => ({
+    return rows.map((row) => {
+      const occurrenceRows = this.definitionOccurrenceRows(row.normalized_term);
+      const representativeSource = occurrenceRows.find((item) => (
+        item.classification === "substantive" || item.classification === "hybrid"
+      )) || occurrenceRows[0] || null;
+      return {
       term: row.display_term,
       normalizedTerm: row.normalized_term,
       sampleDefinition: row.sample_definition,
       lawCount: Number(row.law_count) || 0,
+      substantiveLawCount: Number(row.substantive_law_count) || 0,
+      importCount: Number(row.import_count) || 0,
       wordingCount: Number(row.wording_count) || 0,
-      representativeSource: this.definitionOccurrenceRows(row.normalized_term)[0] || null,
-    }));
+      representativeSource,
+      };
+    });
   }
 
   compareDefinitions(term) {
     this.requireDefinitions();
     const normalizedTerm = normalizeDefinitionTerm(term);
     const occurrences = this.definitionOccurrenceRows(normalizedTerm);
+    const competing = occurrences.filter((occurrence) => occurrence.classification === "substantive" || occurrence.classification === "hybrid");
     const grouped = new Map();
-    for (const occurrence of occurrences) {
+    for (const occurrence of competing) {
       const hash = occurrence.definitionHash || occurrence.definition;
       const group = grouped.get(hash) || { definitionHash: occurrence.definitionHash, definition: occurrence.definition, occurrences: [] };
       group.occurrences.push(occurrence);
@@ -637,9 +714,12 @@ class JsonLegalCacheStore {
       term: occurrences[0]?.term || String(term || "").trim(),
       normalizedTerm,
       lawCount: new Set(occurrences.map((item) => item.celex)).size,
+      substantiveLawCount: new Set(competing.map((item) => item.celex)).size,
+      importCount: occurrences.filter((item) => item.classification === "imported").length,
       wordingCount: grouped.size,
       occurrences,
       wordings: [...grouped.values()],
+      usageEdges: occurrences.flatMap((item) => item.referenceEdges || []),
     };
   }
 
@@ -808,6 +888,7 @@ class JsonLegalCacheStore {
     this.excerptSearchStatement = null;
     this.definitionSearchStatement = null;
     this.definitionOccurrenceStatement = null;
+    this.definitionUsageStatement = null;
   }
 }
 

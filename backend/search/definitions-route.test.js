@@ -24,8 +24,18 @@ test("definition search handler validates and returns grouped results", () => {
   const found = response();
   handler({ query: { q: " risk ", limit: "4" } }, found);
   assert.deepEqual(found.payload, {
-    query: "risk", count: 1, results: [{ term: "risk", lawCount: 4 }],
+    query: "risk", filter: null, count: 1, results: [{ term: "risk", lawCount: 4 }],
   });
+
+  const discovered = response();
+  handler({ query: { filter: "different", limit: "6" } }, discovered);
+  assert.deepEqual(discovered.payload, {
+    query: "", filter: "different", count: 1, results: [{ term: "", lawCount: 6 }],
+  });
+
+  const invalid = response();
+  handler({ query: { filter: "conflicts" } }, invalid);
+  assert.equal(invalid.statusCode, 400);
 });
 
 test("definition compare handler returns comparison and maps unavailable index", () => {

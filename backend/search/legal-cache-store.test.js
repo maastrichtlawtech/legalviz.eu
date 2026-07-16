@@ -489,11 +489,13 @@ test("definition search and comparison work in JSON and SQLite stores", () => {
   fs.writeFileSync(searchPath, JSON.stringify({ records: [
     { celex: "32022L2555", title: "NIS 2 Directive", type: "directive", date: "2022-12-14", eli: "http://data.europa.eu/eli/dir/2022/2555/oj" },
     { celex: "32022L2557", title: "CER Directive", type: "directive", date: "2022-12-14", eli: "http://data.europa.eu/eli/dir/2022/2557/oj" },
+    { celex: "32024R0001", title: "Imported Risk Regulation", type: "regulation", date: "2024-01-01" },
   ] }), "utf8");
   fs.writeFileSync(caseLawPath, "{}", "utf8");
   fs.writeFileSync(definitionsPath, JSON.stringify({ occurrences: [
-    { normalizedTerm: "risk", term: "risk", definition: "the potential for loss", definitionHash: "a", celex: "32022L2555", sourceArticle: "6" },
-    { normalizedTerm: "risk", term: "risk", definition: "a possible harmful event", definitionHash: "b", celex: "32022L2557", sourceArticle: "3" },
+    { occurrenceId: "risk-a", normalizedTerm: "risk", term: "risk", definition: "the potential for loss", definitionHash: "a", classification: "substantive", celex: "32022L2555", sourceArticle: "6" },
+    { occurrenceId: "risk-b", normalizedTerm: "risk", term: "risk", definition: "a possible harmful event", definitionHash: "b", classification: "hybrid", celex: "32022L2557", sourceArticle: "3" },
+    { occurrenceId: "risk-import", normalizedTerm: "risk", term: "risk", definition: "risk as defined in Article 6 of Directive (EU) 2022/2555", definitionHash: "import", classification: "imported", celex: "32024R0001", sourceArticle: "2", referenceEdges: [{ edgeType: "definition_import", sourceOccurrenceId: "risk-import", targetCelex: "32022L2555", targetArticle: "6", targetOccurrenceId: "risk-a", resolution: "definition" }] },
   ] }), "utf8");
   buildSqliteData({
     searchCachePath: searchPath, caseLawCachePath: caseLawPath, definitionsPath,
@@ -508,12 +510,18 @@ test("definition search and comparison work in JSON and SQLite stores", () => {
     assert.equal(store.load(), true);
     const results = store.searchDefinitions("risk");
     assert.equal(results.length, 1);
-    assert.equal(results[0].lawCount, 2);
+    assert.equal(results[0].lawCount, 3);
+    assert.equal(results[0].substantiveLawCount, 2);
+    assert.equal(results[0].importCount, 1);
     assert.equal(results[0].wordingCount, 2);
     assert.equal(results[0].representativeSource.celex, "32022L2555");
+    assert.equal(store.searchDefinitions("", { filter: "different" })[0].normalizedTerm, "risk");
+    assert.equal(store.searchDefinitions("", { filter: "reused" })[0].importCount, 1);
     const comparison = store.compareDefinitions(" ‘RISK’ ");
-    assert.equal(comparison.occurrences.length, 2);
+    assert.equal(comparison.occurrences.length, 3);
     assert.equal(comparison.wordings.length, 2);
+    assert.equal(comparison.importCount, 1);
+    assert.equal(comparison.usageEdges.length, 1);
     assert.equal(comparison.occurrences[0].law.title, "NIS 2 Directive");
     store.close();
   }

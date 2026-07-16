@@ -60,6 +60,7 @@ export function LawViewer() {
   const importCelex = searchParams.get("celex");
   const sourceUrl = searchParams.get("sourceUrl");
   const definitionTerm = searchParams.get("definition") || "";
+  const definitionSource = searchParams.get("definitionSource") || "";
   const { allLaws, libraryVersion } = useLandingLibrary();
 
   const preferences = useLawViewerPreferences({
@@ -123,6 +124,7 @@ export function LawViewer() {
     data: primaryDocument.data,
     selected: selection.selected,
     selectedEntry: primarySelectedEntry,
+    activeDefinitionTerm: definitionTerm,
   });
   const secondarySelectedEntry = useMemo(
     () => getSelectedEntry(secondaryDocument.data, selection.selected),
@@ -177,19 +179,28 @@ export function LawViewer() {
   const closeDefinitionComparison = React.useCallback(() => {
     const nextParams = new URLSearchParams(searchParams);
     nextParams.delete("definition");
+    nextParams.delete("definitionSource");
     setSearchParams(nextParams, { replace: true });
   }, [searchParams, setSearchParams]);
 
   const definitionComparison = definitionTerm ? {
     term: definitionTerm,
     comparison: definitionComparisonState.comparison,
+    selectedSource: definitionSource,
     loading: definitionComparisonState.loading,
     error: definitionComparisonState.error,
     onRetry: definitionComparisonState.retry,
     onClose: closeDefinitionComparison,
-    onOpenSource: (celex, sourceArticle) => {
-      closeDefinitionComparison();
-      interactions.handleOpenLawByCelex(celex, { articleNumber: sourceArticle });
+    onOpenSource: (celex, sourceArticle, sourcePoint) => {
+      const sourceKey = `${String(celex || "").toUpperCase()}:${String(sourceArticle ?? "")}${sourcePoint ? `:${String(sourcePoint)}` : ""}`;
+      const comparisonParams = new URLSearchParams({
+        definition: definitionTerm,
+        definitionSource: sourceKey,
+      });
+      interactions.handleOpenLawByCelex(celex, {
+        articleNumber: sourceArticle,
+        queryParams: comparisonParams,
+      });
     },
   } : null;
 

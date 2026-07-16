@@ -176,7 +176,7 @@ export function useLawViewerInteractions({
     }
   }, [currentContentLang, getExternalReferenceKey, locale, navigate, openFallbackReference, resolveReferenceInput]);
 
-  const handleOpenLawByCelex = useCallback(async (celex, { articleNumber = null, label = null } = {}) => {
+  const handleOpenLawByCelex = useCallback(async (celex, { articleNumber = null, label = null, queryParams = null } = {}) => {
     const normalizedCelex = String(celex || "").trim().toUpperCase();
     if (!normalizedCelex) return;
     const targetLaw = buildImportedLawCandidate({ celex: normalizedCelex, label });
@@ -190,12 +190,16 @@ export function useLawViewerInteractions({
       console.warn(`[LawViewer] Could not save metadata for ${normalizedCelex}`, error);
     }
 
-    navigate(getCanonicalLawRoute(
+    const route = getCanonicalLawRoute(
       targetLaw,
       articleNumber != null && String(articleNumber).trim() !== "" ? "article" : null,
       articleNumber,
       locale
-    ));
+    );
+    const query = queryParams instanceof URLSearchParams
+      ? queryParams.toString()
+      : new URLSearchParams(queryParams || {}).toString();
+    navigate(query ? `${route}${route.includes("?") ? "&" : "?"}${query}` : route);
   }, [locale, navigate]);
 
   const handleContentClick = useCallback((event) => {

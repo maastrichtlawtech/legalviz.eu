@@ -81,7 +81,9 @@ export function Landing({ forcedLocale = null }) {
       const route = getCanonicalLawRoute(targetLaw, sourceArticle ? "article" : null, sourceArticle || null, locale);
       const separator = route.includes("?") ? "&" : "?";
       const term = item.normalizedTerm || item.term;
-      navigate(`${route}${separator}definition=${encodeURIComponent(term)}`);
+      const params = new URLSearchParams({ definition: term });
+      params.set("definitionSource", `${String(source.celex).toUpperCase()}:${String(sourceArticle ?? "")}${source.sourcePoint ? `:${String(source.sourcePoint)}` : ""}`);
+      navigate(`${route}${separator}${params.toString()}`);
       return;
     }
 

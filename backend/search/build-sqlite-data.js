@@ -17,7 +17,7 @@ const DEFAULT_CASE_LAW_CACHE_PATH = path.join(__dirname, "data", "case-law-cache
 const DEFAULT_CITATION_GRAPH_PATH = path.join(__dirname, "data", "citation-graph.json");
 const DEFAULT_DEFINITIONS_PATH = path.join(__dirname, "data", "definitions.json");
 // Keep in lock-step with SQLITE_SCHEMA_VERSION in legal-cache-store.js.
-const SQLITE_SCHEMA_VERSION = 3;
+const SQLITE_SCHEMA_VERSION = 4;
 
 // Normalized form of a cited article, matching how the store compares them, so the
 // (target_celex, target_article_key) index can serve the lookup directly rather than
@@ -55,12 +55,34 @@ function definitionRows(payload) {
     if (!normalizedTerm || !term || !definition || !celex) continue;
     rows.push({
       normalizedTerm, term, definition, celex,
+      occurrenceId: textOrNull(item.occurrenceId),
       sourceArticle: textOrNull(item.sourceArticle ?? item.article),
+      sourcePoint: textOrNull(item.sourcePoint ?? item.point),
+      classification: ["substantive", "imported", "hybrid", "unclassified"].includes(item.classification)
+        ? item.classification : "substantive",
+      classificationReason: textOrNull(item.classificationReason),
+      referenceEdges: Array.isArray(item.referenceEdges) ? item.referenceEdges : [],
       definitionHash: String(item.definitionHash || item.wordingHash || "").trim()
         || crypto.createHash("sha256").update(definition.normalize("NFKC").replace(/\s+/g, " ").trim()).digest("hex"),
     });
   }
   return rows;
+}
+
+function definitionUsageRows(payload, occurrences) {
+  const supplied = Array.isArray(payload?.usageEdges)
+    ? payload.usageEdges : occurrences.flatMap((row) => row.referenceEdges || []);
+  return supplied.map((edge) => ({
+    edgeType: edge?.edgeType === "definition_import" ? "definition_import" : "definition_reference",
+    sourceOccurrenceId: textOrNull(edge?.sourceOccurrenceId),
+    targetCelex: textOrNull(String(edge?.targetCelex || "").trim().toUpperCase()),
+    targetArticle: textOrNull(edge?.targetArticle),
+    targetParagraph: textOrNull(edge?.targetParagraph),
+    targetPoint: textOrNull(edge?.targetPoint),
+    targetOccurrenceId: textOrNull(edge?.targetOccurrenceId),
+    raw: textOrNull(edge?.raw),
+    resolution: textOrNull(edge?.resolution) || "unresolved",
+  })).filter((edge) => edge.sourceOccurrenceId);
 }
 
 function definitionTermRows(payload, occurrences) {
@@ -82,13 +104,21 @@ function definitionTermRows(payload, occurrences) {
   return [...keys].map((normalizedTerm) => {
     const item = suppliedByTerm.get(normalizedTerm) || {};
     const members = grouped.get(normalizedTerm) || [];
+    const substantiveMembers = members.filter((row) => row.classification === "substantive" || row.classification === "hybrid");
     const displayTerm = String(item.displayTerm || item.term || members[0]?.term || normalizedTerm).trim();
-    const sampleDefinition = String(item.sampleDefinition || item.definition || members[0]?.definition || "").trim();
+    const sampleDefinition = String(item.sampleDefinition || item.definition || substantiveMembers[0]?.definition || members[0]?.definition || "").trim();
     const lawCount = Number.isSafeInteger(item.lawCount)
       ? item.lawCount : new Set(members.map((row) => row.celex)).size;
-    const wordingCount = Number.isSafeInteger(item.wordingCount)
-      ? item.wordingCount : new Set(members.map((row) => row.definitionHash)).size;
-    return { normalizedTerm, displayTerm, sampleDefinition, lawCount, wordingCount };
+    const wordingCount = members.length
+      ? new Set(substantiveMembers.map((row) => row.definitionHash)).size
+      : (Number.isSafeInteger(item.wordingCount) ? item.wordingCount : 0);
+    const substantiveLawCount = members.length
+      ? new Set(substantiveMembers.map((row) => row.celex)).size
+      : (Number.isSafeInteger(item.substantiveLawCount) ? item.substantiveLawCount : lawCount);
+    const importCount = members.length
+      ? members.filter((row) => row.classification === "imported").length
+      : (Number.isSafeInteger(item.importCount) ? item.importCount : 0);
+    return { normalizedTerm, displayTerm, sampleDefinition, lawCount, substantiveLawCount, importCount, wordingCount };
   }).filter((row) => row.displayTerm && row.sampleDefinition);
 }
 
@@ -171,6 +201,7 @@ function buildSqliteData({
   const caseLawPayload = caseLawAsset.payload;
   const citationEdges = Array.isArray(citationAsset?.payload?.edges) ? citationAsset.payload.edges : [];
   const definitionOccurrences = definitionRows(definitionsAsset?.payload);
+  const definitionUsageEdges = definitionUsageRows(definitionsAsset?.payload, definitionOccurrences);
   const definitionTerms = definitionTermRows(definitionsAsset?.payload, definitionOccurrences);
   const records = Array.isArray(searchPayload.records) ? searchPayload.records : [];
   const caseLawEntries = Object.entries(caseLawPayload).filter(([rawCelex, details]) => (
@@ -247,12 +278,16 @@ function buildSqliteData({
       CREATE INDEX citations_target ON citations (target_celex, target_article_key);
       CREATE TABLE definition_occurrences (
         id INTEGER PRIMARY KEY,
+        occurrence_id TEXT UNIQUE,
         normalized_term TEXT NOT NULL,
         term TEXT NOT NULL,
         definition TEXT NOT NULL,
         definition_hash TEXT NOT NULL,
         celex TEXT NOT NULL,
-        source_article TEXT
+        source_article TEXT,
+        source_point TEXT,
+        classification TEXT NOT NULL,
+        classification_reason TEXT
       ) STRICT;
       CREATE INDEX definition_occurrences_term ON definition_occurrences (normalized_term);
       CREATE VIRTUAL TABLE definition_terms USING fts5(
@@ -260,9 +295,25 @@ function buildSqliteData({
         display_term,
         sample_definition,
         law_count UNINDEXED,
+        substantive_law_count UNINDEXED,
+        import_count UNINDEXED,
         wording_count UNINDEXED,
         tokenize='unicode61 remove_diacritics 2'
       );
+      CREATE TABLE definition_usage_edges (
+        id INTEGER PRIMARY KEY,
+        edge_type TEXT NOT NULL,
+        source_occurrence_id TEXT NOT NULL,
+        target_celex TEXT,
+        target_article TEXT,
+        target_paragraph TEXT,
+        target_point TEXT,
+        target_occurrence_id TEXT,
+        raw TEXT,
+        resolution TEXT NOT NULL
+      ) STRICT;
+      CREATE INDEX definition_usage_source ON definition_usage_edges (source_occurrence_id);
+      CREATE INDEX definition_usage_target ON definition_usage_edges (target_celex, target_article);
     `);
 
     const insertMetadata = database.prepare("INSERT INTO metadata (key, value) VALUES (?, ?)");
@@ -285,13 +336,20 @@ function buildSqliteData({
     `);
     const insertDefinitionOccurrence = database.prepare(`
       INSERT INTO definition_occurrences
-        (normalized_term, term, definition, definition_hash, celex, source_article)
-      VALUES (?, ?, ?, ?, ?, ?)
+        (occurrence_id, normalized_term, term, definition, definition_hash, celex, source_article,
+         source_point, classification, classification_reason)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     const insertDefinitionTerm = database.prepare(`
       INSERT INTO definition_terms
-        (normalized_term, display_term, sample_definition, law_count, wording_count)
-      VALUES (?, ?, ?, ?, ?)
+        (normalized_term, display_term, sample_definition, law_count, substantive_law_count, import_count, wording_count)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `);
+    const insertDefinitionUsage = database.prepare(`
+      INSERT INTO definition_usage_edges
+        (edge_type, source_occurrence_id, target_celex, target_article, target_paragraph,
+         target_point, target_occurrence_id, raw, resolution)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     let expectedExcerptCount = 0;
@@ -363,12 +421,20 @@ function buildSqliteData({
       insertMetadata.run("citation_edge_count", String(citationEdges.length - skippedCitationEdges));
       for (const row of definitionOccurrences) {
         insertDefinitionOccurrence.run(
-          row.normalizedTerm, row.term, row.definition, row.definitionHash, row.celex, row.sourceArticle
+          row.occurrenceId, row.normalizedTerm, row.term, row.definition, row.definitionHash, row.celex,
+          row.sourceArticle, row.sourcePoint, row.classification, row.classificationReason
         );
       }
       for (const row of definitionTerms) {
         insertDefinitionTerm.run(
-          row.normalizedTerm, row.displayTerm, row.sampleDefinition, row.lawCount, row.wordingCount
+          row.normalizedTerm, row.displayTerm, row.sampleDefinition, row.lawCount,
+          row.substantiveLawCount, row.importCount, row.wordingCount
+        );
+      }
+      for (const edge of definitionUsageEdges) {
+        insertDefinitionUsage.run(
+          edge.edgeType, edge.sourceOccurrenceId, edge.targetCelex, edge.targetArticle,
+          edge.targetParagraph, edge.targetPoint, edge.targetOccurrenceId, edge.raw, edge.resolution
         );
       }
       database.exec("COMMIT");
@@ -419,10 +485,13 @@ function buildSqliteData({
     const citationSourceCount = database.prepare("SELECT COUNT(*) AS count FROM citation_sources").get().count;
     const definitionTermCount = database.prepare("SELECT COUNT(*) AS count FROM definition_terms").get().count;
     const definitionOccurrenceCount = database.prepare("SELECT COUNT(*) AS count FROM definition_occurrences").get().count;
-    if (definitionTermCount !== definitionTerms.length || definitionOccurrenceCount !== definitionOccurrences.length) {
+    const definitionUsageEdgeCount = database.prepare("SELECT COUNT(*) AS count FROM definition_usage_edges").get().count;
+    if (definitionTermCount !== definitionTerms.length || definitionOccurrenceCount !== definitionOccurrences.length
+      || definitionUsageEdgeCount !== definitionUsageEdges.length) {
       throw new Error(
         `SQLite definition count mismatch: terms ${definitionTermCount}/${definitionTerms.length}, ` +
-        `occurrences ${definitionOccurrenceCount}/${definitionOccurrences.length}`
+        `occurrences ${definitionOccurrenceCount}/${definitionOccurrences.length}, ` +
+        `usage edges ${definitionUsageEdgeCount}/${definitionUsageEdges.length}`
       );
     }
     const expectedCitationCount = citationEdges.length - skippedCitationEdges;
@@ -477,6 +546,7 @@ function buildSqliteData({
           sha256: definitionsAsset.sha256,
           terms: definitionTerms.length,
           occurrences: definitionOccurrences.length,
+          usageEdges: definitionUsageEdges.length,
           generatedAt: definitionsAsset.payload?.generatedAt || null,
         } : null,
       },
@@ -494,6 +564,7 @@ function buildSqliteData({
         citationSources: citationSourceCount,
         definitionTerms: definitionTermCount,
         definitionOccurrences: definitionOccurrenceCount,
+        definitionUsageEdges: definitionUsageEdgeCount,
       },
       integrity: {
         sqlite: integrity,
@@ -512,6 +583,7 @@ function buildSqliteData({
       caseLaw: caseLawCount,
       definitionTerms: definitionTermCount,
       definitionOccurrences: definitionOccurrenceCount,
+      definitionUsageEdges: definitionUsageEdgeCount,
       bytes: outputBytes,
       sha256: outputSha256,
     };

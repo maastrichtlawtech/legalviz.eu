@@ -9,7 +9,7 @@ const Database = require("better-sqlite3");
 const { enrichSearchRecord } = require("./search-ranking");
 const DEFAULT_SEARCH_CACHE_PATH = path.join(__dirname, "data", "search-cache.json");
 const DEFAULT_SQLITE_DATA_PATH = path.join(__dirname, "data", "data.sqlite");
-const DEFAULT_CASE_LAW_CACHE_PATH = path.join(__dirname, "data", "case-law-cache-v5.json");
+const DEFAULT_CASE_LAW_CACHE_PATH = path.join(__dirname, "data", "case-law-cache.json");
 const SQLITE_SCHEMA_VERSION = 1;
 
 function sha256File(filePath) {

@@ -73,6 +73,51 @@ interval includes no improvement. The result is therefore an optimisation
 plateau plus selection overfit, not evidence for replacing the simpler current
 configuration. Holdout was not used to choose or refine another candidate.
 
+### Embedding reranking experiment (data-v9, 2026-07-16)
+
+`experiment-embeddings.js` evaluates embeddings as a fourth reciprocal-rank
+source over the existing lexical candidate union. It deliberately does not use
+embeddings for recall, preserves deterministic identifier/reference matches,
+asserts that semantic weight zero has exact live-search top-10 parity, and
+caches normalized 512-dimensional vectors in `/tmp` by default. It requires a
+configured `OPENROUTER_API_KEY`:
+
+```bash
+node --max-old-space-size=6144 search/eval/experiment-embeddings.js \
+  --sqlite search/data/data.sqlite \
+  --search search/data/search-cache.json.gz \
+  --model qwen/qwen3-embedding-4b \
+  --split development
+```
+
+Two models were compared on development only. BGE-M3's best full-development
+fit improved the objective from 0.8436 to 0.8668, but repeated nested CV fell
+to 0.8399, so it was rejected. Qwen3-Embedding-4B was more stable; the frozen
+512-dimensional configuration used semantic weight 4.8 and RRF k=40. Its
+development and one-time holdout results were:
+
+| Split | Ranking | Recall@1 | Recall@5 | nDCG@10 |
+| --- | --- | ---: | ---: | ---: |
+| Development | lexical | 75.0% | 90.0% | 0.808 |
+| Development | + Qwen embeddings | 82.5% | 93.8% | 0.862 |
+| Holdout | lexical | 60.0% | 80.0% | 0.759 |
+| Holdout | + Qwen embeddings | 65.0% | 85.0% | 0.788 |
+
+On holdout, the paired nDCG@10 delta was +0.0286 with 95% CI [-0.0297,
++0.1078]. This is directionally encouraging but not conclusive with 20 cases.
+The configured endpoint added 223 ms p50 and 1.37 s p95 query-embedding latency
+in a ten-query sample; scoring the roughly 400 lexical candidates added 3.6 ms
+p50 and 11.0 ms p95. The experiment's SQLite cache occupied 84.6 MB for 20,491
+document/query vectors. A naive SQLite extrapolation to all 80,469 laws is
+about 330 MB on disk (about 157 MiB for raw float data alone); it need not be
+loaded wholly into RAM if queried from a vector-aware disk index.
+
+The evidence supports a larger semantic evaluation, especially paraphrase and
+vocabulary-mismatch cases, but not enabling a remote embedding call in the
+default live-search path yet. A production trial should precompute document
+vectors, cache query vectors, define timeout/fallback behaviour, and gate the
+feature so lexical search remains available when the provider is slow or down.
+
 The tuning script cannot load holdout cases. Its objective combines nDCG@10,
 recall@1, recall@5, and pairwise accuracy; use it to select a candidate, then
 confirm that candidate once on holdout with `run.js`.

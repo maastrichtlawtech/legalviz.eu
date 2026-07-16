@@ -22,6 +22,11 @@ const {
   radicalInverse,
   stratifiedFolds,
 } = require("./eval/optimize-ranking");
+const {
+  dot,
+  normalizeVector,
+  parseArgs: parseEmbeddingArgs,
+} = require("./eval/experiment-embeddings");
 
 test("search evaluation dataset has unique, valid categorized cases", () => {
   const cases = loadEvaluationCases();
@@ -140,4 +145,23 @@ test("ranking optimiser samples deterministically and stratifies every case once
   assert.deepEqual([...folds.flat()].sort((left, right) => left - right), [0, 1, 2, 3, 4, 5]);
   assert.deepEqual(folds, stratifiedFolds(cases, 3, 42));
   assert.ok(Math.max(...folds.map((fold) => fold.length)) - Math.min(...folds.map((fold) => fold.length)) <= 1);
+});
+
+test("embedding experiment normalizes vectors and protects holdout", () => {
+  const normalized = normalizeVector([3, 4]);
+  assert.ok(Math.abs(dot(normalized, normalized) - 1) < 1e-6);
+  assert.deepEqual([...normalizeVector([0, 0])], [0, 0]);
+  const options = parseEmbeddingArgs([
+    "--sqlite", "data.sqlite",
+    "--search", "search.json.gz",
+    "--model", "example/model",
+  ]);
+  assert.equal(options.split, "development");
+  assert.equal(options.model, "example/model");
+  assert.throws(() => parseEmbeddingArgs([
+    "--sqlite", "data.sqlite",
+    "--search", "search.json.gz",
+    "--model", "example/model",
+    "--split", "holdout",
+  ]), /requires fixed/);
 });

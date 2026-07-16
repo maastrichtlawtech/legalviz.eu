@@ -530,10 +530,19 @@ integrity results. Runtime opens the result read-only through
 `better-sqlite3`; the serving path does not depend on Node's experimental
 `node:sqlite` API.
 
-The in-memory MiniSearch index contains titles and aliases only. Excerpts live
-in a contentless FTS5 index and are consulted after deterministic and title
-matches, so excerpt-only recall cannot outrank a title/alias hit. The JSON path
-keeps the original combined MiniSearch index for fixture and local compatibility.
+The revised search keeps deterministic CELEX, official-reference, and exact
+alias matches first. Broad queries retrieve independent candidate lists from an
+in-memory title/alias MiniSearch index, an in-memory EuroVoc MiniSearch index,
+and the contentless SQLite FTS5 excerpt index. Weighted reciprocal-rank fusion
+combines those lists, then applies bounded act-type, in-force-status, and
+log-damped citation priors. The JSON path uses a separate excerpt MiniSearch
+index as its development fallback; production serves SQLite.
+
+This costs roughly 385 MB V8 heap / 675 MB process RSS for data-v9 before a
+browser is launched. Provision at least 1.5 GiB for the backend process so law
+fetching and parsing have headroom. Re-run `search/eval/run.js` after changing
+the data release or Node runtime; see `search/eval/README.md` for the quality,
+latency, memory, signal-coverage, and paired-comparison gates.
 
 Before publishing a data artifact, compare JSON and SQLite ranking against the
 full release corpus:

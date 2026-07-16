@@ -125,16 +125,41 @@ function dedupeByCelex(records) {
 // surface a law that free text alone would otherwise miss entirely, but not
 // enough for body-text noise to outrank a genuine title/alias match.
 const EXCERPT_BOOST = 0.3;
+const EUROVOC_BOOST = 0.8;
+const IN_FORCE_BOOST = 1.08;
+const NO_LONGER_IN_FORCE_BOOST = 0.9;
+const MAX_CITATION_BOOST = 1.2;
+const MAX_GLOBAL_PRIOR = 1.25;
+const CITATION_LOG_SCALE = 0.025;
+const RRF_K = 20;
+const CANDIDATE_LIMIT = 200;
+// Title and controlled-vocabulary evidence are co-equal. Body-text matches are
+// useful for recall but deliberately weaker because recitals contain many
+// incidental concepts. Selected on the development split; see eval/README.md.
+const SOURCE_WEIGHTS = { title: 1.1, eurovoc: 1.1, excerpt: 0.5 };
+const COVERAGE_EXPONENT = 2;
 
-function buildMiniSearch(records, { includeExcerpt = true } = {}) {
-  const fields = includeExcerpt ? ["title", "aliases", "excerpt"] : ["title", "aliases"];
-  const boost = includeExcerpt
-    ? { aliases: 3, title: 1, excerpt: EXCERPT_BOOST }
-    : { aliases: 3, title: 1 };
+function citationBoost(count) {
+  const citations = Math.max(0, Number(count) || 0);
+  return Math.min(MAX_CITATION_BOOST, 1 + CITATION_LOG_SCALE * Math.log1p(citations));
+}
+
+function requestsHistoricalLaw(parsed) {
+  return /\b(?:former|historic|historical|old|repealed|repeal|expired|obsolete|superseded|no longer in force)\b/i
+    .test(String(parsed.originalQuery || ""));
+}
+
+function buildMiniSearch(records, { includeExcerpt = true, includeEurovoc = true } = {}) {
+  const fields = ["title", "aliases"];
+  if (includeEurovoc) fields.push("eurovoc");
+  if (includeExcerpt) fields.push("excerpt");
+  const boost = { aliases: 3, title: 1 };
+  if (includeEurovoc) boost.eurovoc = EUROVOC_BOOST;
+  if (includeExcerpt) boost.excerpt = EXCERPT_BOOST;
   const miniSearch = new MiniSearch({
     idField: "celex",
     fields,
-    storeFields: ["type"],
+    storeFields: ["type", "inForce"],
     searchOptions: {
       boost,
       fuzzy: 0.2,
@@ -151,10 +176,46 @@ function buildMiniSearch(records, { includeExcerpt = true } = {}) {
     // low-value postings for the three act-type words, while retaining named
     // aliases/acronyms for fuzzy and prefix matching.
     aliases: searchableAliases(record).join(" "),
+    eurovoc: (record.eurovoc || []).join(" "),
     excerpt: record.excerpt || "",
     type: record.type,
+    inForce: record.inForce,
   })));
 
+  return miniSearch;
+}
+
+function buildEurovocSearch(records) {
+  const miniSearch = new MiniSearch({
+    idField: "celex",
+    fields: ["eurovoc"],
+    searchOptions: {
+      fuzzy: false,
+      prefix: true,
+      combineWith: "AND",
+    },
+  });
+  miniSearch.addAll(dedupeByCelex(records).map((record) => ({
+    celex: record.celex,
+    eurovoc: (record.eurovoc || []).join(" "),
+  })));
+  return miniSearch;
+}
+
+function buildExcerptMiniSearch(records) {
+  const miniSearch = new MiniSearch({
+    idField: "celex",
+    fields: ["excerpt"],
+    searchOptions: {
+      fuzzy: false,
+      prefix: true,
+      combineWith: "AND",
+    },
+  });
+  miniSearch.addAll(dedupeByCelex(records).map((record) => ({
+    celex: record.celex,
+    excerpt: record.excerpt || "",
+  })));
   return miniSearch;
 }
 
@@ -223,18 +284,23 @@ function containedAliasKeys(normalizedQuery) {
   return [...new Set(keys)];
 }
 
-// Re-encodes the act-type priors that the retired scoreLaw ranking applied,
-// as multiplicative boosts on MiniSearch relevance. This only reshuffles the
-// free-text stage: the deterministic celex/reference/alias matches run first
-// and are unaffected. Demote decisions (they rarely answer a plain "... act"
-// query) and nudge results toward the act type the query names.
-function buildDocumentBoost(parsed) {
+// Query-dependent and global priors for MiniSearch relevance. This only
+// reshuffles the free-text stage: deterministic celex/reference/alias matches
+// run first and are unaffected. Type intent remains the strongest prior;
+// current status and distinct citing acts are deliberately small and capped.
+function buildDocumentBoost(parsed, citationCounts = new Map(), {
+  useGlobalPriors = true,
+  useStatusPrior = true,
+  useCitationPrior = true,
+} = {}) {
   const query = String(parsed.originalQuery || "").toLowerCase();
   const mentionsAct = /\bact\b/.test(query);
   const mentionsDirective = /\bdirective\b/.test(query);
   const mentionsRegulation = /\bregulation\b/.test(query);
 
-  return (_id, _term, stored) => {
+  const historicalIntent = requestsHistoricalLaw(parsed);
+
+  return (id, _term, stored) => {
     const type = stored && stored.type;
     let boost = 1;
     if (type === "decision") boost *= mentionsAct ? 0.3 : 0.6;
@@ -242,8 +308,26 @@ function buildDocumentBoost(parsed) {
     else if (type === "regulation") boost *= mentionsRegulation ? 1.5 : 1.1;
     if (mentionsDirective && type === "regulation") boost *= 0.7;
     if (mentionsRegulation && type === "directive") boost *= 0.7;
+    if (useGlobalPriors) {
+      let statusBoost = 1;
+      if (useStatusPrior) {
+        if (historicalIntent && stored?.inForce === false) statusBoost = IN_FORCE_BOOST;
+        else if (historicalIntent && stored?.inForce === true) statusBoost = NO_LONGER_IN_FORCE_BOOST;
+        else if (stored?.inForce === true) statusBoost = IN_FORCE_BOOST;
+        else if (stored?.inForce === false) statusBoost = NO_LONGER_IN_FORCE_BOOST;
+      }
+      const authorityBoost = useCitationPrior
+        ? citationBoost(citationCounts.get(normalizeCelexLookupKey(id)))
+        : 1;
+      boost *= Math.min(MAX_GLOBAL_PRIOR, statusBoost * authorityBoost);
+    }
     return boost;
   };
+}
+
+function documentPrior(parsed, law, citationCounts, options) {
+  const boost = buildDocumentBoost(parsed, citationCounts, options);
+  return boost(law.celex, "", { type: law.type, inForce: law.inForce });
 }
 
 class JsonLegalCacheStore {
@@ -260,6 +344,15 @@ class JsonLegalCacheStore {
         ? DEFAULT_SQLITE_DATA_PATH
         : null);
     this.requireSqlite = options.requireSqlite ?? Boolean(configuredSqlitePath);
+    this.rankingProfile = options.rankingProfile === "baseline" ? "baseline" : "revised";
+    this.rankingConfig = {
+      rrfK: options.rankingConfig?.rrfK ?? RRF_K,
+      candidateLimit: options.rankingConfig?.candidateLimit ?? CANDIDATE_LIMIT,
+      coverageExponent: options.rankingConfig?.coverageExponent ?? COVERAGE_EXPONENT,
+      sourceWeights: { ...SOURCE_WEIGHTS, ...(options.rankingConfig?.sourceWeights || {}) },
+      useStatusPrior: options.rankingConfig?.useStatusPrior ?? true,
+      useCitationPrior: options.rankingConfig?.useCitationPrior ?? true,
+    };
     this.payload = null;
     this.records = [];
     this.loadedAt = null;
@@ -269,8 +362,11 @@ class JsonLegalCacheStore {
     this.byOfficialReference = new Map();
     this.byAlias = new Map();
     this.miniSearch = null;
+    this.eurovocSearch = null;
+    this.excerptMiniSearch = null;
     this.database = null;
     this.excerptSearchStatement = null;
+    this.citationCounts = new Map(options.citationCounts || []);
     this.source = null;
   }
 
@@ -294,6 +390,8 @@ class JsonLegalCacheStore {
     this.byOfficialReference = new Map();
     this.byAlias = new Map();
     this.miniSearch = null;
+    this.eurovocSearch = null;
+    this.excerptMiniSearch = null;
     this.source = null;
   }
 
@@ -341,7 +439,13 @@ class JsonLegalCacheStore {
       }
     }
 
-    this.miniSearch = buildMiniSearch(records, { includeExcerpt });
+    const revised = this.rankingProfile !== "baseline";
+    this.miniSearch = buildMiniSearch(records, {
+      includeExcerpt: includeExcerpt && !revised,
+      includeEurovoc: false,
+    });
+    this.eurovocSearch = revised ? buildEurovocSearch(records) : null;
+    this.excerptMiniSearch = revised && includeExcerpt ? buildExcerptMiniSearch(records) : null;
     this.loadedAt = new Date().toISOString();
     this.loadError = null;
   }
@@ -372,6 +476,12 @@ class JsonLegalCacheStore {
       }
 
       this.database = database;
+      this.citationCounts = this.rankingProfile === "baseline" ? new Map() : new Map(database.prepare(`
+          SELECT target_celex AS celex, COUNT(DISTINCT source_celex) AS count
+          FROM citations
+          WHERE kind = 'legislation'
+          GROUP BY target_celex
+        `).all().map((row) => [normalizeCelexLookupKey(row.celex), row.count]));
       this.excerptSearchStatement = database.prepare(`
         SELECT mapping.celex
         FROM law_excerpts
@@ -439,6 +549,32 @@ class JsonLegalCacheStore {
     };
   }
 
+  getRankingSignalStats() {
+    const celexes = new Set(this.records.map((record) => normalizeCelexLookupKey(record.celex)).filter(Boolean));
+    let citedCelexes = this.citationCounts;
+    let excerptRecords = this.records.filter((record) => String(record.excerpt || "").trim()).length;
+    if (this.database) {
+      citedCelexes = new Map(this.database.prepare(`
+        SELECT DISTINCT target_celex AS celex
+        FROM citations
+        WHERE kind = 'legislation'
+      `).all().map((row) => [normalizeCelexLookupKey(row.celex), true]));
+      excerptRecords = this.database.prepare(
+        "SELECT COUNT(DISTINCT celex) AS count FROM law_excerpt_map"
+      ).get().count;
+    }
+    const countMatching = (predicate) => this.records.filter(predicate).length;
+    return {
+      records: this.records.length,
+      eurovocRecords: countMatching((record) => (record.eurovoc || []).length > 0),
+      knownStatusRecords: countMatching((record) => typeof record.inForce === "boolean"),
+      inForceRecords: countMatching((record) => record.inForce === true),
+      noLongerInForceRecords: countMatching((record) => record.inForce === false),
+      excerptRecords,
+      citedRecords: [...celexes].filter((celex) => citedCelexes.has(celex)).length,
+    };
+  }
+
   get activePath() {
     return this.source === "sqlite" ? this.sqlitePath : this.cachePath;
   }
@@ -484,12 +620,16 @@ class JsonLegalCacheStore {
     // natural query (for example "digital services act obligations"). Only
     // multi-word contiguous aliases qualify, avoiding the huge candidate sets
     // produced by broad title OR searches.
-    for (const key of containedAliasKeys(parsed.normalized)) {
-      for (const record of this.byAlias.get(key) || []) addMatch(record);
+    if (!requestsHistoricalLaw(parsed)) {
+      for (const key of containedAliasKeys(parsed.normalized)) {
+        for (const record of this.byAlias.get(key) || []) addMatch(record);
+      }
     }
 
-    if (this.miniSearch) {
-      const boostDocument = buildDocumentBoost(parsed);
+    if (this.rankingProfile === "baseline" && this.miniSearch) {
+      const boostDocument = buildDocumentBoost(parsed, this.citationCounts, {
+        useGlobalPriors: false,
+      });
       let hits = this.miniSearch.search(parsed.rewrittenQuery, { combineWith: "AND", boostDocument });
       // A broad OR over three or more terms can materialize tens of thousands
       // of title hits (and keep V8's high-water heap resident) before the FTS
@@ -506,7 +646,7 @@ class JsonLegalCacheStore {
       }
     }
 
-    if (this.database) {
+    if (this.rankingProfile === "baseline" && this.database) {
       const terms = parsed.terms || [];
       let hits = this.searchExcerpts(buildFtsExpression(terms, "AND"));
       if (hits.length === 0) {
@@ -514,6 +654,113 @@ class JsonLegalCacheStore {
       }
       for (const hit of hits) {
         addMatch(getDeterministicMatch(this.byCelex, normalizeCelexLookupKey(hit.celex)));
+      }
+    }
+
+    if (this.rankingProfile !== "baseline") {
+      const retrievalQuery = parsed.terms.join(" ") || parsed.rewrittenQuery;
+      const { candidateLimit, coverageExponent, rrfK, sourceWeights } = this.rankingConfig;
+      const candidates = new Map();
+      const sourceIds = { title: [], eurovoc: [], excerpt: [] };
+      let candidateOrdinal = 0;
+      const expandWithOr = (index, hits) => {
+        if (parsed.terms.length < 2 || hits.length >= candidateLimit) return hits;
+        const seenIds = new Set(hits.map((hit) => normalizeCelexLookupKey(hit.id)));
+        const expanded = [...hits];
+        for (const hit of index.search(retrievalQuery, { combineWith: "OR" })) {
+          const celex = normalizeCelexLookupKey(hit.id);
+          if (!celex || seenIds.has(celex)) continue;
+          seenIds.add(celex);
+          expanded.push(hit);
+          if (expanded.length >= candidateLimit) break;
+        }
+        return expanded;
+      };
+      const addCandidates = (source, hits, idForHit, coverageForHit = () => 1) => {
+        const limited = hits.slice(0, candidateLimit);
+        let effectiveRank = 0;
+        let previousScore = null;
+        limited.forEach((hit, index) => {
+          // MiniSearch returns a numeric relevance score. Equal-scoring hits
+          // should share a rank: otherwise an arbitrary index-order difference
+          // can be larger than the deliberately small status/citation prior.
+          // SQLite FTS rows carry no score, so they retain ordinal ranks.
+          const hitScore = Number.isFinite(hit.score) ? hit.score : null;
+          if (hitScore == null || previousScore == null || Math.abs(hitScore - previousScore) > 1e-12) {
+            effectiveRank = index + 1;
+          }
+          previousScore = hitScore;
+          const celex = normalizeCelexLookupKey(idForHit(hit));
+          const record = getDeterministicMatch(this.byCelex, celex);
+          if (!record) return;
+          sourceIds[source].push(celex);
+          let candidate = candidates.get(celex);
+          if (!candidate) {
+            candidate = { record, ordinal: candidateOrdinal++, fusionScore: 0, sources: {} };
+            candidates.set(celex, candidate);
+          }
+          const coverage = Math.max(0, Math.min(1, coverageForHit(hit)));
+          candidate.sources[source] = { rank: effectiveRank, coverage };
+          candidate.fusionScore += sourceWeights[source] * (coverage ** coverageExponent) / (rrfK + effectiveRank);
+        });
+      };
+
+      if (this.miniSearch && retrievalQuery) {
+        let hits = this.miniSearch.search(retrievalQuery, { combineWith: "AND" });
+        hits = expandWithOr(this.miniSearch, hits);
+        addCandidates("title", hits, (hit) => hit.id, (hit) => {
+          const matched = new Set(hit.queryTerms || []).size;
+          return parsed.terms.length === 0 ? 1 : matched / parsed.terms.length;
+        });
+      }
+
+      if (this.eurovocSearch && retrievalQuery) {
+        let hits = this.eurovocSearch.search(retrievalQuery, { combineWith: "AND" });
+        hits = expandWithOr(this.eurovocSearch, hits);
+        addCandidates("eurovoc", hits, (hit) => hit.id, (hit) => {
+          const matched = new Set(hit.queryTerms || []).size;
+          return parsed.terms.length === 0 ? 1 : matched / parsed.terms.length;
+        });
+      }
+
+      if (this.database) {
+        const terms = parsed.terms || [];
+        let hits = this.searchExcerpts(buildFtsExpression(terms, "AND"));
+        if (hits.length === 0) hits = this.searchExcerpts(buildFtsExpression(terms, "OR"));
+        addCandidates("excerpt", hits, (hit) => hit.celex);
+      } else if (this.excerptMiniSearch && retrievalQuery) {
+        let hits = this.excerptMiniSearch.search(retrievalQuery, { combineWith: "AND" });
+        if (hits.length === 0 && parsed.terms.length < 3) {
+          hits = this.excerptMiniSearch.search(retrievalQuery, { combineWith: "OR" });
+        }
+        addCandidates("excerpt", hits, (hit) => hit.id);
+      }
+
+      const ranked = [...candidates.values()]
+        .map((candidate) => ({
+          ...candidate,
+          finalScore: candidate.fusionScore * documentPrior(
+            parsed,
+            candidate.record,
+            this.citationCounts,
+            { useStatusPrior: this.rankingConfig.useStatusPrior, useCitationPrior: this.rankingConfig.useCitationPrior }
+          ),
+        }))
+        .sort((left, right) => right.finalScore - left.finalScore || left.ordinal - right.ordinal);
+      for (const candidate of ranked) addMatch(candidate.record);
+
+      if (typeof options.onDiagnostics === "function") {
+        options.onDiagnostics({
+          retrievalQuery,
+          sources: sourceIds,
+          union: [...candidates.keys()],
+          ranked: ranked.map((candidate) => ({
+            celex: candidate.record.celex,
+            fusionScore: candidate.fusionScore,
+            finalScore: candidate.finalScore,
+            sources: candidate.sources,
+          })),
+        });
       }
     }
 

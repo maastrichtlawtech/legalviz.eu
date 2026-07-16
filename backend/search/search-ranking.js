@@ -62,12 +62,23 @@ const QUERY_REWRITES = new Map([
 
 const LOW_SIGNAL_TERMS = new Set([
   "act",
+  "current",
+  "currently",
   "eu",
+  "former",
+  "historic",
+  "historical",
+  "law",
+  "laws",
+  "modern",
+  "old",
   "of",
   "the",
   "and",
   "on",
-  "for"
+  "for",
+  "repealed",
+  "superseded"
 ]);
 
 function normalizeText(value) {

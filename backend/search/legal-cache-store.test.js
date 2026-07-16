@@ -233,6 +233,132 @@ test("legal cache store exposes EuroVoc topics carried by the cache", () => {
   ]);
 });
 
+test("legal cache store reports ranking-signal coverage", () => {
+  const store = new JsonLegalCacheStore(fixturePath, { preferJson: true });
+  assert.equal(store.load(), true);
+  const stats = store.getRankingSignalStats();
+  assert.equal(stats.records, store.records.length);
+  assert.ok(stats.eurovocRecords > 0);
+  assert.ok(stats.knownStatusRecords > 0);
+  assert.equal(stats.excerptRecords, 0);
+});
+
+test("legal cache store retrieves a law by EuroVoc topic absent from its title", () => {
+  const store = new JsonLegalCacheStore(fixturePath);
+  store.load();
+
+  const results = store.searchLaws("electronic data processing", { limit: 5 });
+  assert.equal(results[0]?.celex, "32016R0679");
+});
+
+test("baseline ranking profile provides a reproducible EuroVoc-free comparison", () => {
+  const baseline = new JsonLegalCacheStore(fixturePath, { preferJson: true, rankingProfile: "baseline" });
+  const revised = new JsonLegalCacheStore(fixturePath, { preferJson: true, rankingProfile: "revised" });
+  baseline.load();
+  revised.load();
+
+  const query = "online platform competition policy";
+  assert.notEqual(baseline.searchLaws(query, { limit: 1 })[0]?.celex, "32022R1925");
+  assert.equal(revised.searchLaws(query, { limit: 1 })[0]?.celex, "32022R1925");
+});
+
+test("free-text ranking prefers an in-force law but preserves historical intent", () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "legal-cache-store-status-ranking-"));
+  const tempPath = path.join(tempDir, "status-ranking.json");
+  fs.writeFileSync(tempPath, JSON.stringify({ records: [
+    {
+      celex: "32020L0001",
+      title: "Personal Data Protection Framework",
+      type: "directive",
+      eli: "http://data.europa.eu/eli/dir/2020/1/oj",
+      inForce: false,
+    },
+    {
+      celex: "32020L0002",
+      title: "Personal Data Protection Framework",
+      type: "directive",
+      eli: "http://data.europa.eu/eli/dir/2020/2/oj",
+      inForce: true,
+    },
+  ] }), "utf8");
+
+  const store = new JsonLegalCacheStore(tempPath, { preferJson: true });
+  assert.equal(store.load(), true);
+  assert.equal(store.searchLaws("personal data protection")[0]?.celex, "32020L0002");
+  // Historical wording reverses the small status preference rather than
+  // silently rewriting an explicitly historical query toward current law.
+  assert.equal(store.searchLaws("historical personal data protection")[0]?.celex, "32020L0001");
+});
+
+test("free-text ranking uses a capped distinct-citing-act prior", () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "legal-cache-store-citation-ranking-"));
+  const tempPath = path.join(tempDir, "citation-ranking.json");
+  fs.writeFileSync(tempPath, JSON.stringify({ records: [
+    {
+      celex: "32020R0001",
+      title: "Common Widget Rules",
+      type: "regulation",
+      eli: "http://data.europa.eu/eli/reg/2020/1/oj",
+    },
+    {
+      celex: "32020R0002",
+      title: "Common Widget Rules",
+      type: "regulation",
+      eli: "http://data.europa.eu/eli/reg/2020/2/oj",
+    },
+  ] }), "utf8");
+
+  const store = new JsonLegalCacheStore(tempPath, {
+    preferJson: true,
+    citationCounts: [["32020R0002", 500]],
+  });
+  assert.equal(store.load(), true);
+  assert.equal(store.searchLaws("common widget rules")[0]?.celex, "32020R0002");
+  // Deterministic lookup remains stronger than every global prior.
+  assert.equal(store.searchLaws("32020R0001")[0]?.celex, "32020R0001");
+});
+
+test("SQLite search derives citation authority from distinct citing acts", () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "legal-cache-store-citation-sqlite-"));
+  const searchPath = path.join(tempDir, "search.json");
+  const caseLawPath = path.join(tempDir, "case-law.json");
+  const graphPath = path.join(tempDir, "citation-graph.json");
+  const sqlitePath = path.join(tempDir, "data.sqlite");
+  const records = ["32020R0001", "32020R0002"].map((celex, index) => ({
+    celex,
+    title: "Common Widget Rules",
+    type: "regulation",
+    eli: `http://data.europa.eu/eli/reg/2020/${index + 1}/oj`,
+  }));
+  fs.writeFileSync(searchPath, JSON.stringify({ records }), "utf8");
+  fs.writeFileSync(caseLawPath, "{}", "utf8");
+  fs.writeFileSync(graphPath, JSON.stringify({
+    graphVersion: 2,
+    parserVersion: 15,
+    generatedAt: "2026-07-16T00:00:00.000Z",
+    coverage: {},
+    stats: { edges: 2 },
+    edges: [
+      { kind: "legislation", sourceCelex: "32021R0010", sourceUnitType: "article", sourceUnit: "1", targetCelex: "32020R0002", targetArticle: null },
+      // A second provision from the same act must not add another authority vote.
+      { kind: "legislation", sourceCelex: "32021R0010", sourceUnitType: "article", sourceUnit: "2", targetCelex: "32020R0002", targetArticle: null },
+    ],
+  }), "utf8");
+  buildSqliteData({
+    searchCachePath: searchPath,
+    caseLawCachePath: caseLawPath,
+    citationGraphPath: graphPath,
+    outputPath: sqlitePath,
+    log: () => {},
+  });
+
+  const store = new JsonLegalCacheStore(searchPath, { sqlitePath, requireSqlite: true });
+  assert.equal(store.load(), true);
+  assert.equal(store.citationCounts.get("32020R0002"), 1);
+  assert.equal(store.searchLaws("common widget rules")[0]?.celex, "32020R0002");
+  store.close();
+});
+
 test("legal cache store caps searchLaws topics at 5 and defaults to empty array for a record with none", () => {
   const store = new JsonLegalCacheStore(fixturePath);
   store.load();

@@ -106,6 +106,27 @@ jobs:
             if (decided < laws * 0.8) throw new Error(decided + "/" + laws + " laws have a known in-force status - expected >80% (data-v8 shipped 87%), in-force enrichment is degraded");
             console.log("enrichment intact: " + laws + " laws, all dated, all carrying eurovoc, " + decided + " with a known in-force status");
           '
+      - name: Gate production search quality and signal coverage
+        run: |
+          docker run --rm legalviz-backend:ci node --expose-gc search/eval/run.js \
+            --sqlite search/data/data.sqlite \
+            --cases search/eval/ranking-queries.json \
+            --split holdout \
+            --limit 10 \
+            --iterations 1 \
+            --enable-rewrites \
+            --json > search-evaluation.json
+          jq --exit-status '
+            .quality.recallAt1 >= 0.55 and
+            .quality.recallAt5 >= 0.75 and
+            .quality.ndcgAt10 >= 0.72 and
+            .quality.candidateRecall.union >= 0.90 and
+            (.signals.eurovocRecords / .signals.records) >= 0.80 and
+            (.signals.knownStatusRecords / .signals.records) >= 0.80 and
+            (.signals.excerptRecords / .signals.records) >= 0.95 and
+            (.signals.citedRecords / .signals.records) >= 0.35
+          ' search-evaluation.json
+          jq '{quality: {recallAt1: .quality.recallAt1, recallAt5: .quality.recallAt5, ndcgAt10: .quality.ndcgAt10, candidateRecall: .quality.candidateRecall.union}, signals}' search-evaluation.json
       - name: Container logs
         if: always()
         run: docker logs legalviz-backend || true

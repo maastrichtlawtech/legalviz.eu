@@ -629,6 +629,33 @@ node --max-old-space-size=8192 search/fetch-eurovoc.js
 node --max-old-space-size=8192 search/fetch-in-force.js
 ```
 
+If whole acts are missing rather than a field — a transient Cellar failure during
+the sweep, or an act Cellar had not indexed yet when it ran — add them by CELEX
+instead of re-sweeping the year around them:
+
+```bash
+node --max-old-space-size=8192 search/backfill-cache.js \
+  --celex 32014D0055,32016D0040 --cachePath search/data/search-cache.json.gz
+node --max-old-space-size=8192 search/backfill-cache.js \
+  --celex @missing.txt --cachePath search/data/search-cache.json.gz
+```
+
+`backfill-cache.js` runs the same steps as the full builder in the same order
+(SPARQL metadata → title/excerpt, corpus-first → EuroVoc → in-force →
+`enrichSearchRecord`), so a backfilled record is indistinguishable from a swept
+one. It reads/writes `.json` and `.json.gz`, so it patches the release asset
+directly, and it skips ids already in the cache — a re-run after a partial
+failure only fetches what is still missing. Note this is the opposite direction
+from `reenrich-cache.js`, which only refreshes records already present.
+
+**Only English-language acts are indexable.** The pipeline is English-only
+throughout (`FILTER(LANG(?title) = "en")`, `/EN/TXT/`, `ENG.fmx4`). Most pre-1973
+acts and many pre-2004 ones exist in Cellar **only** in DAN/DEU/FRA/ITA/NLD, so
+they have no English rendition to fetch and are permanently out of scope — not a
+coverage bug. When auditing gaps, filter the manifestation query by
+`cdm:expression_uses_language <…/authority/language/ENG>` or the result will
+overcount by an order of magnitude (see issue #100: 942 "missing" acts, 29 real).
+
 **Backfill; don't rebuild, to add a field.** These tools patch the cache they
 read, touching only their own field and carrying everything else through
 verbatim. A rebuild re-derives `date` and `eurovoc` from scratch and will happily

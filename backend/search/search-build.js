@@ -629,6 +629,75 @@ function toRecord(binding) {
   };
 }
 
+// CELEX ids are matched against `^3\d{4}[RLD]` by the year harvest; reuse the
+// same shape here so a malformed/injected id can never reach the query body.
+const CELEX_ID_PATTERN = /^[0-9A-Z]{4,24}$/;
+
+// Callers take ids from files and issue lists, where a corrigendum id
+// (`…R(01)`) or a stray token is normal. They filter with this first so one bad
+// id is dropped with a warning instead of throwing away the whole batch; the
+// assert below stays as the last line of defence against query injection.
+function isQueryableCelexId(celex) {
+  return CELEX_ID_PATTERN.test(String(celex || ""));
+}
+
+function assertSafeCelexIds(celexIds) {
+  for (const celex of celexIds) {
+    if (!CELEX_ID_PATTERN.test(celex)) {
+      throw new Error(`Refusing to query malformed CELEX id: ${JSON.stringify(celex)}`);
+    }
+  }
+}
+
+// Same projection as buildYearQuery, but scoped to an explicit id list instead
+// of a CELEX year prefix. Used to backfill individual acts a year sweep missed
+// without re-harvesting the year around them.
+function buildCelexQuery(celexIds) {
+  assertSafeCelexIds(celexIds);
+  const values = celexIds.map((celex) => `"${celex}"^^xsd:string`).join(" ");
+  return `
+PREFIX cdm: <http://publications.europa.eu/ontology/cdm#>
+PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+SELECT DISTINCT ?celex ?title ?date ?eli
+WHERE {
+  VALUES ?celex { ${values} }
+  ?cellar
+    cdm:resource_legal_id_celex ?celex ;
+    cdm:resource_legal_eli ?eli .
+
+  OPTIONAL {
+    ?cellar cdm:work_title ?title .
+    FILTER(LANG(?title) = "en")
+  }
+  OPTIONAL { ?cellar cdm:work_date_document ?date . }
+}
+ORDER BY ?celex
+`.trim();
+}
+
+// Harvests metadata for an explicit CELEX list, in batches. Mirrors
+// harvestPrimaryActs' contract: records without an ELI are dropped, because
+// `isPrimaryAct` is derived from the ELI downstream and a record without one
+// would never be served.
+async function harvestActsByCelex({ celexIds, batchSize = 100, runSparqlImpl = runSparql }) {
+  const records = new Map();
+  const ids = [...new Set(celexIds)];
+  for (let start = 0; start < ids.length; start += batchSize) {
+    const batch = ids.slice(start, start + batchSize);
+    logProgress(`Harvesting metadata for ${batch.length} CELEX ids (${start + batch.length}/${ids.length})`);
+    const data = await runSparqlImpl(buildCelexQuery(batch));
+    for (const binding of data.results?.bindings || []) {
+      const record = toRecord(binding);
+      // A work can carry several ELIs; prefer the primary /oj one so the record
+      // matches what the year harvest would have produced.
+      const existing = records.get(record.celex);
+      if (existing && !/\/oj$/.test(record.eli || "")) continue;
+      records.set(record.celex, record);
+    }
+  }
+  return [...records.values()].filter((record) => record.celex && record.eli);
+}
+
 async function harvestPrimaryActs({ fromYear, toYear, limit, runSparqlImpl = runSparql }) {
   const records = new Map();
   for (let year = fromYear; year >= toYear; year -= 1) {
@@ -1093,12 +1162,16 @@ module.exports = {
   EXCERPT_MAX_LENGTH,
   attachEurovocTopics,
   attachInForceStatus,
+  buildCelexQuery,
   buildExcerptFromCombined,
   buildSearchCache,
+  enrichRecords,
   extractExcerptFromXml,
   extractOfficialTitleAndExcerpt,
   fetchCombinedFmxXml,
+  harvestActsByCelex,
   harvestPrimaryActs,
+  isQueryableCelexId,
   buildYearQuery,
   ensurePositiveInt,
   extractTitleFromEurlexHtml,

@@ -38,7 +38,7 @@ COPY search/build-sqlite-data.js search/search-ranking.js ./search/
 # Placed before `COPY . .` so this (large) layer stays cached across code
 # changes and only re-runs when DATA_RELEASE_TAG is bumped for a new data build.
 ARG DATA_RELEASE_REPO=maastrichtlawtech/legalviz.eu
-ARG DATA_RELEASE_TAG=data-v8
+ARG DATA_RELEASE_TAG=data-v9
 # Every asset comes from this one tag, so a new release must carry the full set —
 # re-upload the unchanged ones alongside the changed one or this fetch 404s.
 # citation-graph.json.gz is a *build input* like the others: it is folded into

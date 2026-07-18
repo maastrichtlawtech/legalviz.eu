@@ -783,6 +783,8 @@ Current test coverage includes:
 | `RECITAL_TITLE_MODEL` | Model for cached AI-generated recital titles. Default `google/gemini-2.5-pro`. |
 | `PLAYWRIGHT_HEADLESS` / `PLAYWRIGHT_BROWSERS_PATH` / `PLAYWRIGHT_MODULE_PATH` / `LEGALVIZ_PLAYWRIGHT_MODULE_PATH` | Playwright configuration for fetching laws that require rendering. |
 
+**OpenRouter spend cap:** the production deployment relies on an account-level spend limit configured in the OpenRouter dashboard as the hard ceiling on AI-feature cost — the API itself only applies the generic per-IP rate limit to these endpoints. Any key used in deployment should carry such a limit. When the limit is exhausted, cache misses on the AI endpoints start failing (OpenRouter rejects the calls) while already-cached titles, summaries, and digests keep serving normally.
+
 ## Notes
 
 - FMX fetching and search are separate concerns. Search does not download FMX files.

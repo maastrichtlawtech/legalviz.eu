@@ -182,9 +182,27 @@ function isCombinedLawEnvelope(value) {
 }
 
 function createCombinedLawEnvelope(payload, rawXml = null) {
+  // Stamp the envelope with the parser version the payload itself reports
+  // (both the Formex and the EUR-Lex HTML parser embed `parserVersion` in
+  // their output). For locally-parsed laws this equals the bundled
+  // PARSER_VERSION, but a backend `/parsed` response may come from an older
+  // (or newer) deploy during a staggered rollout — labeling it with the
+  // bundled constant would cache an old-shape payload as "current", and with
+  // no rawXml to re-parse it could never self-heal. Fall back to the frontend
+  // constant only when the payload doesn't report a version at all.
+  //
+  // No cache-constant bump is needed for this stamping change: combined-v1
+  // envelopes are versioned by `parserVersion` itself (not by
+  // API_JSON_CACHE_VERSION, which guards the separate api-json-v1 format, nor
+  // by CACHE_VERSION, which is the IndexedDB schema version — neither shape
+  // changed). Every envelope the old logic mis-stamped carries the bundled
+  // constant of an earlier deploy (≤ 18; PARSER_VERSION became 19 in the same
+  // branch as this fix), so the parserVersion-mismatch check in
+  // getCachedLawPayload/fetchParsedLaw already re-parses or discards them.
+  const reported = payload?.parserVersion;
   const envelope = {
     format: "combined-v1",
-    parserVersion: PARSER_VERSION,
+    parserVersion: Number.isFinite(reported) ? reported : PARSER_VERSION,
     payload,
   };
   if (rawXml) envelope.rawXml = rawXml;
@@ -625,11 +643,18 @@ export async function fetchFormex(celex, lang = "EN") {
   const apiLang = toApiLang(lang);
   const cacheKey = makeCacheKey(celex, lang);
   return getInFlightRequest(`formex:${cacheKey}`, async () => {
-    // 1. Try cache first — raw XML string (legacy) or envelope with rawXml
+    // 1. Try cache first — raw XML string (legacy) or envelope with rawXml.
+    // Raw strings are validated with isFmxDocument, mirroring
+    // getCachedLawPayload: an entry poisoned before body validation existed
+    // (e.g. a proxy's HTML error page cached as "XML") must be a cache miss
+    // here too, or it gets served forever while the payload path rejects it.
     const cached = await cacheGet(cacheKey);
     if (typeof cached === "string") {
-      console.log(`[FormexAPI] Cache hit (raw): ${cacheKey}`);
-      return cached;
+      if (isFmxDocument(cached)) {
+        console.log(`[FormexAPI] Cache hit (raw): ${cacheKey}`);
+        return cached;
+      }
+      console.log(`[FormexAPI] Ignoring invalid raw cache entry: ${cacheKey}`);
     }
     if (isCombinedLawEnvelope(cached) && cached.rawXml) {
       console.log(`[FormexAPI] Cache hit (envelope rawXml): ${cacheKey}`);
@@ -667,7 +692,22 @@ export async function fetchFormex(celex, lang = "EN") {
       xmlText = await res.text();
     }
 
-    // 3. Cache it
+    // 3. Validate before caching. A proxy/captive portal can answer 200 with
+    // an HTML error page, and the JSON branch above can stringify a non-XML
+    // envelope — caching such a body would poison the entry (it parses to a
+    // generic Error later, which the /parsed fallback doesn't recognize,
+    // leaving the law permanently unloadable). Throw a FormexApiError that
+    // isMissingStructuredLawText (src/utils/law-viewer/errors.js) matches on
+    // its "formex … not available" message, so callers fall back to /parsed.
+    // Deliberately no markMissingFmx: the bad body may be transient.
+    if (typeof xmlText !== "string" || !isFmxDocument(xmlText)) {
+      throw new FormexApiError(
+        `Formex XML not available for ${celex}: response body is not a Formex document`,
+        { status: 502, code: "fmx_invalid_body" },
+      );
+    }
+
+    // 4. Cache it
     await cacheSet(cacheKey, xmlText);
     await upsertLawMeta(celex, { cachedAt: Date.now() });
     await pruneCacheIfNeeded(celex, PROTECTED_BUNDLED_CELEXES);
@@ -684,7 +724,9 @@ export async function fetchFormex(celex, lang = "EN") {
 export async function getCachedFormex(celex, lang = "EN") {
   if (!celex) return null;
   const cached = await cacheGet(makeCacheKey(celex, lang));
-  if (typeof cached === "string") return cached;
+  // Same validation as fetchFormex/getCachedLawPayload: a poisoned raw entry
+  // (cached before body validation existed) is a miss, not a hit.
+  if (typeof cached === "string") return isFmxDocument(cached) ? cached : null;
   if (isCombinedLawEnvelope(cached) && cached.rawXml) return cached.rawXml;
   return null;
 }
@@ -701,31 +743,38 @@ export async function getCachedLawPayload(celex, lang = "EN") {
   // Raw XML string (legacy cache entry) — parse, upgrade to envelope, return
   if (typeof cached === "string" && isFmxDocument(cached)) {
     console.log(`[FormexAPI] Upgrading raw XML cache to envelope: ${cacheKey}`);
-    const payload = parseFmxToCombined(cached);
-    await cacheSet(cacheKey, createCombinedLawEnvelope(payload, cached));
-    return createCombinedLawEnvelope(payload);
+    try {
+      const payload = parseFmxToCombined(cached);
+      await cacheSet(cacheKey, createCombinedLawEnvelope(payload, cached));
+      return createCombinedLawEnvelope(payload);
+    } catch {
+      // Unparseable despite looking like Formex — treat as a miss so the
+      // caller re-fetches instead of surfacing a dead-end load error.
+      return null;
+    }
   }
 
   if (isCombinedLawEnvelope(cached)) {
     // Current version — serve directly
     if (cached.parserVersion === PARSER_VERSION) return cached;
-    // Pre-versioning envelope (no parserVersion field) — accept as current
-    // and stamp it so we don't re-check every load.
-    if (cached.parserVersion == null) {
-      console.log(`[FormexAPI] Stamping pre-versioning cache entry: ${cacheKey}`);
-      cached.parserVersion = PARSER_VERSION;
-      await cacheSet(cacheKey, cached);
-      return cached;
+    // Stale — including pre-versioning envelopes (parserVersion == null),
+    // whose parser vintage is unknown. These used to be stamped as current
+    // here, but an unknown-vintage payload may predate shape changes, so it
+    // is treated exactly like any other stale entry: re-parse from raw XML
+    // when we have it, otherwise discard so the caller re-fetches.
+    if (typeof cached.rawXml === "string" && isFmxDocument(cached.rawXml)) {
+      console.log(`[FormexAPI] Re-parsing stale cache (parser v${cached.parserVersion ?? "pre-versioning"} → v${PARSER_VERSION}): ${cacheKey}`);
+      try {
+        const payload = parseFmxToCombined(cached.rawXml);
+        const envelope = createCombinedLawEnvelope(payload, cached.rawXml);
+        await cacheSet(cacheKey, envelope);
+        return envelope;
+      } catch {
+        return null;
+      }
     }
-    // Stale envelope with raw XML — re-parse locally
-    if (cached.rawXml) {
-      console.log(`[FormexAPI] Re-parsing stale cache (parser v${cached.parserVersion} → v${PARSER_VERSION}): ${cacheKey}`);
-      const payload = parseFmxToCombined(cached.rawXml);
-      const envelope = createCombinedLawEnvelope(payload, cached.rawXml);
-      await cacheSet(cacheKey, envelope);
-      return envelope;
-    }
-    // Stale envelope without raw XML (from /parsed fallback) — discard
+    // Stale envelope without (valid) raw XML — e.g. a /parsed response from
+    // an older backend deploy — discard so the caller re-fetches.
     console.log(`[FormexAPI] Stale cache, no raw XML available: ${cacheKey}`);
     return null;
   }

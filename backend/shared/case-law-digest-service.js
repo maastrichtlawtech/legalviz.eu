@@ -6,7 +6,7 @@ const {
   stableHash,
   makeSingleFlight,
   loadCache,
-  saveCache,
+  saveCacheEntry,
   extractJsonObject,
   normalizeCites,
 } = require('./ai-digest-utils');
@@ -238,8 +238,9 @@ async function ensureCaseLawDigest({
     }
 
     const generated = await generateCaseLawDigest(input, { apiKey, model, chatComplete: chatCompleteImpl });
+    let entry = null;
     if (cacheDir) {
-      cache[key] = {
+      entry = {
         version: CACHE_VERSION,
         schemaVersion: SCHEMA_VERSION,
         promptVersion: PROMPT_VERSION,
@@ -249,14 +250,14 @@ async function ensureCaseLawDigest({
         generatedAt: new Date().toISOString(),
         digest: generated.digest,
       };
-      saveCache(cacheDir, CACHE_FILE, cache);
+      saveCacheEntry(cacheDir, CACHE_FILE, key, entry);
     }
 
     return {
       digest: generated.digest,
       model: generated.digest.noCaseLaw ? null : (generated.model || model),
       usage: generated.usage || null,
-      generatedAt: cache[key]?.generatedAt || null,
+      generatedAt: entry?.generatedAt || null,
       caseLawCacheVersion: CASE_LAW_CACHE_VERSION,
       cached: false,
     };

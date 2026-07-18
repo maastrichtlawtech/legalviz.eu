@@ -68,6 +68,20 @@ function saveCache(cacheDir, cacheFile, cache) {
   fs.renameSync(tempPath, filePath);
 }
 
+// Merge one entry over a freshly re-read copy of the cache file, then write it
+// atomically. The services load the cache before an (often multi-second) model
+// call and write after it; writing back that stale in-memory snapshot would
+// silently drop any entry a concurrent miss on a *different* key persisted in
+// between. The read-merge-write below is fully synchronous — no await between
+// the read and the rename — so in this single-process server it cannot
+// interleave with another JS-side write (no extra mutex needed).
+function saveCacheEntry(cacheDir, cacheFile, key, entry) {
+  const cache = loadCache(cacheDir, cacheFile);
+  cache[key] = entry;
+  saveCache(cacheDir, cacheFile, cache);
+  return cache;
+}
+
 function extractJsonObject(text) {
   const trimmed = String(text || '').trim()
     .replace(/^```(?:json)?\s*/i, '')
@@ -134,6 +148,7 @@ module.exports = {
   makeSingleFlight,
   loadCache,
   saveCache,
+  saveCacheEntry,
   extractJsonObject,
   buildCitationIndex,
   normalizeCites,

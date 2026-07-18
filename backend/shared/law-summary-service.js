@@ -9,7 +9,7 @@ const {
   stableHash,
   makeSingleFlight,
   loadCache,
-  saveCache,
+  saveCacheEntry,
 } = require('./ai-digest-utils');
 
 const CACHE_FILE = 'law-summary-cache-v1.json';
@@ -317,8 +317,7 @@ async function ensureLawSummary({
     // needed. Refresh the remembered file name if it moved.
     if (servable && rawHash && cached.rawHash === rawHash) {
       if (cacheDir && cached.sourceFile !== (source.sourceFile || null)) {
-        cache[key] = { ...cached, sourceFile: source.sourceFile || null };
-        saveCache(cacheDir, CACHE_FILE, cache);
+        saveCacheEntry(cacheDir, CACHE_FILE, key, { ...cached, sourceFile: source.sourceFile || null });
       }
       return cachedResult(cached);
     }
@@ -331,16 +330,18 @@ async function ensureLawSummary({
       // Same parsed input: adopt the raw-source fingerprint so the next
       // request can take the fast path without re-parsing. This also
       // migrates entries written before rawHash/sourceFile existed.
+      let entry = cached;
       if (cacheDir && rawHash && (cached.rawHash !== rawHash || cached.sourceFile !== (source.sourceFile || null))) {
-        cache[key] = { ...cached, rawHash, sourceFile: source.sourceFile || null };
-        saveCache(cacheDir, CACHE_FILE, cache);
+        entry = { ...cached, rawHash, sourceFile: source.sourceFile || null };
+        saveCacheEntry(cacheDir, CACHE_FILE, key, entry);
       }
-      return cachedResult(cache[key] || cached);
+      return cachedResult(entry);
     }
 
     const generated = await generateLawSummary(input, { apiKey, model, chatComplete: chatCompleteImpl });
+    let entry = null;
     if (cacheDir) {
-      cache[key] = {
+      entry = {
         version: CACHE_VERSION,
         schemaVersion: SCHEMA_VERSION,
         promptVersion: PROMPT_VERSION,
@@ -351,14 +352,14 @@ async function ensureLawSummary({
         generatedAt: new Date().toISOString(),
         summary: generated.summary,
       };
-      saveCache(cacheDir, CACHE_FILE, cache);
+      saveCacheEntry(cacheDir, CACHE_FILE, key, entry);
     }
 
     return {
       summary: generated.summary,
       model: generated.model || model,
       usage: generated.usage || null,
-      generatedAt: cache[key]?.generatedAt || null,
+      generatedAt: entry?.generatedAt || null,
       cached: false,
     };
   });

@@ -33,7 +33,7 @@ import {
  * Bump this whenever the parser output changes (new fields, bug fixes, etc.)
  * so that cached parsed results are automatically re-parsed from raw XML.
  */
-export const PARSER_VERSION = 18;
+export const PARSER_VERSION = 19;
 
 // ---------------------------------------------------------------------------
 // FMX → HTML conversion helpers
@@ -350,7 +350,14 @@ function appendFootnotes(html, ctx) {
 }
 
 function escapeHtml(s) {
-  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  // Quotes must be escaped too: output lands inside double-quoted attributes
+  // (data-marker, data-oj-*), where a bare " breaks out of the attribute.
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 // ---------------------------------------------------------------------------

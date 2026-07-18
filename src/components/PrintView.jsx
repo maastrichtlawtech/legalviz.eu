@@ -1,5 +1,6 @@
 import React, { useMemo } from "react";
 import { mapRecitalsToArticles } from "../utils/nlp.js";
+import { sanitizeLawHtml } from "../utils/sanitizeHtml.js";
 
 export function PrintView({ data, options, uiLocale = "en", labels }) {
   const { title, articles, recitals, annexes } = data ?? {};
@@ -66,7 +67,7 @@ export function PrintView({ data, options, uiLocale = "en", labels }) {
           </h5>
           <div
             className="prose prose-sm prose-slate max-w-none text-justify print-content"
-            dangerouslySetInnerHTML={{ __html: article.article_html }}
+            dangerouslySetInnerHTML={{ __html: sanitizeLawHtml(article.article_html) }}
           />
 
           {/* Render Related Recitals */}
@@ -79,7 +80,7 @@ export function PrintView({ data, options, uiLocale = "en", labels }) {
                     <span className="font-bold text-[10px] text-gray-400 shrink-0 mt-0.5">({r.recital_number})</span>
                     <div 
                       className="prose prose-xs prose-slate max-w-none text-justify print-content text-gray-600"
-                      dangerouslySetInnerHTML={{ __html: r.recital_html }} 
+                      dangerouslySetInnerHTML={{ __html: sanitizeLawHtml(r.recital_html) }} 
                     />
                   </div>
                 ))}
@@ -119,7 +120,7 @@ export function PrintView({ data, options, uiLocale = "en", labels }) {
                     <span className="font-bold text-xs text-gray-500 shrink-0 mt-0.5">({r.recital_number})</span>
                     <div 
                       className="prose prose-xs prose-slate max-w-none text-justify print-content"
-                      dangerouslySetInnerHTML={{ __html: r.recital_html }} 
+                      dangerouslySetInnerHTML={{ __html: sanitizeLawHtml(r.recital_html) }} 
                     />
                  </div>
               </div>
@@ -154,7 +155,7 @@ export function PrintView({ data, options, uiLocale = "en", labels }) {
                 </h3>
                 <div
                   className="prose prose-sm prose-slate max-w-none print-content"
-                  dangerouslySetInnerHTML={{ __html: ax.annex_html }}
+                  dangerouslySetInnerHTML={{ __html: sanitizeLawHtml(ax.annex_html) }}
                 />
               </div>
             ))}

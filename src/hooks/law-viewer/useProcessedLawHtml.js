@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { injectDefinitionTooltips } from "../../utils/definitions.js";
+import { sanitizeLawHtml } from "../../utils/sanitizeHtml.js";
 
 function escapeHtml(value) {
   return String(value || "")
@@ -31,10 +32,10 @@ export function useProcessedLawHtml({ data, selected, selectedEntry = null, acti
     const skipDefinitions = definitionEntry?.article_title &&
       /definitions?|definicj/i.test(definitionEntry.article_title);
 
-    return injectDefinitionTooltips(selectedHtml, data.definitions, {
+    return sanitizeLawHtml(injectDefinitionTooltips(selectedHtml, data.definitions, {
       skipDefinitionsArticle: skipDefinitions,
       langCode: data.langCode,
       activeTerm: activeDefinitionTerm,
-    });
+    }));
   }, [activeDefinitionTerm, data.articles, data.definitions, data.langCode, selected, selectedEntry]);
 }

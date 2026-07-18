@@ -52,6 +52,19 @@ export function useRecitalMap({ data, currentLaw }) {
         setRecitalMap(withOrphanRecitals(map));
 
         if (!cacheKey) return;
+
+        // Because the cache key is language-invariant, a degenerate map (e.g.
+        // computed from a language the tokenizer failed on) would be served for
+        // EVERY language of this law. If a law with a meaningful number of
+        // recitals and articles produced a map where (almost) everything is
+        // orphaned, skip the cache write so a later visit can recompute.
+        const orphanCount = (map.get(null) || []).length;
+        const looksDegenerate =
+          data.recitals.length >= 5 &&
+          data.articles.length >= 3 &&
+          orphanCount >= data.recitals.length * 0.95;
+        if (looksDegenerate) return;
+
         try {
           localStorage.setItem(cacheKey, JSON.stringify(Array.from(map.entries())));
         } catch (error) {

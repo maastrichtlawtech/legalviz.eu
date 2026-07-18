@@ -58,6 +58,28 @@ describe("tokenize", () => {
     // German stop words should filter more aggressively for DE text
     expect(deTokens.length).toBeLessThanOrEqual(enTokens.length);
   });
+
+  it("tokenizes Greek text (non-Latin script)", () => {
+    const tokens = tokenize(
+      "Η προστασία των δεδομένων προσωπικού χαρακτήρα είναι θεμελιώδες δικαίωμα.",
+      "EL"
+    );
+    expect(tokens.length).toBeGreaterThan(0);
+    expect(tokens).toContain("προστασία");
+    expect(tokens).toContain("δεδομένων");
+    // EL stop word must still be filtered
+    expect(tokens).not.toContain("είναι");
+  });
+
+  it("tokenizes Bulgarian text (Cyrillic script)", () => {
+    const tokens = tokenize(
+      "Защитата на личните данни е основно право на всеки гражданин.",
+      "BG"
+    );
+    expect(tokens.length).toBeGreaterThan(0);
+    expect(tokens).toContain("защитата");
+    expect(tokens).toContain("данни");
+  });
 });
 
 describe("mapRecitalsToArticles", () => {
@@ -191,6 +213,37 @@ describe("mapRecitalsToArticles", () => {
       mapRecitalsToArticles(deRecitals, deArticles, "DE").get(null)
     ).toEqual(["1"]);
   });
+
+  it("maps Greek recitals to Greek articles instead of orphaning them", () => {
+    // Regression: the old tokenizer stripped all Greek characters, so every
+    // Greek (and Bulgarian) recital ended up an orphan.
+    const elArticles = [
+      {
+        article_number: "1",
+        article_title: "Αντικείμενο",
+        article_html:
+          "<p>Ο παρών κανονισμός θεσπίζει κανόνες για την προστασία των δεδομένων προσωπικού χαρακτήρα.</p>",
+      },
+      {
+        article_number: "2",
+        article_title: "Πεδίο εφαρμογής",
+        article_html:
+          "<p>Ο παρών κανονισμός εφαρμόζεται στην επεξεργασία από υπευθύνους εγκατεστημένους στην Ένωση.</p>",
+      },
+    ];
+    const elRecitals = [
+      {
+        recital_number: "1",
+        recital_text:
+          "Η προστασία των δεδομένων προσωπικού χαρακτήρα είναι θεμελιώδες δικαίωμα.",
+      },
+    ];
+
+    const result = mapRecitalsToArticles(elRecitals, elArticles, "EL");
+
+    expect(result.get(null)).toEqual([]);
+    expect(result.get("1").map((r) => r.recital_number)).toContain("1");
+  });
 });
 
 describe("buildSearchIndex + searchIndex", () => {
@@ -242,6 +295,66 @@ describe("buildSearchIndex + searchIndex", () => {
       expect(results[0]).toHaveProperty("title");
       expect(results[0]).toHaveProperty("score");
     }
+  });
+
+  it("carries the docs' langCode onto the index", () => {
+    const index = buildSearchIndex({
+      articles: [
+        {
+          article_number: "1",
+          article_title: "Gegenstand",
+          article_html: "<p>Datenschutz Grundsätze</p>",
+          langCode: "DE",
+        },
+      ],
+    });
+    expect(index.langCode).toBe("DE");
+  });
+
+  it("tokenizes the query with the index language (doc/query consistency)", () => {
+    // "verordnung" is a German stop word: the DE-tokenized docs never indexed
+    // it. The query must go through the same DE tokenizer so it becomes empty
+    // and falls back to substring search, instead of being TF-IDF-matched
+    // against a term no document carries (which returned nothing).
+    const index = buildSearchIndex({
+      articles: [
+        {
+          article_number: "1",
+          article_title: "Gegenstand",
+          article_html: "<p>Diese Verordnung regelt den Datenschutz.</p>",
+          langCode: "DE",
+        },
+      ],
+    });
+    const results = searchIndex("verordnung", index);
+    expect(results.length).toBeGreaterThan(0);
+    expect(results[0].id).toBe("1");
+  });
+
+  it("searches Greek documents with a Greek query end-to-end", () => {
+    const index = buildSearchIndex({
+      articles: [
+        {
+          article_number: "1",
+          article_title: "Αντικείμενο",
+          article_html:
+            "<p>Η προστασία των δεδομένων προσωπικού χαρακτήρα είναι θεμελιώδες δικαίωμα.</p>",
+          langCode: "EL",
+        },
+        {
+          article_number: "2",
+          article_title: "Πεδίο εφαρμογής",
+          article_html:
+            "<p>Ο κανονισμός εφαρμόζεται στην επεξεργασία στην Ένωση.</p>",
+          langCode: "EL",
+        },
+      ],
+    });
+    // Not a contiguous substring of any doc, so only TF-IDF can find it —
+    // the old tokenizer reduced both docs and query to zero Greek tokens.
+    const results = searchIndex("προστασία δεδομένων", index);
+    expect(results.length).toBeGreaterThan(0);
+    expect(results[0].id).toBe("1");
   });
 });
 

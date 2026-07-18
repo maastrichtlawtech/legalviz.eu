@@ -1,5 +1,5 @@
 // NLP Algorithm Version - bump this when algorithm changes to invalidate cache
-export const NLP_VERSION = 14;
+export const NLP_VERSION = 15;
 
 const MONOTONICITY_BETA = 0.9;
 const MONOTONICITY_GAMMA = 2;
@@ -23,7 +23,11 @@ export function tokenize(text, langCode) {
   const stopWords = langCode ? getStopWords(langCode) : DEFAULT_STOP_WORDS;
   return text
     .toLowerCase()
-    .replace(/[^\w\s\u00C0-\u024F]/g, " ") // replace punctuation with space (keep accented/Polish chars)
+    // Replace punctuation with space, keeping letters in ANY script (Latin,
+    // Greek, Cyrillic, \u2026), digits, combining marks and underscore. The old
+    // ASCII/Latin-Extended-only class stripped Greek and Bulgarian text to
+    // nothing, orphaning every recital and breaking in-document search.
+    .replace(/[^\p{L}\p{N}\p{M}_\s]/gu, " ")
     .split(/\s+/)
     .filter(w => w.length > 2 && !stopWords.has(w));
 }
@@ -334,7 +338,12 @@ export function buildSearchIndex(data) {
     vec: computeTFIDFVector(doc.tokens, idf)
   }));
 
-  return { docs: docVectors, idf };
+  // Remember the corpus language so queries can be tokenized with the same
+  // stop-word list the docs were indexed with. Docs from one build share a
+  // language, so the first one that carries a langCode is representative.
+  const langCode = data.langCode || docs.find(doc => doc.langCode)?.langCode;
+
+  return { docs: docVectors, idf, langCode };
 }
 
 /**
@@ -347,7 +356,9 @@ export function searchIndex(query, index) {
   if (!index || !index.docs) return [];
 
   const q = query.toLowerCase();
-  const qTokens = tokenize(q);
+  // Tokenize the query with the same language the index docs were tokenized
+  // with, so stop-word handling matches on both sides.
+  const qTokens = tokenize(q, index.langCode);
 
   if (qTokens.length === 0) {
     // Fallback to simple substring match on pre-processed docs

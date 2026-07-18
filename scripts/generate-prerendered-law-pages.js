@@ -17,6 +17,12 @@ const FEATURED_LAWS = getBundledLaws();
 // the site is, not just a snippet of the underlying legal text (which reads
 // like a plain legal-text mirror otherwise).
 const APP_BLURB = "LegalViz.EU is a free interactive reader for EU law.";
+// FEATURED_LAWS entries carry no article/recital counts, so a failed law-data
+// fetch would otherwise fall back to generating zero deep pages — silently
+// dropping hundreds of already-indexed SEO pages from production. Default to
+// failing the build instead; set PRERENDER_ALLOW_PARTIAL=1 to restore the old
+// warn-and-continue behavior (e.g. offline/dev builds without API access).
+const ALLOW_PARTIAL = ["1", "true"].includes(String(process.env.PRERENDER_ALLOW_PARTIAL || "").toLowerCase());
 
 function installDomGlobals() {
   const { window } = new JSDOM("<!doctype html><html><body></body></html>");
@@ -404,7 +410,15 @@ async function buildLawPages(template, law) {
     data = await fetchLawData(law);
     console.log(`[prerender] Loaded ${law.slug} from remote source`);
   } catch (error) {
-    console.warn(`[prerender] Falling back to metadata-only page for ${law.slug}: ${error.message}`);
+    if (!ALLOW_PARTIAL) {
+      throw new Error(
+        `Could not fetch law data for ${law.slug} (${error.message}). `
+        + "Featured laws carry no article/recital counts, so continuing would generate zero article/recital pages. "
+        + "Set PRERENDER_ALLOW_PARTIAL=1 to build metadata-only pages anyway.",
+        { cause: error },
+      );
+    }
+    console.warn(`[prerender] PRERENDER_ALLOW_PARTIAL: falling back to metadata-only page for ${law.slug}: ${error.message}`);
   }
 
   // Fetched independently from the main law data: a slow/cold cache or a

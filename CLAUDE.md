@@ -17,7 +17,7 @@ npm run build                 # vite build + copy-404 + prerender law pages + si
 npm test                      # test:web (vitest) + test:api (node --test)
 npm run test:web              # frontend unit tests (vitest run)
 npm run test:watch            # vitest watch mode
-npm run test:api              # backend tests: node --test search/*.test.js shared/*.test.js routes/*.test.js bin/*.test.js (run from backend/)
+npm run test:api              # backend tests: node --test search/*.test.js shared/*.test.js routes/*.test.js bin/*.test.js mcp/*.test.js (run from backend/)
 ```
 
 Single test file (frontend, vitest): `npx vitest run src/utils/nlp.test.js`
@@ -27,7 +27,7 @@ The fmxParser.test.js is a vitest test (not part of the backend node:test glob).
 
 Backend CLI (`eurlex`) commands are documented in [backend/README.md](backend/README.md); run via `npx eurlex <command>` from `backend/` after `npm install`.
 
-Requires Node.js v24+.
+Requires Node.js v22.12+ (`engines` in root and backend `package.json`; the backend needs require(esm), unflagged since 22.12).
 
 Subtree-specific guidance lives in nested memory files that Claude Code loads on demand when you work in them: [backend/CLAUDE.md](backend/CLAUDE.md) (API, CLI, MCP, AI services) and [src/CLAUDE.md](src/CLAUDE.md) (React frontend). Keep this root file for cross-cutting concerns; push backend-only or frontend-only detail down into those.
 
@@ -65,7 +65,7 @@ Nearly every expensive operation — Formex parsing, TF‑IDF recital mapping, C
 | Article-digest JSON schema / prompt | `SCHEMA_VERSION` / `PROMPT_VERSION` | `backend/shared/article-digest-service.js` |
 | Whole-law digest JSON schema / prompt | `SCHEMA_VERSION` / `PROMPT_VERSION` | `backend/shared/case-law-digest-service.js` |
 | Persisted analytics shape (`analytics.json` fields) | `ANALYTICS_SCHEMA_VERSION` | `backend/shared/analytics.js` |
-| Runtime SQLite tables/indexes | `SQLITE_SCHEMA_VERSION` | `backend/search/legal-cache-store.js` and `backend/search/build-sqlite-data.js` |
+| Runtime SQLite tables/indexes | `SQLITE_SCHEMA_VERSION` | `backend/search/legal-cache-store.js`, `backend/search/build-sqlite-data.js`, and `backend/search/citation-graph-store.js` (three copies, kept in lock-step) |
 | Precomputed data republished as a new GitHub Release (`data-vN`) | `DATA_RELEASE_TAG` → `data-vN` | `backend/Dockerfile` |
 
 The data caches are the one entry above that isn't a code constant: they ship as **GitHub Release assets** (they're far too large to commit), so republishing them means creating a new `data-vN` release **and** bumping `DATA_RELEASE_TAG` in `backend/Dockerfile` in the same commit. Skip the bump and every deploy keeps fetching the old data no matter what you rebuilt. The Dockerfile fetches **every** asset from that one tag, so a new release must carry the full set — re-upload the unchanged ones alongside the changed one, or the Docker build 404s.

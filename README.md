@@ -63,14 +63,17 @@ The API also exposes an [MCP](https://modelcontextprotocol.io) server at `https:
 
 ### Setup
 
-Requires Node.js v24+.
+Requires Node.js v22.12+.
 
 ```bash
 git clone https://github.com/maastrichtlawtech/eur-lex-visualiser.git
 cd eur-lex-visualiser
-npm install
-npm run dev          # frontend on http://localhost:5173
+npm install                    # frontend deps
+(cd backend && npm install)    # backend deps — required: `npm run dev` also starts the API
+npm run dev                    # frontend on http://localhost:5173 + API on http://localhost:3000
 ```
+
+To run only the frontend (no backend install needed), use `npm run dev:web`.
 
 ### Project Structure
 

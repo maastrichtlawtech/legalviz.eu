@@ -9,7 +9,7 @@ Backend-only notes. The root [CLAUDE.md](../CLAUDE.md) has the monorepo picture 
 ```bash
 npm start                     # API server on :3000 (or $PORT)
 npm run dev                   # API with --watch (auto-restart)
-npm test                      # node --test search/*.test.js shared/*.test.js routes/*.test.js bin/*.test.js
+npm test                      # node --test search/*.test.js shared/*.test.js routes/*.test.js bin/*.test.js mcp/*.test.js
 npm run test:search           # search tests only
 npm run build:search-cache    # build the MiniSearch metadata cache into search/data/
 npm run build:sqlite-data     # convert search + case-law JSON into the runtime SQLite store

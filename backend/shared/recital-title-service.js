@@ -1,8 +1,7 @@
-const fs = require('fs');
-const path = require('path');
 const crypto = require('crypto');
 
 const { chatComplete } = require('./openrouter-chat');
+const { loadCache, saveCacheEntry, makeSingleFlight } = require('./ai-digest-utils');
 
 const CACHE_FILE = 'recital-title-cache-v1.json';
 const CACHE_VERSION = 2;
@@ -46,26 +45,6 @@ function contentHash(recitals) {
 
 function cacheKey(celex, lang) {
   return `${String(celex || '').toUpperCase()}_${String(lang || 'ENG').toUpperCase()}`;
-}
-
-function loadCache(cacheDir) {
-  try {
-    const filePath = path.join(cacheDir, CACHE_FILE);
-    if (!fs.existsSync(filePath)) return {};
-    const parsed = JSON.parse(fs.readFileSync(filePath, 'utf8'));
-    return parsed && typeof parsed === 'object' ? parsed : {};
-  } catch {
-    return {};
-  }
-}
-
-function saveCache(cacheDir, cache) {
-  try {
-    fs.mkdirSync(cacheDir, { recursive: true });
-    fs.writeFileSync(path.join(cacheDir, CACHE_FILE), JSON.stringify(cache, null, 2), 'utf8');
-  } catch {
-    // best-effort cache
-  }
 }
 
 function hasTitles(titles) {
@@ -156,39 +135,52 @@ async function generateRecitalTitles({ celex, lang, recitals, apiKey, model }) {
   return titles;
 }
 
+const withSingleFlight = makeSingleFlight();
+
 async function ensureRecitalTitles({ celex, lang, recitals, cacheDir, apiKey, model }) {
   const hash = contentHash(recitals);
   const key = cacheKey(celex, lang);
-  const cache = cacheDir ? loadCache(cacheDir) : {};
-  const cached = cache[key];
+  // Coalesce concurrent misses onto one in-flight generation: without this, N
+  // simultaneous requests for the same uncached law each paid the full batch
+  // of model calls (this service predates the shared digest plumbing).
+  return withSingleFlight(`${key}:${hash}:${model || ''}`, async () => {
+    const cache = cacheDir ? loadCache(cacheDir, CACHE_FILE) : {};
+    const cached = cache[key];
 
-  if (
-    cached?.version === CACHE_VERSION
-    && cached?.contentHash === hash
-    && cached?.model === model
-    && hasTitles(cached?.titles)
-  ) {
-    return {
-      titles: cached.titles,
-      model: cached.model || null,
-      cached: true,
-    };
-  }
+    if (
+      cached?.version === CACHE_VERSION
+      && cached?.contentHash === hash
+      && cached?.model === model
+      && hasTitles(cached?.titles)
+    ) {
+      return {
+        titles: cached.titles,
+        model: cached.model || null,
+        cached: true,
+      };
+    }
 
-  const titles = await generateRecitalTitles({ celex, lang, recitals, apiKey, model });
+    const titles = await generateRecitalTitles({ celex, lang, recitals, apiKey, model });
 
-  if (cacheDir) {
-    cache[key] = {
-      version: CACHE_VERSION,
-      contentHash: hash,
-      model,
-      generatedAt: new Date().toISOString(),
-      titles,
-    };
-    saveCache(cacheDir, cache);
-  }
+    if (cacheDir) {
+      try {
+        // Atomic merge-on-save via the shared helper: a crash mid-write can no
+        // longer corrupt the whole cache file, and a concurrent write for a
+        // different law is no longer silently discarded.
+        saveCacheEntry(cacheDir, CACHE_FILE, key, {
+          version: CACHE_VERSION,
+          contentHash: hash,
+          model,
+          generatedAt: new Date().toISOString(),
+          titles,
+        });
+      } catch {
+        // best-effort cache
+      }
+    }
 
-  return { titles, model, cached: false };
+    return { titles, model, cached: false };
+  });
 }
 
 /**
@@ -202,7 +194,7 @@ function getCachedRecitalTitles({ celex, lang, recitals, cacheDir }) {
   if (!cacheDir) return { titles: {}, cached: false };
   const hash = contentHash(recitals);
   const key = cacheKey(celex, lang);
-  const cache = loadCache(cacheDir);
+  const cache = loadCache(cacheDir, CACHE_FILE);
   const cached = cache[key];
 
   if (

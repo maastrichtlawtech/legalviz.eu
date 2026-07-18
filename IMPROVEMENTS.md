@@ -2,6 +2,8 @@
 
 Full-codebase review (backend API & AI services, parsers & search, React frontend, tests/build/CI/extension), July 2026. Every finding below was verified against source; file:line references are as of this commit.
 
+**Status:** findings marked **FIXED (this branch)** were resolved on the same PR that introduced this review. Still open: M5 (Playwright DoS hardening), M7 (service-worker precache ordering), the residual of C2 (per-endpoint LLM rate limiting), and most of the Low list.
+
 **Status of the previous roadmap in this file:** largely done and therefore removed — the repo now has 730+ passing tests across vitest and node:test, `LawViewer.jsx` is decomposed (582 lines + 16 hooks), CI runs lint + tests + build on every PR, and lint is clean. What follows replaces it.
 
 ---
@@ -36,18 +38,26 @@ The four AI endpoints (recital titles, law summary, article digest, whole-law di
 ### H1. `escapeHtml` in the Formex parser doesn't escape quotes, but feeds double-quoted attributes — **FIXED (this branch)**
 `fmxParser.mjs:352-354` escaped only `& < >`, yet its output lands inside `data-marker="…"` and `data-oj-*="…"` attributes — a `"` in document content broke out of the attribute. Fixed by aligning it with the HTML parser's `escapeHtml` (quotes and apostrophes now escaped) and bumping `PARSER_VERSION` to 19.
 
-### H2. Cross-reference grammar: comma+digit over-match creates spurious article links
+### H2. Cross-reference grammar: comma+digit over-match creates spurious article links — **FIXED (this branch)**
+
+> Fixed: a bare comma now continues an enumeration only when the following number reads like another list item (group, qualifier, further comma-and-number, or closing list word). Regression-tested. Original finding:
 `backend/shared/legal-reference-core.mjs:194` — the enumeration separator accepts a bare `,` so `"Article 4(1), 30 % of the allowances"` yields refs `4` and `30`, and `injectCrossRefLinks` renders "30" as a clickable link to `#article-30` (which usually exists in a large law, so integrity checks don't strip it). Wrong links and wrong `crossReferences` edges persist into caches. Verified by execution.
 **Fix:** require an article-ish continuation (e.g. `(n)`, "and", "to") after a bare comma; bump `PARSER_VERSION` + rebuild graph data.
 
-### H3. Coordinated act lists only capture the first identifier
+### H3. Coordinated act lists only capture the first identifier — **FIXED (this branch)**
+
+> Fixed: a tail scanner now emits one reference per conjunction-separated identifier after each act-word match, stopping at the next act word. The citation graph still needs a `data-vN` rebuild to pick up the recovered edges. Original finding:
 `fmxParser.mjs:408-417` — `"Directives 89/665/EEC and 92/13/EEC"` extracts only the first directive because the regex requires an act word immediately before each identifier. This phrasing is ubiquitous in repeal/amendment clauses, so the citation graph is systematically missing external edges corpus-wide. Fix + `PARSER_VERSION` bump + `data-vN` republish.
 
-### H4. NLP tokenizer destroys Greek/Cyrillic text, and the empty result poisons a language-invariant cache
+### H4. NLP tokenizer destroys Greek/Cyrillic text, and the empty result poisons a language-invariant cache — **FIXED (this branch)**
+
+> Fixed: Unicode-aware tokenizer (`\p{L}\p{N}`), degenerate maps are no longer cached, queries tokenize with the index language, `NLP_VERSION` bumped to 15. Original finding:
 `src/utils/nlp.js:26` keeps only ASCII + Latin-Extended, so EL/BG laws tokenize to nothing: every recital is orphaned and in-document search returns zero results. Worse, `useRecitalMap.js:29-35` caches the recital→article map under a key with **no language component**, so opening a law in Greek first stores the empty map and serves it for English too until an `NLP_VERSION` bump.
 **Fix:** switch to a Unicode-aware tokenizer (`\p{L}\p{N}`), bump `NLP_VERSION`, and either key the cache by language or only cache maps built from a designated pivot language.
 
-### H5. Cross-law navigation rewrites deep links from stale data
+### H5. Cross-law navigation rewrites deep links from stale data — **FIXED (this branch)**
+
+> Fixed: `useLawSelection` now bails until `data.celex` matches the law in the URL, with regression tests. Original finding:
 `src/hooks/law-viewer/useLawSelection.js:12-23` resolves the URL's article against `data` that may still hold the *previous* law during the same commit; not finding it, it falls back to the first article and `navigateToCanonical(..., { replace: true })` destroys the intended deep link. `useLawDocument` tags `data.celex` for exactly this guard and `LawViewer.jsx:220,288` uses it — `useLawSelection` doesn't.
 **Fix:** bail out of the effect when `data.celex` doesn't match the URL's law.
 
@@ -55,50 +65,66 @@ The four AI endpoints (recital titles, law summary, article digest, whole-law di
 
 ## Medium
 
-### M1. Frontend cache can be permanently poisoned by an unvalidated response
+### M1. Frontend cache can be permanently poisoned by an unvalidated response — **FIXED (this branch)**
+
+> Fixed: bodies are validated before caching (invalid ones trigger the `/parsed` fallback), poisoned raw entries read as cache misses, envelopes are stamped with the payload-reported parser version, and unknown-vintage envelopes are treated as stale. Original finding:
 `src/utils/formexApi.js:659-671` writes whatever body came back (including proxy error pages) to IndexedDB *before* parse validation; subsequent loads serve the poisoned entry as a cache hit, the parse error isn't recognized by `isMissingStructuredLawText`, the `/parsed` fallback never fires, and the law stays unloadable until eviction/reset. Relatedly, `/parsed` responses are stamped with the *frontend's* `PARSER_VERSION` (`formexApi.js:995`) instead of the `parserVersion` the backend actually reports, masking version skew during staggered deploys; and unknown-vintage envelopes are stamped current rather than discarded (:713-719).
 **Fix:** validate before caching; propagate the backend-reported parser version into the envelope.
 
-### M2. All four AI JSON caches have a lost-update race; recital titles also lack single-flight and atomic writes
+### M2. All four AI JSON caches have a lost-update race; recital titles also lack single-flight and atomic writes — **FIXED (this branch)**
+
+> Fixed: `saveCacheEntry` re-reads and merges before the atomic tmp+rename write in all four services, and the recital-title service now uses the shared single-flight and atomic-save plumbing. Original finding:
 Pattern in `law-summary-service.js:293-354`, `article-digest-service.js:208-240`, `case-law-digest-service.js:220-252`, `recital-title-service.js:162-188`: load whole file → await LLM (seconds) → save whole file. Two concurrent misses on *different* keys silently discard one paid-for result, which is then regenerated (and paid for) later. `recital-title-service.js` additionally predates the shared plumbing: no `makeSingleFlight` (N concurrent requests each pay the full batch) and a direct `writeFileSync` with no tmp+rename — a crash mid-write corrupts the cache file, which `loadCache` silently swallows, wiping every generated title.
 **Fix:** merge-on-save (re-read + merge before write) or per-key files; port recital titles onto `ai-digest-utils` (single-flight + atomic save).
 
-### M3. Cached digests still require a live Cellar round trip
+### M3. Cached digests still require a live Cellar round trip — **FIXED (this branch)**
+
+> Fixed: the digest routes share the `/case-law` route's short-TTL resolution memo, so repeat requests within the TTL are served without hitting Cellar. (A full fix — serving the cached digest when Cellar is down beyond the TTL — would need the digest cache key decoupled from the live payload hash.) Original finding:
 `api-routes.js:530,583` call `fetchCaseLaw` unconditionally because `sourceHash` is computed before the cache check (unlike `/case-law`'s `resolutionCache` at :380-381). A Cellar outage 503s fully-cached digests, and a hiccup returning a partial case list changes the hash and silently regenerates the digest at LLM cost — overwriting good cache with one built from incomplete data.
 
-### M4. Outbound-call timeout coverage is inconsistent
+### M4. Outbound-call timeout coverage is inconsistent — **FIXED (this branch)**
+
+> Fixed: `chatComplete`/`chatStream` now enforce a default 120s ceiling (`OPENROUTER_TIMEOUT_MS` to override, combined with any caller signal), and both `fetchWithTimeout` helpers use `AbortSignal.timeout`, which stays armed through body reads. Original finding:
 No service passes an abort signal to `chatComplete` (`openrouter-chat.js:66-76`) — a stalled OpenRouter stream holds the request open for minutes with no cancellation on client disconnect, while the model keeps billing. Both `fetchWithTimeout` helpers (`reference-utils.js:252-268`, `fmx-service.js:72-97`) clear the timeout once *headers* arrive, leaving `.text()`/`.arrayBuffer()` reads un-aborted, and `downloadFmx` buffers whole files with no size cap. (`eurlex-html-parser.js:1444-1512` does it correctly — clear in `finally` after `text()` — copy that pattern.)
 
 ### M5. Anonymous requests can force per-request headless-Chromium launches
 `server.js:142-150,174-180` — during a WAF-challenge period any FMX-less CELEX launches Playwright Chromium, and pages that parse to no content are deliberately not cached, so every repeat request re-fetches: a repeatable CPU/memory DoS within the ordinary rate limit. Add a negative-result cache and a Chromium concurrency cap.
 
-### M6. Prerender silently ships a gutted site if the API is down at build time
+### M6. Prerender silently ships a gutted site if the API is down at build time — **FIXED (this branch)**
+
+> Fixed: the build now fails when law data cannot be fetched for a featured law (opt-out via `PRERENDER_ALLOW_PARTIAL=1`). Original finding:
 `scripts/generate-prerendered-law-pages.js:401-407` warns and falls back to `law.articles || 0` — but `FEATURED_LAWS` entries carry no counts, so the fallback is always 0: the build exits 0 having generated zero article/recital pages for the affected law, and the sitemap shrinks to match. Hundreds of indexed SEO pages vanish with no CI failure. **Fix:** fail the build (or require explicit fallback counts) when the API fetch fails.
 
 ### M7. Service-worker precache is computed before prerendering rewrites index.html
 `package.json:11` runs `vite build` (which records `index.html`'s revision in the Workbox manifest) *before* the prerender script rewrites `dist/index.html`. A deploy changing only prerendered homepage content keeps serving the old cached homepage to returning PWA users until some asset hash also changes. Reorder, or exclude `index.html` from precache and revision it separately.
 
-### M8. In-document search index is wiped and rebuilt on every LawViewer render
+### M8. In-document search index is wiped and rebuilt on every LawViewer render — **FIXED (this branch)**
+
+> Fixed: the lists object is memoized. Original finding:
 `LawViewer.jsx:319` passes an inline `lists={{ … }}` object; `TopBar.jsx:424-428` keys `setCurrentSearchIndex(null); setResults([])` on `[lists]` identity. Any re-render while the search modal is open (e.g. recital titles resolving) clears the user's live results mid-typing and rebuilds the TF-IDF index. **Fix:** `useMemo` the lists object.
 
-### M9. Modals are inaccessible and global shortcuts stay live behind them
+### M9. Modals are inaccessible and global shortcuts stay live behind them — **FIXED (this branch)**
+
+> Fixed: both modals have `role="dialog"`/`aria-modal`, labelled close buttons, Escape handling, and focus management; global reader shortcuts are suppressed while a dialog is open. Original finding:
 `CaseLawModal.jsx:207-277` and `PrintModal.jsx:23-38`: no `role="dialog"`/`aria-modal`, no focus trap, no focus restore, unlabeled close buttons; PrintModal has no Escape handler at all. Because `LawViewerQuickNavigation.jsx:16` only suppresses shortcuts when a `[role="dialog"]` exists, the role-less modals also leave j/k/arrow navigation (`useLawViewerInteractions.js:40-68`) silently navigating the law behind the modal.
 
-### M10. `SQLITE_SCHEMA_VERSION` has an undocumented third copy
+### M10. `SQLITE_SCHEMA_VERSION` has an undocumented third copy — **FIXED (this branch)**
+
+> Fixed: the CLAUDE.md table now names all three files. Original finding:
 It lives in `legal-cache-store.js:17`, `build-sqlite-data.js:20`, **and** `citation-graph-store.js:9`, but the invalidation table in CLAUDE.md names only the first two. A bump that follows the docs leaves the citation-graph store rejecting the new `data.sqlite` and silently takes down all citation endpoints. Update the CLAUDE.md table (or import the constant from one module).
 
 ---
 
 ## Low
 
-- **README quickstart is broken**: `README.md:68-73` omits `cd backend && npm install`; `npm run dev` then crashes and `scripts/dev.js:67-75` kills the Vite child too. Also Node-version drift: README/CLAUDE.md say v24+, `backend/package.json` says `>=22.12`, root has no `engines` at all (suite passes on v22).
-- **Docs test-glob drift**: CLAUDE.md's backend test command omits `mcp/*.test.js`, which `backend/package.json` runs.
+- ~~README quickstart is broken~~ **FIXED (this branch)** — was:: `README.md:68-73` omits `cd backend && npm install`; `npm run dev` then crashes and `scripts/dev.js:67-75` kills the Vite child too. Also Node-version drift: README/CLAUDE.md say v24+, `backend/package.json` says `>=22.12`, root has no `engines` at all (suite passes on v22).
+- ~~Docs test-glob drift~~ **FIXED (this branch)** — was:: CLAUDE.md's backend test command omits `mcp/*.test.js`, which `backend/package.json` runs.
 - **`mapChatError` forwards raw upstream detail/status** (`api-routes.js:37-70`) — minor provider-internals leak.
 - **Analytics records invalid `:celex` path garbage** for non-5xx responses (`analytics.js:286-290`) — nuisance data in `/api/_stats`.
 - **Dev/no-SQLite fallback re-parses the ~50 MB case-law seed per request** (`law-queries.js:238-241` bypasses the memo).
 - **O(n²) identifier-repair pass** (`fmxParser.mjs:650-748`) and **O(recitals×articles) TF-IDF on the main thread** (`nlp.js:171-230`, only a 100 ms `setTimeout` defers it) — jank on large laws; a Web Worker + chunking would fix both.
 - **HTML-parser title heuristic steals colon-terminated operative sentences** as `article_title` (`eurlex-html-parser.js:71-78`).
-- **In-document search queries tokenize with English stop words regardless of law language** (`nlp.js:350` omits `langCode`).
+- ~~In-document search queries tokenized with English stop words regardless of law language~~ **FIXED (this branch)** (queries now tokenize with the index language).
 - **Latent null push in supplemental SQLite records** (`legal-cache-store.js:526` misses the null guard the main loop has).
 - **Prerender assumes contiguous numeric article numbering** (`generate-prerendered-law-pages.js:159-167`) — breaks for future laws with "Article 8a".
 - **`pages.yml` duplicates the full lint+test+build that `ci.yml` already ran** on the same push — doubled CI minutes.

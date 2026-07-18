@@ -363,6 +363,21 @@ function registerApiRoutes(app, deps) {
     }
   });
 
+  // Short-TTL memo shared by /case-law and the two digest routes. The digest
+  // routes need the case-law payload on every request (its hash is part of
+  // the digest cache key), which used to mean a live SPARQL round trip even
+  // for fully cached digests — so a Cellar hiccup 503'd cached content, and a
+  // partial case list silently regenerated the digest at LLM cost. Within the
+  // TTL, repeat requests are served from this memo instead.
+  async function fetchCaseLawMemo(celex) {
+    const cacheKey = `case-law:${celex}`;
+    const cached = cacheGet(resolutionCache, cacheKey);
+    if (cached) return cached;
+    const payload = await fetchCaseLaw(celex, runSparqlQuery, { cacheDir: FMX_DIR, dataStore: legalCacheStore });
+    cacheSet(resolutionCache, cacheKey, payload, Math.min(RESOLUTION_CACHE_MS, CASE_LAW_ROUTE_CACHE_MS));
+    return payload;
+  }
+
   app.get('/api/laws/:celex/case-law', rateLimitMiddleware, async (req, res) => {
     try {
       const { celex } = req.params;
@@ -371,15 +386,7 @@ function registerApiRoutes(app, deps) {
         return res.status(400).json({ error: 'Invalid CELEX format' });
       }
 
-      const cacheKey = `case-law:${celex}`;
-      const cached = cacheGet(resolutionCache, cacheKey);
-      if (cached) {
-        return res.json(cached);
-      }
-
-      const payload = await fetchCaseLaw(celex, runSparqlQuery, { cacheDir: FMX_DIR, dataStore: legalCacheStore });
-      cacheSet(resolutionCache, cacheKey, payload, Math.min(RESOLUTION_CACHE_MS, CASE_LAW_ROUTE_CACHE_MS));
-      res.json(payload);
+      res.json(await fetchCaseLawMemo(celex));
     } catch (err) {
       safeErrorResponse(res, err, 'Failed to fetch case law');
     }
@@ -527,7 +534,7 @@ function registerApiRoutes(app, deps) {
       }
 
       const parsed = await resolveParsedLaw(celex, lang, { skipFmxProbe: req.query.skipFmxProbe === '1' });
-      const caseLawPayload = await fetchCaseLaw(celex, runSparqlQuery, { cacheDir: FMX_DIR, dataStore: legalCacheStore });
+      const caseLawPayload = await fetchCaseLawMemo(celex);
       const result = await ensureArticleDigest({
         celex,
         articleNumber,
@@ -580,7 +587,7 @@ function registerApiRoutes(app, deps) {
       }
 
       const parsed = await resolveParsedLaw(celex, lang, { skipFmxProbe: req.query.skipFmxProbe === '1' });
-      const caseLawPayload = await fetchCaseLaw(celex, runSparqlQuery, { cacheDir: FMX_DIR, dataStore: legalCacheStore });
+      const caseLawPayload = await fetchCaseLawMemo(celex);
       const result = await ensureCaseLawDigest({
         celex,
         lang,

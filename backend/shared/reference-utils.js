@@ -250,21 +250,15 @@ function createReferenceResolver({
   toSearchLang,
 }) {
   async function fetchWithTimeout(url, options = {}) {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
-
-    try {
-      const response = await fetch(url, {
-        ...options,
-        signal: controller.signal,
-        redirect: 'follow',
-      });
-      clearTimeout(timeout);
-      return response;
-    } catch (err) {
-      clearTimeout(timeout);
-      throw err;
-    }
+    // AbortSignal.timeout stays armed while the body is consumed, so the
+    // deadline also covers the caller's response.json()/text() reads — the
+    // previous cleared-setTimeout version stopped covering the request as
+    // soon as headers arrived, letting a trickling body pin it indefinitely.
+    return fetch(url, {
+      ...options,
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+      redirect: 'follow',
+    });
   }
 
   async function runSparqlQuery(query) {

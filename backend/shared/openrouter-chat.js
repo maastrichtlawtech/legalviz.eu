@@ -1,5 +1,20 @@
 const DEFAULT_BASE_URL = 'https://openrouter.ai/api/v1';
 
+// Hard ceiling on a single chat call. Without it a stalled provider holds the
+// HTTP request open for as long as undici tolerates a trickling body — minutes
+// — while the model keeps generating (and billing) for a client that may be
+// long gone. Generous because whole-law digests legitimately take a while.
+const DEFAULT_TIMEOUT_MS = Number(process.env.OPENROUTER_TIMEOUT_MS) > 0
+  ? Number(process.env.OPENROUTER_TIMEOUT_MS)
+  : 120_000;
+
+// Combine the caller's signal (if any) with the default timeout so passing an
+// explicit signal never silently disables the ceiling.
+function withTimeout(signal, timeoutMs) {
+  const timeoutSignal = AbortSignal.timeout(timeoutMs);
+  return signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal;
+}
+
 class ChatProviderError extends Error {
   constructor(message, { status = 500, code = null, details = null } = {}) {
     super(message);
@@ -49,10 +64,12 @@ async function chatComplete({
   responseFormat = null,
   reasoning = null,
   signal,
+  timeoutMs = DEFAULT_TIMEOUT_MS,
 }) {
   if (!apiKey) {
     throw new ChatProviderError('OPENROUTER_API_KEY is required', { status: 503, code: 'missing_api_key' });
   }
+  signal = withTimeout(signal, timeoutMs);
   const url = `${String(baseUrl).replace(/\/+$/, '')}/chat/completions`;
   const body = { model, messages, temperature, max_tokens: maxTokens };
   if (responseFormat) {
@@ -108,10 +125,12 @@ async function* chatStream({
   temperature = 0.2,
   maxTokens = 1500,
   signal,
+  timeoutMs = DEFAULT_TIMEOUT_MS,
 }) {
   if (!apiKey) {
     throw new ChatProviderError('OPENROUTER_API_KEY is required', { status: 503, code: 'missing_api_key' });
   }
+  signal = withTimeout(signal, timeoutMs);
   const url = `${String(baseUrl).replace(/\/+$/, '')}/chat/completions`;
   const res = await fetch(url, {
     method: 'POST',

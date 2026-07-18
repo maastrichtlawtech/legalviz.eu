@@ -1087,10 +1087,42 @@ describe("extractCrossRefsFromText — multi-article citations", () => {
       actType: "directive",
       actCelex: "31989L0686",
     });
+    expect(refs.find((ref) => ref.target === "94/9/EC")).toMatchObject({
+      actType: "directive",
+      actCelex: "31994L0009",
+    });
     expect(refs.find((ref) => ref.target === "765/2008")).toMatchObject({
       actType: "regulation",
       actCelex: "32008R0765",
     });
+  });
+
+  it("extracts every member of a coordinated act list", () => {
+    const refs = extractCrossRefsFromText(
+      "Directives 2014/23/EU, 2014/24/EU and 2014/25/EU are repealed with effect from 1 January 2026",
+      lang,
+    ).filter((ref) => ref.type === "external");
+    expect(refs.map((ref) => ref.target)).toEqual(["2014/23/EU", "2014/24/EU", "2014/25/EU"]);
+    for (const ref of refs) {
+      expect(ref.actType).toBe("directive");
+    }
+    // The list tail must stop at the next act word, not swallow it.
+    const mixed = extractCrossRefsFromText(
+      "Directive 95/46/EC and Regulation (EU) 2016/679 govern processing",
+      lang,
+    ).filter((ref) => ref.type === "external");
+    expect(mixed.map((ref) => [ref.actType, ref.target])).toEqual([
+      ["directive", "95/46/EC"],
+      ["regulation", "2016/679"],
+    ]);
+  });
+
+  it("does not link prose numbers after an article citation's bare comma", () => {
+    const refs = extractCrossRefsFromText(
+      "as referred to in Article 4(1), 30 % of the allowances shall be auctioned",
+      lang,
+    ).filter((ref) => ref.type === "article");
+    expect(refs.map((ref) => ref.target)).toEqual(["4"]);
   });
 
   it("binds historical bare-Treaty citations instead of making internal links", () => {

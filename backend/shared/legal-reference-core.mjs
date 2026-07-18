@@ -193,6 +193,24 @@ function scanArticleEnumerations(text, {
   const separatorWords = `${listWordSource}|${rangeWordSource}`;
   const separatorRe = new RegExp(`(\\s*,\\s*(?:${separatorWords})\\s+|\\s*,\\s*|\\s+(?:${separatorWords})\\s+)`, 'iy');
   const rangeSeparatorRe = new RegExp(`^\\s*(?:${rangeWordSource})\\s*$`, 'i');
+  // A bare comma followed by a number is more often prose than an enumeration
+  // separator ("Article 4(1), 30 % of the allowances", "pursuant to Article 5,
+  // 2016 marked…"). Accept it as a continuation only when the number that
+  // follows reads like another list item: immediately followed by a
+  // parenthesised group, a point/paragraph qualifier, a further comma-and-
+  // number, or a closing list word ("Articles 5, 6 and 7"). An explicit
+  // list/range word or a repeated article word stays sufficient on its own.
+  const bareCommaRe = /^\s*,\s*$/;
+  const bareCommaItemRe = new RegExp(
+    `\\d+[a-z]?(?:` +
+      `\\s*\\(` +
+      `|\\s*,?\\s*(?:${pointWordSource})\\b` +
+      `|\\s*,?\\s*(?:\\[?\\s*(?:first|second|third|fourth|last|final)\\s*\\]?\\s+)?(?:paragraph|subparagraph|indent|sentence)\\b` +
+      `|\\s*,\\s*\\d` +
+      `|\\s*,?\\s+(?:${separatorWords})\\s+\\d` +
+    `)`,
+    'iy',
+  );
   const repeatedArticleRe = new RegExp(`\\s*(?:${articleWordSource})\\s+`, 'iy');
   const abbreviatedGroupRe = /\s*\(\s*([a-z0-9]+)\s*\)/iy;
   const digitRe = /\d/y;
@@ -331,18 +349,28 @@ function scanArticleEnumerations(text, {
         }
         if (!followingSeparator) break;
         repeatedArticleRe.lastIndex = following;
-        if (repeatedArticleRe.exec(text)) following = repeatedArticleRe.lastIndex;
+        const followingArticleWord = repeatedArticleRe.exec(text);
+        if (followingArticleWord) following = repeatedArticleRe.lastIndex;
         digitRe.lastIndex = following;
         if (!digitRe.exec(text)) break;
+        if (!followingArticleWord && bareCommaRe.test(followingSeparator[1])) {
+          bareCommaItemRe.lastIndex = following;
+          if (!bareCommaItemRe.exec(text)) break;
+        }
         pendingRange = rangeSeparatorRe.test(followingSeparator[1]);
         position = following;
         continue;
       }
 
       repeatedArticleRe.lastIndex = next;
-      if (repeatedArticleRe.exec(text)) next = repeatedArticleRe.lastIndex;
+      const repeatedArticleWord = repeatedArticleRe.exec(text);
+      if (repeatedArticleWord) next = repeatedArticleRe.lastIndex;
       digitRe.lastIndex = next;
       if (!digitRe.exec(text)) break;
+      if (!repeatedArticleWord && bareCommaRe.test(separator[1])) {
+        bareCommaItemRe.lastIndex = next;
+        if (!bareCommaItemRe.exec(text)) break;
+      }
       pendingRange = rangeSeparatorRe.test(separator[1]);
       position = next;
     }

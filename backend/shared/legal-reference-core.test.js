@@ -38,6 +38,34 @@ test('shared scanner consumes three or more abbreviated paragraph members', () =
   assert.equal(refs[0].end, 'Article 6(2), (3) and (4)'.length);
 });
 
+test('shared scanner does not treat prose after a bare comma as more articles', () => {
+  const percentage = scanArticleEnumerations(
+    'as referred to in Article 4(1), 30 % of the allowances shall be auctioned',
+  );
+  assert.deepEqual(percentage[0].items.map((item) => item.articleNumber), ['4']);
+
+  const year = scanArticleEnumerations('pursuant to Article 5, 2016 marked a turning point');
+  assert.deepEqual(year[0].items.map((item) => item.articleNumber), ['5']);
+});
+
+test('shared scanner still expands bare-comma lists that end in a list word', () => {
+  const three = scanArticleEnumerations('Articles 5, 6 and 7 shall apply');
+  assert.deepEqual(three[0].items.map((item) => item.articleNumber), ['5', '6', '7']);
+
+  const four = scanArticleEnumerations('Articles 2, 4, 6 and 8');
+  assert.deepEqual(four[0].items.map((item) => item.articleNumber), ['2', '4', '6', '8']);
+
+  const grouped = scanArticleEnumerations('Articles 5(1), 6(2) and 7');
+  assert.deepEqual(
+    grouped[0].items.map(({ articleNumber, paragraph }) => ({ articleNumber, paragraph })),
+    [
+      { articleNumber: '5', paragraph: '1' },
+      { articleNumber: '6', paragraph: '2' },
+      { articleNumber: '7', paragraph: null },
+    ],
+  );
+});
+
 test('shared scanner accepts bare named points and numeric paragraph qualifiers', () => {
   const refs = scanArticleEnumerations(
     'Article 4, point 5, and Article 10, paragraph 2(b), of Regulation 1/2003',

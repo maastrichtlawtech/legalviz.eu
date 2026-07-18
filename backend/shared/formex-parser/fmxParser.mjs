@@ -423,6 +423,63 @@ const EXTERNAL_LAW_RE = new RegExp(
   "gi",
 );
 
+// Conjunctions that join members of a multi-act citation list, across the
+// document languages the act-word vocabulary above covers. Longer forms come
+// first so the sticky alternation prefers them. Deliberately excludes "of":
+// English "of" would let numeric dates ("of 13/12/1989") read as identifiers.
+const EXTERNAL_LAW_LIST_CONJ =
+  "och|oder|oraz|eller|agus|vagy|sau|és|și|ja|või|tai|ali|jew|and|und|ir|in|et|ou|og|en|ed|or|un|y|u|o|e|i|a";
+
+// "Directives 2014/23/EU, 2014/24/EU and 2014/25/EU are repealed" cites three
+// acts, but EXTERNAL_LAW_RE anchors every identifier to an act word, so only
+// the first was captured — silently dropping the later members of the
+// repeal/amendment lists that fan out into the citation graph. After each head
+// match, consume the conjunction-separated tail of bare identifiers and emit
+// one match per identifier, reusing the head's act word for metadata. The tail
+// stops at the first token that is not an identifier, so a following
+// "… and Regulation (EU) 2016/679" is left for the main scan.
+const EXTERNAL_LAW_LIST_TAIL_RE = new RegExp(
+  `\\s*(?:,\\s*(?:${EXTERNAL_LAW_LIST_CONJ})\\s+|,\\s+|\\s+(?:${EXTERNAL_LAW_LIST_CONJ})\\s+)` +
+  `((?:\\(\\s*[A-Z]+\\s*\\)\\s+)?(?:N(?:o)?\\.?\\s+)?(\\d{1,4}\\/\\d+(?:\\/[A-Z]+)?))`,
+  "iy",
+);
+
+/**
+ * Iterate external-law citations: every EXTERNAL_LAW_RE match plus the bare
+ * identifiers of any coordinated list hanging off it. Yields
+ * `{ start, end, matchedText, citation, identifier }`, where start/end/
+ * matchedText describe the exact text span (for linkification) and `citation`
+ * is act-word-prefixed (synthesized for tail members) for metadata parsing.
+ */
+function* iterateExternalLawMatches(text) {
+  EXTERNAL_LAW_RE.lastIndex = 0;
+  let m;
+  while ((m = EXTERNAL_LAW_RE.exec(text)) !== null) {
+    yield {
+      start: m.index,
+      end: m.index + m[0].length,
+      matchedText: m[0],
+      citation: m[0],
+      identifier: m[1],
+    };
+    const actPrefix = m[0].slice(0, m[0].lastIndexOf(m[1]));
+    let pos = EXTERNAL_LAW_RE.lastIndex;
+    let tail;
+    while ((EXTERNAL_LAW_LIST_TAIL_RE.lastIndex = pos), (tail = EXTERNAL_LAW_LIST_TAIL_RE.exec(text)) !== null) {
+      const start = pos + tail[0].indexOf(tail[1]);
+      pos = EXTERNAL_LAW_LIST_TAIL_RE.lastIndex;
+      yield {
+        start,
+        end: start + tail[1].length,
+        matchedText: tail[1],
+        citation: `${actPrefix}${tail[1]}`,
+        identifier: tail[2],
+      };
+    }
+    if (pos > EXTERNAL_LAW_RE.lastIndex) EXTERNAL_LAW_RE.lastIndex = pos;
+  }
+}
+
 const CONTEXTUAL_ACT_RE = /\b(this|that(?:\s+same)?|said|same|latter)\s+(Regulation|Directive|Decision)\b/gi;
 
 const NATIONAL_LAW_RE =
@@ -1008,18 +1065,17 @@ export function extractCrossRefsFromText(text, lang) {
   }
 
   // External law references (mostly language-independent abbreviations)
-  EXTERNAL_LAW_RE.lastIndex = 0;
-  while ((m = EXTERNAL_LAW_RE.exec(text)) !== null) {
-    const institutionalContext = text.slice(Math.max(0, m.index - 120), m.index + 220);
-    const ecscAuthority = /\bHigh Authority\b/i.test(text.slice(Math.max(0, m.index - 80), m.index + 80));
-    const institutionalIssuer = hasInstitutionalIssuerContext(text, m.index);
-    const target = normalizeFlattenedFootnoteIdentifier(m[1], text.slice(m.index + m[0].length), m[0]);
+  for (const em of iterateExternalLawMatches(text)) {
+    const institutionalContext = text.slice(Math.max(0, em.start - 120), em.start + 220);
+    const ecscAuthority = /\bHigh Authority\b/i.test(text.slice(Math.max(0, em.start - 80), em.start + 80));
+    const institutionalIssuer = hasInstitutionalIssuerContext(text, em.start);
+    const target = normalizeFlattenedFootnoteIdentifier(em.identifier, text.slice(em.end), em.citation);
     externalRefs.push({
       type: "external",
       target,
-      raw: m[0],
-      start: m.index,
-      end: m.index + m[0].length,
+      raw: em.matchedText,
+      start: em.start,
+      end: em.end,
       // Decisions and recommendations of a Joint/Association Committee are
       // instruments of an external agreement body, not CELEX sector-3 acts.
       // Preserve them as explicit external citations rather than guessing a
@@ -1027,10 +1083,10 @@ export function extractCrossRefsFromText(text, lang) {
       externalInstitutional: /\bof\s+the\s+(?:Joint|Association)\s+(?:Committee|Council)\b|\b(?:[A-Z][A-Za-z]*(?:[-–][A-Za-z]+)*\s+)?(?:Joint\s+Committee|Association\s+Council)\b/i.test(institutionalContext),
       // A reference expressly tied to a regional/state government is a
       // national instrument, not an unresolved EU act.
-      externalNational: isClearlyNationalInstrumentContext(text, m.index),
-      externalCaseLaw: isClearlyCaseLawContext(text, m.index),
+      externalNational: isClearlyNationalInstrumentContext(text, em.start),
+      externalCaseLaw: isClearlyCaseLawContext(text, em.start),
       ecscAuthority,
-      ...parseExternalLawMeta(m[0], target, { ecscAuthority, institutionalIssuer }),
+      ...parseExternalLawMeta(em.citation, target, { ecscAuthority, institutionalIssuer }),
     });
   }
 
@@ -1194,19 +1250,17 @@ export function injectCrossRefLinks(html, lang) {
 
     const externalRefs = [];
 
-    EXTERNAL_LAW_RE.lastIndex = 0;
-    let match;
-    while ((match = EXTERNAL_LAW_RE.exec(text)) !== null) {
-      const target = normalizeFlattenedFootnoteIdentifier(match[1], text.slice(match.index + match[0].length), match[0]);
-      const ecscAuthority = /\bHigh Authority\b/i.test(text.slice(Math.max(0, match.index - 80), match.index + 80));
-      const institutionalIssuer = hasInstitutionalIssuerContext(text, match.index);
-      const meta = parseExternalLawMeta(match[0], target, { ecscAuthority, institutionalIssuer });
+    for (const em of iterateExternalLawMatches(text)) {
+      const target = normalizeFlattenedFootnoteIdentifier(em.identifier, text.slice(em.end), em.citation);
+      const ecscAuthority = /\bHigh Authority\b/i.test(text.slice(Math.max(0, em.start - 80), em.start + 80));
+      const institutionalIssuer = hasInstitutionalIssuerContext(text, em.start);
+      const meta = parseExternalLawMeta(em.citation, target, { ecscAuthority, institutionalIssuer });
       externalRefs.push({
-        start: match.index,
-        end: match.index + match[0].length,
+        start: em.start,
+        end: em.end,
         kind: "external",
         target,
-        label: match[0],
+        label: em.matchedText,
         ...meta,
       });
     }
@@ -1280,6 +1334,7 @@ export function injectCrossRefLinks(html, lang) {
       // detection plus the phrase-absorbing merge.
       const articleRefs = [];
       articleInjectRe.lastIndex = 0;
+      let match;
       while ((match = articleInjectRe.exec(text)) !== null) {
         const articleMatch = lang.article.exec(match[0]);
         lang.article.lastIndex = 0;

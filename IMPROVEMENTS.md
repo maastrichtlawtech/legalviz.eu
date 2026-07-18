@@ -8,7 +8,9 @@ Full-codebase review (backend API & AI services, parsers & search, React fronten
 
 ## Critical
 
-### C1. Stored XSS: legacy EUR-Lex HTML is rendered unsanitized
+### C1. Stored XSS: legacy EUR-Lex HTML is rendered unsanitized — **FIXED (this branch)**
+
+> Fixed by sanitizing with DOMPurify at the two injection choke points: `useProcessedLawHtml` (covers the reader pane, dual-pane, and side-by-side views) and `PrintView`. Original finding kept for the record:
 `backend/shared/eurlex-html-parser.js:162-168` builds `article_html`/`annex_html` from raw `node.outerHTML` of the fetched EUR-Lex page, and the frontend injects it via `dangerouslySetInnerHTML` in `LawDocumentContent.jsx:16`, `LawContentPane.jsx:128`, `PrintView.jsx:69,82,122,157`, and `LawViewerSideBySide.jsx:149-153`. There is no sanitizer anywhere in the pipeline, and the payload is persisted in IndexedDB — so a hostile fragment (inline event handler, `javascript:` href) becomes *stored* XSS replayed on every revisit. The Formex path escapes text; the HTML-fallback path does not.
 **Fix:** run the HTML through DOMPurify (or an allowlist serializer at parse time) at the single injection choke point; bump `PARSER_VERSION`.
 
@@ -21,7 +23,9 @@ The four AI endpoints (recital titles, law summary, article digest, whole-law di
 
 **Fix:** dedicated, much tighter limiter + global concurrency/budget cap on the LLM routes; origin allowlist for them; consider restricting generation to a curated law list.
 
-### C3. Data-refresh automation publishes releases the Dockerfile cannot consume
+### C3. Data-refresh automation publishes releases the Dockerfile cannot consume — **FIXED (this branch)**
+
+> Fixed: the workflow now downloads/republishes the unversioned asset names the Dockerfile fetches (`case-law-cache.json.gz`), carries `citation-graph.json.gz` and `definitions.json.gz` forward from the current release, folds both into its validation SQLite build, and the publish job asserts the release contains every asset named in the Dockerfile's fetch loop before creating it. Original finding kept for the record:
 `backend/Dockerfile:49` mandatorily fetches `case-law-cache.json.gz` and `citation-graph.json.gz` from the `data-vN` release, but `.github/workflows/refresh-case-law-data.yml` publishes `case-law-cache-v5.json.gz` (different name) and carries neither the citation graph nor `definitions.json.gz` forward. Merging the workflow's auto-opened "Deploy data-vN" PR would 404 every backend Docker build (and silently drop the cross-law definitions feature). The workflow predates the citation-graph and definitions assets and has drifted from the Dockerfile's own "a new release must carry the full set" invariant.
 **Fix:** make the workflow download and re-upload the full current asset set under the exact names the Dockerfile expects, and add a CI assertion that release assets ⊇ Dockerfile fetch list.
 
@@ -29,8 +33,8 @@ The four AI endpoints (recital titles, law summary, article digest, whole-law di
 
 ## High
 
-### H1. `escapeHtml` in the Formex parser doesn't escape quotes, but feeds double-quoted attributes
-`fmxParser.mjs:352-354` escapes only `& < >`, yet its output lands inside `data-marker="…"` (:108, :255) and `data-oj-*="…"` (:160). A `"` in document content breaks out of the attribute — attribute injection into HTML that is then `dangerouslySetInnerHTML`'d. The HTML parser's own `escapeHtml` (`eurlex-html-parser.js:50-57`) does it right; align them. Bump `PARSER_VERSION`.
+### H1. `escapeHtml` in the Formex parser doesn't escape quotes, but feeds double-quoted attributes — **FIXED (this branch)**
+`fmxParser.mjs:352-354` escaped only `& < >`, yet its output lands inside `data-marker="…"` and `data-oj-*="…"` attributes — a `"` in document content broke out of the attribute. Fixed by aligning it with the HTML parser's `escapeHtml` (quotes and apostrophes now escaped) and bumping `PARSER_VERSION` to 19.
 
 ### H2. Cross-reference grammar: comma+digit over-match creates spurious article links
 `backend/shared/legal-reference-core.mjs:194` — the enumeration separator accepts a bare `,` so `"Article 4(1), 30 % of the allowances"` yields refs `4` and `30`, and `injectCrossRefLinks` renders "30" as a clickable link to `#article-30` (which usually exists in a large law, so integrity checks don't strip it). Wrong links and wrong `crossReferences` edges persist into caches. Verified by execution.

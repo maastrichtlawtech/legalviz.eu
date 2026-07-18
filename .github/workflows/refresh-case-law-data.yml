@@ -41,12 +41,23 @@ jobs:
       - name: Download current release inputs
         run: |
           mkdir -p refresh-inputs refresh-output backend/law-cache
+          # The Dockerfile fetches every asset from one data-vN tag, so the new
+          # release must carry the full set: refresh the case-law cache here and
+          # pass the rest of the current release through unchanged. Release
+          # asset names are unversioned (case-law-cache.json.gz); the versioned
+          # name (case-law-cache-v5.json) is the local CACHE_DIR file only.
           gh release download "${{ steps.current-release.outputs.tag }}" \
             --repo "${{ github.repository }}" \
             --pattern search-cache.json.gz \
-            --pattern case-law-cache-v5.json.gz \
+            --pattern case-law-cache.json.gz \
+            --pattern citation-graph.json.gz \
             --dir refresh-inputs
-          gzip --decompress --stdout refresh-inputs/case-law-cache-v5.json.gz \
+          gh release download "${{ steps.current-release.outputs.tag }}" \
+            --repo "${{ github.repository }}" \
+            --pattern definitions.json.gz \
+            --dir refresh-inputs \
+            || echo "Optional definitions asset is not present in ${{ steps.current-release.outputs.tag }}"
+          gzip --decompress --stdout refresh-inputs/case-law-cache.json.gz \
             > backend/law-cache/case-law-cache-v5.json
       - name: Restore judgment corpus
         id: corpus-cache
@@ -73,11 +84,17 @@ jobs:
         working-directory: backend
         run: |
           gzip --keep --stdout --best law-cache/case-law-cache-v5.json \
-            > ../refresh-output/case-law-cache-v5.json.gz
+            > ../refresh-output/case-law-cache.json.gz
           cp ../refresh-inputs/search-cache.json.gz ../refresh-output/search-cache.json.gz
+          cp ../refresh-inputs/citation-graph.json.gz ../refresh-output/citation-graph.json.gz
+          if [ -f ../refresh-inputs/definitions.json.gz ]; then
+            cp ../refresh-inputs/definitions.json.gz ../refresh-output/definitions.json.gz
+          fi
           node search/build-sqlite-data.js \
             --search ../refresh-output/search-cache.json.gz \
-            --case-law ../refresh-output/case-law-cache-v5.json.gz \
+            --case-law ../refresh-output/case-law-cache.json.gz \
+            --citation-graph ../refresh-output/citation-graph.json.gz \
+            --definitions ../refresh-output/definitions.json.gz \
             --output ../refresh-output/data.sqlite \
             --manifest ../refresh-output/data.sqlite.manifest.json
           node --expose-gc --max-old-space-size=6144 search/compare-search-backends.js \
@@ -122,6 +139,11 @@ jobs:
         run: |
           [[ "$RELEASE_TAG" =~ ^data-v[0-9]+$ ]]
           ! gh release view "$RELEASE_TAG" --repo "${{ github.repository }}" >/dev/null 2>&1
+      - name: Verify release carries every asset the Dockerfile fetches
+        run: |
+          for asset in $(sed -n 's/.*for asset in \(.*\); do.*/\1/p' backend/Dockerfile); do
+            test -f "release-assets/$asset" || { echo "Missing mandatory Docker build input: $asset"; exit 1; }
+          done
       - name: Publish immutable data release
         run: |
           gh release create "$RELEASE_TAG" release-assets/* \

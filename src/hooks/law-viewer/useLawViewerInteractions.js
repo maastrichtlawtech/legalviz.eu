@@ -40,6 +40,9 @@ export function useLawViewerInteractions({
   useEffect(() => {
     const handleKeyDown = (event) => {
       if (event.target.tagName === "INPUT" || event.target.tagName === "TEXTAREA") return;
+      // Don't hijack navigation keys while a dialog is open on top of the
+      // reader (mirrors isGlobalShortcutContext in LawViewerQuickNavigation).
+      if (typeof document !== "undefined" && document.querySelector('[role="dialog"]')) return;
 
       const { currentList, index } = getCurrentEntryIndex(data, selected);
       if (!currentList.length) return;

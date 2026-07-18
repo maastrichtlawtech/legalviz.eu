@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { buildToc } from "../../utils/law-viewer/content.js";
 import { resolveSelectionFromData } from "../../utils/law-viewer/selection.js";
 
-export function useLawSelection({ data, kind, id, navigateToCanonical }) {
+export function useLawSelection({ data, kind, id, celex, navigateToCanonical }) {
   const [selected, setSelected] = useState({ kind: "overview", id: null, html: "" });
   const [openChapter, setOpenChapter] = useState(null);
   const [isAnnexesOpen, setIsAnnexesOpen] = useState(false);
@@ -11,6 +11,11 @@ export function useLawSelection({ data, kind, id, navigateToCanonical }) {
 
   useEffect(() => {
     if (!data.articles?.length && !data.recitals?.length && !data.annexes?.length) return;
+    // When navigating to a different law, the URL updates a render before the
+    // document refetches, so `data` still holds the previous law.  Resolving
+    // against it would fall back to that law's first article and rewrite the
+    // URL, destroying the deep link — wait until the document matches.
+    if (celex && data.celex !== celex) return;
 
     const nextSelection = resolveSelectionFromData(data, kind, id);
     if (!nextSelection) return;
@@ -20,7 +25,7 @@ export function useLawSelection({ data, kind, id, navigateToCanonical }) {
     if (!kind || !id || nextSelection.kind !== kind || String(nextSelection.id) !== String(id)) {
       navigateToCanonical(nextSelection.kind, nextSelection.id, { replace: true });
     }
-  }, [data, id, kind, navigateToCanonical]);
+  }, [celex, data, id, kind, navigateToCanonical]);
 
   useEffect(() => {
     if (selected.kind === "article" && selected.id && toc.length > 0) {

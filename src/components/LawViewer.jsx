@@ -102,6 +102,7 @@ export function LawViewer() {
     data: primaryDocument.data,
     kind,
     id,
+    celex: source.effectiveCelex,
     navigateToCanonical: source.navigateToCanonical,
   });
   const interactions = useLawViewerInteractions({
@@ -283,6 +284,12 @@ export function LawViewer() {
   // Resume tracking: persist the reader position once per selection change so
   // the library can offer a "Resume at Art. N" deep-link.
   const { articles, recitals, annexes } = primaryDocument.data;
+  // Stable identity so consumers keyed on `lists` (e.g. TopBar's search-index
+  // reset effect) don't rebuild on every render.
+  const lawLists = useMemo(
+    () => ({ articles, recitals, annexes }),
+    [annexes, articles, recitals]
+  );
   useEffect(() => {
     if (!source.effectiveCelex || !derived.hasLoadedContent) return;
     if (primaryDocument.data.celex !== source.effectiveCelex) return;
@@ -316,7 +323,7 @@ export function LawViewer() {
           lawKey={source.currentLaw?.slug || slug || key || "import"}
           title={derived.currentLawLabel}
           breadcrumb={breadcrumb}
-          lists={{ articles: primaryDocument.data.articles, recitals: primaryDocument.data.recitals, annexes: primaryDocument.data.annexes }}
+          lists={lawLists}
           globalLists={allLawsData}
           eurlexUrl={derived.eurlexUrl}
           onPrint={() => printState.setPrintModalOpen(true)}
@@ -441,7 +448,7 @@ export function LawViewer() {
 
                   <LawViewerReadingFooter
                     selected={selection.selected}
-                    lists={{ articles: primaryDocument.data.articles, recitals: primaryDocument.data.recitals, annexes: primaryDocument.data.annexes }}
+                    lists={lawLists}
                     onPrevNext={selection.onPrevNext}
                     onGoOverview={goToOverview}
                     t={t}

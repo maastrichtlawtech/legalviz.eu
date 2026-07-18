@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { X, Printer, Check } from "lucide-react";
 import { Button } from "./Button.jsx";
@@ -6,12 +6,37 @@ import { useI18n } from "../i18n/useI18n.js";
 
 export function PrintModal({ isOpen, onClose, onPrint, counts }) {
   const { t } = useI18n();
+  const panelRef = useRef(null);
   const [options, setOptions] = useState({
     recitals: false,
     articles: true,
     annexes: false,
     relatedRecitals: false,
   });
+
+  // Close on Escape
+  const handleKeyDown = useCallback(
+    (e) => {
+      if (e.key === "Escape") onClose();
+    },
+    [onClose]
+  );
+
+  useEffect(() => {
+    if (!isOpen) return;
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [isOpen, handleKeyDown]);
+
+  // Focus the dialog on open; restore focus on close.
+  useEffect(() => {
+    if (!isOpen) return;
+    const previouslyFocused = document.activeElement;
+    panelRef.current?.focus();
+    return () => {
+      if (previouslyFocused instanceof HTMLElement) previouslyFocused.focus();
+    };
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -29,9 +54,17 @@ export function PrintModal({ isOpen, onClose, onPrint, counts }) {
       />
 
       {/* Modal */}
-      <div className="relative w-full max-w-md bg-white rounded-2xl shadow-2xl p-6 animate-in zoom-in-95 duration-200">
-        <button 
+      <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label={t("printModal.title")}
+        tabIndex={-1}
+        className="relative w-full max-w-md bg-white rounded-2xl shadow-2xl p-6 animate-in zoom-in-95 duration-200 outline-none"
+      >
+        <button
           onClick={onClose}
+          aria-label={t("common.close")}
           className="absolute right-4 top-4 p-1 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-100 transition-colors"
         >
           <X size={20} />

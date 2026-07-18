@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useCallback } from "react";
+import React, { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { createPortal } from "react-dom";
 import { X, Search, ExternalLink, ChevronDown, ChevronUp } from "lucide-react";
 import { useI18n } from "../i18n/useI18n.js";
@@ -147,6 +147,7 @@ function CaseCard({ c, currentLang }) {
 
 export function CaseLawModal({ isOpen, onClose, cases, currentLang, celex }) {
   const { t } = useI18n();
+  const panelRef = useRef(null);
   const [query, setQuery] = useState("");
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
@@ -171,6 +172,19 @@ export function CaseLawModal({ isOpen, onClose, cases, currentLang, celex }) {
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [isOpen, handleKeyDown]);
+
+  // Focus the dialog on open (unless the auto-focused search input already
+  // holds focus); restore focus on close.
+  useEffect(() => {
+    if (!isOpen) return;
+    const previouslyFocused = document.activeElement;
+    if (!panelRef.current?.contains(document.activeElement)) {
+      panelRef.current?.focus();
+    }
+    return () => {
+      if (previouslyFocused instanceof HTMLElement) previouslyFocused.focus();
+    };
+  }, [isOpen]);
 
   // Lock body scroll when open
   useEffect(() => {
@@ -213,7 +227,14 @@ export function CaseLawModal({ isOpen, onClose, cases, currentLang, celex }) {
       />
 
       {/* Modal panel */}
-      <div className="relative flex w-full max-w-2xl max-h-[85vh] flex-col rounded-2xl bg-white shadow-2xl animate-in zoom-in-95 duration-200 dark:bg-gray-900 dark:border dark:border-gray-700">
+      <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label={t("metadata.caseLaw")}
+        tabIndex={-1}
+        className="relative flex w-full max-w-2xl max-h-[85vh] flex-col rounded-2xl bg-white shadow-2xl animate-in zoom-in-95 duration-200 outline-none dark:bg-gray-900 dark:border dark:border-gray-700"
+      >
         {/* Header */}
         <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3 dark:border-gray-700">
           <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">
@@ -221,6 +242,7 @@ export function CaseLawModal({ isOpen, onClose, cases, currentLang, celex }) {
           </h2>
           <button
             onClick={onClose}
+            aria-label={t("common.close")}
             className="rounded-full p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors dark:hover:bg-gray-800 dark:hover:text-gray-300"
           >
             <X size={18} />

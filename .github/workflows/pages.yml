@@ -8,6 +8,11 @@ permissions:
   contents: read
   pages: write
   id-token: write
+# Serialize Pages deployments: allow an in-progress deploy to finish and queue
+# newer ones, so concurrent pushes to main don't collide at the Pages API.
+concurrency:
+  group: pages
+  cancel-in-progress: false
 jobs:
   build:
     runs-on: ubuntu-latest

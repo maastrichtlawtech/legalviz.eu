@@ -287,7 +287,7 @@ cache.
 {
   "celex": "32016R0679",
   "lang": "ENG",
-  "model": "google/gemini-2.5-pro",
+  "model": "google/gemini-3.5-flash-lite",
   "cached": true,
   "titles": {
     "1": "Protection of natural persons",
@@ -776,11 +776,11 @@ Current test coverage includes:
 | `LAW_SUMMARY_OPENROUTER_API_KEY` | Optional OpenRouter key used for law summaries and article case-law digests. Falls back to `ARTICLE_QA_OPENROUTER_API_KEY`, then `OPENROUTER_API_KEY`. |
 | `ARTICLE_QA_OPENROUTER_API_KEY` | Legacy fallback key still accepted for static summary generation. |
 | `RECITAL_TITLE_OPENROUTER_API_KEY` | Optional OpenRouter key used only for recital-title generation and `eurlex recital-titles`. Falls back to `OPENROUTER_API_KEY`. |
-| `LAW_SUMMARY_MODEL` | Model for cached law summaries. Default falls back through `ARTICLE_QA_ANSWER_MODEL`, `ARTICLE_QA_MODEL`, then `google/gemini-2.5-pro`. |
-| `ARTICLE_DIGEST_MODEL` | Model for cached article case-law digests. Default falls back through `LAW_SUMMARY_MODEL`, `ARTICLE_QA_ANSWER_MODEL`, `ARTICLE_QA_MODEL`, then `google/gemini-2.5-pro`. |
+| `LAW_SUMMARY_MODEL` | Model for cached law summaries. Default falls back through `ARTICLE_QA_ANSWER_MODEL`, `ARTICLE_QA_MODEL`, then `google/gemini-3.5-flash-lite`. |
+| `ARTICLE_DIGEST_MODEL` | Model for cached article case-law digests. Default falls back through `LAW_SUMMARY_MODEL`, `ARTICLE_QA_ANSWER_MODEL`, `ARTICLE_QA_MODEL`, then `google/gemini-3.5-flash-lite`. |
 | `ARTICLE_QA_MODEL` / `ARTICLE_QA_ANSWER_MODEL` | Legacy model fallbacks still accepted for static summary generation. |
 | `ARTICLE_QA_PLANNER_MODEL` | Legacy model fallback used only by recital-title defaults. |
-| `RECITAL_TITLE_MODEL` | Model for cached AI-generated recital titles. Default `google/gemini-2.5-pro`. |
+| `RECITAL_TITLE_MODEL` | Model for cached AI-generated recital titles. Default `google/gemini-3.5-flash-lite`. |
 | `PLAYWRIGHT_HEADLESS` / `PLAYWRIGHT_BROWSERS_PATH` / `PLAYWRIGHT_MODULE_PATH` / `LEGALVIZ_PLAYWRIGHT_MODULE_PATH` | Playwright configuration for fetching laws that require rendering. |
 
 ## Notes

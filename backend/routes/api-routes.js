@@ -14,10 +14,10 @@ const { ensureLawSummary } = require("../shared/law-summary-service");
 const { ensureArticleDigest } = require("../shared/article-digest-service");
 const { ensureCaseLawDigest } = require("../shared/case-law-digest-service");
 
-const DEFAULT_STATIC_SUMMARY_MODEL = process.env.LAW_SUMMARY_MODEL || process.env.ARTICLE_QA_ANSWER_MODEL || process.env.ARTICLE_QA_MODEL || 'google/gemini-2.5-pro';
-const DEFAULT_ARTICLE_DIGEST_MODEL = process.env.ARTICLE_DIGEST_MODEL || process.env.LAW_SUMMARY_MODEL || process.env.ARTICLE_QA_ANSWER_MODEL || process.env.ARTICLE_QA_MODEL || 'google/gemini-2.5-pro';
-const DEFAULT_CASE_LAW_DIGEST_MODEL = process.env.CASE_LAW_DIGEST_MODEL || process.env.ARTICLE_DIGEST_MODEL || process.env.LAW_SUMMARY_MODEL || process.env.ARTICLE_QA_ANSWER_MODEL || process.env.ARTICLE_QA_MODEL || 'google/gemini-2.5-pro';
-const DEFAULT_RECITAL_TITLE_MODEL = process.env.RECITAL_TITLE_MODEL || process.env.ARTICLE_QA_PLANNER_MODEL || process.env.ARTICLE_QA_MODEL || 'google/gemini-2.5-pro';
+const DEFAULT_STATIC_SUMMARY_MODEL = process.env.LAW_SUMMARY_MODEL || process.env.ARTICLE_QA_ANSWER_MODEL || process.env.ARTICLE_QA_MODEL || 'google/gemini-3.5-flash-lite';
+const DEFAULT_ARTICLE_DIGEST_MODEL = process.env.ARTICLE_DIGEST_MODEL || process.env.LAW_SUMMARY_MODEL || process.env.ARTICLE_QA_ANSWER_MODEL || process.env.ARTICLE_QA_MODEL || 'google/gemini-3.5-flash-lite';
+const DEFAULT_CASE_LAW_DIGEST_MODEL = process.env.CASE_LAW_DIGEST_MODEL || process.env.ARTICLE_DIGEST_MODEL || process.env.LAW_SUMMARY_MODEL || process.env.ARTICLE_QA_ANSWER_MODEL || process.env.ARTICLE_QA_MODEL || 'google/gemini-3.5-flash-lite';
+const DEFAULT_RECITAL_TITLE_MODEL = process.env.RECITAL_TITLE_MODEL || process.env.ARTICLE_QA_PLANNER_MODEL || process.env.ARTICLE_QA_MODEL || 'google/gemini-3.5-flash-lite';
 
 function getStaticSummaryApiKey() {
   return process.env.LAW_SUMMARY_OPENROUTER_API_KEY

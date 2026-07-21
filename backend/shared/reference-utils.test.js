@@ -72,6 +72,32 @@ test('buildEliCandidates handles decision JHA suffix', () => {
   assert.ok(candidates.includes('http://publications.europa.eu/resource/eli/dec/2008/977/oj'));
 });
 
+test('buildEliCandidates includes implementing/delegated regulation subtypes', () => {
+  // CELEX 32014R0028 is Commission Implementing Regulation (EU) No 28/2014,
+  // whose ELI is reg_impl/2014/28 -- a plain reg lookup misses it.
+  const candidates = buildEliCandidates({
+    actType: 'regulation',
+    year: '2014',
+    number: '28',
+  });
+  assert.deepEqual(candidates, [
+    'http://publications.europa.eu/resource/eli/reg/2014/28/oj',
+    'http://publications.europa.eu/resource/eli/reg_impl/2014/28/oj',
+    'http://publications.europa.eu/resource/eli/reg_del/2014/28/oj',
+  ]);
+});
+
+test('buildEliCandidates includes implementing/delegated directive subtypes', () => {
+  const candidates = buildEliCandidates({
+    actType: 'directive',
+    year: '2019',
+    number: '790',
+  });
+  assert.ok(candidates.includes('http://publications.europa.eu/resource/eli/dir/2019/790/oj'));
+  assert.ok(candidates.includes('http://publications.europa.eu/resource/eli/dir_impl/2019/790/oj'));
+  assert.ok(candidates.includes('http://publications.europa.eu/resource/eli/dir_del/2019/790/oj'));
+});
+
 test('validateCelex accepts canonical CELEX format', () => {
   assert.equal(validateCelex('32016R0679'), true);
   assert.equal(validateCelex('32016R0679(01)'), true);
@@ -280,7 +306,8 @@ test('resolveEurlexUrl keeps OJ fallback path when cache cannot resolve determin
     const result = await resolver.resolveEurlexUrl('https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=OJ:L:2015:00999:TOC', 'ENG');
     assert.equal(result.resolved, null);
     assert.equal(result.fallback?.type, 'open-source-url');
-    assert.equal(fetchCalls.length, 4);
+    // 3 act types x their subtype candidates: reg(3) + dir(3) + dec(4) = 10.
+    assert.equal(fetchCalls.length, 10);
   } finally {
     restore();
   }

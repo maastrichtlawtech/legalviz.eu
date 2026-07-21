@@ -207,21 +207,32 @@ function buildEliCandidates(reference) {
     );
   }
 
+  // The FMX-style reference carries no act subtype, but EUR-Lex/Cellar mint a
+  // distinct ELI per subtype: a basic act uses `reg`/`dir`/`dec`, while
+  // implementing and delegated acts use `reg_impl`/`reg_del` (etc.). These share
+  // the same year/number sequences per subtype, so a plain `reg` lookup misses
+  // e.g. Commission Implementing Regulation (EU) No 28/2014 (`reg_impl/2014/28`).
+  // Try the basic subtype first (the common case) and fall back to the others.
+  const eli = (type, num = number) =>
+    `http://publications.europa.eu/resource/eli/${type}/${reference.year}/${num}/oj`;
+
   if (reference.actType === 'directive') {
-    return [`http://publications.europa.eu/resource/eli/dir/${reference.year}/${number}/oj`];
+    return [eli('dir'), eli('dir_impl'), eli('dir_del')];
   }
 
   if (reference.actType === 'regulation') {
-    return [`http://publications.europa.eu/resource/eli/reg/${reference.year}/${number}/oj`];
+    return [eli('reg'), eli('reg_impl'), eli('reg_del')];
   }
 
   if (reference.actType === 'decision') {
     const candidates = [];
     if (reference.suffix === 'JHA') {
-      candidates.push(`http://publications.europa.eu/resource/eli/dec_framw/${reference.year}/${number}/oj`);
+      candidates.push(eli('dec_framw'));
     }
-    candidates.push(`http://publications.europa.eu/resource/eli/dec/${reference.year}/${number}/oj`);
-    candidates.push(`http://publications.europa.eu/resource/eli/dec/${reference.year}/${number}(1)/oj`);
+    candidates.push(eli('dec'));
+    candidates.push(eli('dec', `${number}(1)`));
+    candidates.push(eli('dec_impl'));
+    candidates.push(eli('dec_del'));
     return [...new Set(candidates)];
   }
 

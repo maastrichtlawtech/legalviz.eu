@@ -5,6 +5,11 @@ import { GitCompare, X } from "lucide-react";
 const VIEWPORT_MARGIN = 8;
 const ANCHOR_GAP = 8;
 const CLOSE_DELAY_MS = 150;
+// Tapping a term focuses its tabindex=0 span, so the browser scrolls it into
+// view and (on mobile) toggles the URL bar, firing scroll/resize right after
+// open. Ignore those for a beat so the popup isn't dismissed by the very
+// gesture that opened it.
+const OPEN_SETTLE_MS = 350;
 // Below this width an anchored popup has nowhere sensible to go, so we
 // render a bottom sheet instead.
 const SHEET_MEDIA_QUERY = "(max-width: 640px)";
@@ -35,6 +40,7 @@ export function DefinitionTooltip({ t, onCompareDefinition }) {
   const closeTimerRef = useRef(null);
   const focusCompareOnOpenRef = useRef(false);
   const returnFocusRef = useRef(null);
+  const openedAtRef = useRef(0);
 
   const cancelScheduledClose = useCallback(() => {
     if (closeTimerRef.current) {
@@ -66,6 +72,7 @@ export function DefinitionTooltip({ t, onCompareDefinition }) {
   useEffect(() => {
     const openFromElement = (el) => {
       cancelScheduledClose();
+      openedAtRef.current = Date.now();
       setActive({
         term: el.getAttribute("data-term") || el.textContent,
         definition: el.getAttribute("data-definition") || "",
@@ -124,11 +131,24 @@ export function DefinitionTooltip({ t, onCompareDefinition }) {
       if (el) openFromElement(el);
     };
 
-    // Any scroll invalidates the anchored position; the sheet is
-    // viewport-fixed, so only close when the popup itself isn't scrolling.
-    const handleScroll = (event) => {
-      if (isSheet && event.target instanceof Node && tooltipRef.current?.contains(event.target)) return;
-      if (!isSheet) close();
+    // The sheet is viewport-fixed, so it never needs to close on scroll.
+    // The anchored popup's position is tied to the term's viewport rect, so a
+    // real scroll invalidates it — but ignore the scroll-into-view the browser
+    // fires right after tapping the (focusable) term, which would otherwise
+    // dismiss the popup the same tap just opened.
+    const handleScroll = () => {
+      if (isSheet) return;
+      if (Date.now() - openedAtRef.current < OPEN_SETTLE_MS) return;
+      close();
+    };
+
+    // A genuine resize invalidates the anchored position, but the sheet is
+    // pinned to the viewport and must survive the URL-bar show/hide that mobile
+    // browsers report as a resize when a tap scrolls the focused term into view.
+    const handleResize = () => {
+      if (isSheet) return;
+      if (Date.now() - openedAtRef.current < OPEN_SETTLE_MS) return;
+      close();
     };
 
     document.addEventListener("mouseover", handleMouseOver);
@@ -137,7 +157,7 @@ export function DefinitionTooltip({ t, onCompareDefinition }) {
     document.addEventListener("keydown", handleKeyDown);
     document.addEventListener("focusin", handleFocusIn);
     window.addEventListener("scroll", handleScroll, { capture: true, passive: true });
-    window.addEventListener("resize", close);
+    window.addEventListener("resize", handleResize);
     return () => {
       document.removeEventListener("mouseover", handleMouseOver);
       document.removeEventListener("mouseout", handleMouseOut);
@@ -145,7 +165,7 @@ export function DefinitionTooltip({ t, onCompareDefinition }) {
       document.removeEventListener("keydown", handleKeyDown);
       document.removeEventListener("focusin", handleFocusIn);
       window.removeEventListener("scroll", handleScroll, { capture: true });
-      window.removeEventListener("resize", close);
+      window.removeEventListener("resize", handleResize);
       cancelScheduledClose();
     };
   }, [cancelScheduledClose, close, isSheet, scheduleClose]);

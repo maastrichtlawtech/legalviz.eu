@@ -10,6 +10,11 @@ const { createReferenceResolver } = require("../shared/reference-utils");
 const { ClientError, cacheGet, cacheSet, safeErrorResponse, toSearchLang } = require("../shared/api-utils");
 const { CitationGraphStore, GRAPH_VERSION } = require("../search/citation-graph-store");
 const { JsonLegalCacheStore } = require("../search/legal-cache-store");
+const {
+  CACHE_VERSION: LAW_SUMMARY_CACHE_VERSION,
+  PROMPT_VERSION: LAW_SUMMARY_PROMPT_VERSION,
+  SCHEMA_VERSION: LAW_SUMMARY_SCHEMA_VERSION,
+} = require("../shared/law-summary-service");
 
 const fixturePath = path.join(__dirname, "..", "search", "__fixtures__", "search-fixture.json");
 const gdprFmxPath = path.join(__dirname, "..", "..", "src", "__fixtures__", "gdpr.fmx.xml");
@@ -481,6 +486,31 @@ test("AI-backed static routes require their own OpenRouter key or the shared fal
     assert.equal(res.payload.code, "openrouter_unconfigured");
     assert.match(res.payload.error, /OpenRouter API key/);
     assert.equal(resolveParsedLawCalled, false);
+  });
+});
+
+test("GET /api/laws/:celex/summary returns the cache version contract", async () => {
+  await withOpenRouterEnv({ LAW_SUMMARY_OPENROUTER_API_KEY: "test-key" }, async () => {
+    const { app } = registerTestRoutes({
+      ensureLawSummary: async () => ({
+        model: "test-model",
+        cached: true,
+        generatedAt: "2026-07-16T00:00:00.000Z",
+        summary: { purpose: { text: "Test", citations: [] } },
+      }),
+    });
+    const handler = app.routes.get("/api/laws/:celex/summary");
+    const res = createResponseRecorder();
+
+    await handler({
+      params: { celex: "32016R0679" },
+      query: { lang: "ENG" },
+    }, res);
+
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.payload.cacheVersion, LAW_SUMMARY_CACHE_VERSION);
+    assert.equal(res.payload.schemaVersion, LAW_SUMMARY_SCHEMA_VERSION);
+    assert.equal(res.payload.promptVersion, LAW_SUMMARY_PROMPT_VERSION);
   });
 });
 

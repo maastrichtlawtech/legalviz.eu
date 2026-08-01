@@ -73,6 +73,26 @@ describe("law summary cache versioning", () => {
     const { makeLawSummaryCacheKey } = await importFormexApi();
 
     expect(makeLawSummaryCacheKey("32016R0679"))
-      .toBe("32016R0679_ENG_summary_v1_schema3_prompt3");
+      .toBe("32016R0679_ENG_summary_v2_schema3_prompt3");
+  });
+
+  it("does not cache a response from a mismatched backend version", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        celex: "32016R0679",
+        lang: "ENG",
+        cacheVersion: 1,
+        schemaVersion: 3,
+        promptVersion: 3,
+        summary: { purpose: { text: "stale", citations: [] } },
+      }),
+    }));
+
+    const { fetchLawSummary } = await importFormexApi();
+    await expect(fetchLawSummary("32016R0679")).rejects.toMatchObject({
+      code: "cache_version_mismatch",
+      status: 409,
+    });
   });
 });

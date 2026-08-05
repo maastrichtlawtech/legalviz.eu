@@ -181,7 +181,7 @@ export function Landing({ forcedLocale = null }) {
         </div>
 
         <div className="mt-10 flex justify-center">
-          <McpLandingTeaser t={t} />
+          <McpLandingTeaser />
         </div>
 
         <Motion.div

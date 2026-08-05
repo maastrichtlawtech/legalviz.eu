@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { Bot, Check, ChevronRight, Copy, ExternalLink, X } from "lucide-react";
 import { useI18n } from "../i18n/useI18n.js";
 
-export const MCP_SERVER_URL = "https://api.legalviz.eu/mcp";
+const MCP_SERVER_URL = "https://api.legalviz.eu/mcp";
 const MCP_DOCS_URL =
   "https://github.com/maastrichtlawtech/eur-lex-visualiser/blob/main/backend/README.md#mcp-server";
 
@@ -28,27 +28,33 @@ function markMcpPromoSeen() {
   }
 }
 
+function legacyCopy(text) {
+  try {
+    const textarea = document.createElement("textarea");
+    textarea.value = text;
+    textarea.setAttribute("readonly", "");
+    textarea.style.position = "fixed";
+    textarea.style.opacity = "0";
+    document.body.appendChild(textarea);
+    textarea.select();
+    const ok = document.execCommand("copy");
+    textarea.remove();
+    return ok;
+  } catch {
+    return false;
+  }
+}
+
 function copyToClipboard(text) {
-  return navigator.clipboard.writeText(text).then(
-    () => true,
-    () => {
-      // Clipboard API can be blocked (permissions, insecure context); fall back.
-      try {
-        const textarea = document.createElement("textarea");
-        textarea.value = text;
-        textarea.setAttribute("readonly", "");
-        textarea.style.position = "fixed";
-        textarea.style.opacity = "0";
-        document.body.appendChild(textarea);
-        textarea.select();
-        const ok = document.execCommand("copy");
-        textarea.remove();
-        return ok;
-      } catch {
-        return false;
-      }
-    }
-  );
+  // navigator.clipboard is missing in insecure contexts / older browsers, and
+  // throws synchronously rather than rejecting — guard before calling it.
+  const viaClipboardApi = navigator.clipboard
+    ? navigator.clipboard.writeText(text).then(
+        () => true,
+        () => false
+      )
+    : Promise.resolve(false);
+  return viaClipboardApi.then((ok) => ok || legacyCopy(text));
 }
 
 function ClientRow({ name, steps }) {
@@ -60,7 +66,8 @@ function ClientRow({ name, steps }) {
   );
 }
 
-export function McpModal({ onClose, t }) {
+function McpModal({ onClose }) {
+  const { t } = useI18n();
   const panelRef = useRef(null);
   const [copied, setCopied] = useState(false);
   const resetTimer = useRef(null);
@@ -138,10 +145,7 @@ export function McpModal({ onClose, t }) {
             {t("landing.mcpUrlLabel")}
           </span>
           <div className="mt-1.5 flex items-stretch gap-2">
-            <code
-              className="min-w-0 flex-1 select-all overflow-x-auto whitespace-nowrap rounded-xl border border-gray-300 bg-gray-50 px-3 py-2 font-mono text-sm text-eu-navy dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
-              data-testid="mcp-url"
-            >
+            <code className="min-w-0 flex-1 select-all overflow-x-auto whitespace-nowrap rounded-xl border border-gray-300 bg-gray-50 px-3 py-2 font-mono text-sm text-eu-navy dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100">
               {MCP_SERVER_URL}
             </code>
             <button
@@ -180,7 +184,8 @@ export function McpModal({ onClose, t }) {
 }
 
 /** Compact pill on the landing page that opens the MCP modal. */
-export function McpLandingTeaser({ t }) {
+export function McpLandingTeaser() {
+  const { t } = useI18n();
   const [isOpen, setIsOpen] = useState(false);
 
   const handleOpen = () => {
@@ -202,7 +207,7 @@ export function McpLandingTeaser({ t }) {
           aria-hidden="true"
         />
       </button>
-      {isOpen ? <McpModal onClose={() => setIsOpen(false)} t={t} /> : null}
+      {isOpen ? <McpModal onClose={() => setIsOpen(false)} /> : null}
     </>
   );
 }
@@ -240,7 +245,7 @@ export function McpTopBarButton() {
           />
         ) : null}
       </button>
-      {isOpen ? <McpModal onClose={() => setIsOpen(false)} t={t} /> : null}
+      {isOpen ? <McpModal onClose={() => setIsOpen(false)} /> : null}
     </>
   );
 }

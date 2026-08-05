@@ -148,7 +148,19 @@
     "searchCta": "Találjon jogszabályt gyorsan",
     "searchHint": "Keressen elsődleges uniós jogi aktusokat cím, hivatkozás vagy CELEX szerint.",
     "searchPlaceholder": "Elsődleges uniós jogi aktusok keresése cím, hivatkozás vagy CELEX szerint",
-    "searchPlaceholderMobile": "Elsődleges uniós jogi aktusok keresése"
+    "searchPlaceholderMobile": "Elsődleges uniós jogi aktusok keresése",
+    "mcpEyebrow": "MI-integráció",
+    "mcpTitle": "Használja a LegalVizt a ChatGPT-ben, Claude-ban és máshol",
+    "mcpDescription": "A LegalViz ingyenes MCP-szervert (Model Context Protocol) kínál. Kapcsolja össze MI-asszisztensével, hogy az kereshessen az uniós jogszabályokban, elolvashasson egyes cikkeket és preambulumbekezdéseket, és utánanézhessen az EUB ítélkezési gyakorlatának — a hivatalos szövegek alapján.",
+    "mcpUrlLabel": "MCP-szerver URL-je",
+    "mcpCopy": "Másolás",
+    "mcpCopied": "Másolva!",
+    "mcpChatgptSteps": "Beállítások → Csatlakozók → Speciális beállítások → Egyéni csatlakozó hozzáadása, majd illessze be az URL-t.",
+    "mcpClaudeSteps": "Beállítások → Csatlakozók → Egyéni csatlakozó hozzáadása, majd illessze be az URL-t.",
+    "mcpOthersName": "Cursor, VS Code és más MCP-kliensek",
+    "mcpOthersSteps": "Adja hozzá az URL-t a kliens MCP-konfigurációjához Streamable HTTP-szerverként. Nincs szükség API-kulcsra vagy fiókra.",
+    "mcpDocs": "Teljes útmutató és elérhető eszközök",
+    "mcpShortLabel": "MI"
   },
   "resetFooter": {
     "title": "Valami nem működik?",

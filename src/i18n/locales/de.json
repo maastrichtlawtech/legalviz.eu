@@ -148,7 +148,19 @@
     "searchCta": "Finden Sie ein Gesetz schnell",
     "searchHint": "Suchen Sie primäre EU-Rechtsakte nach Titel, Referenz oder CELEX und öffnen Sie sie direkt.",
     "searchPlaceholder": "Primäre EU-Rechtsakte nach Titel, Referenz oder CELEX suchen",
-    "searchPlaceholderMobile": "Primäre EU-Rechtsakte suchen"
+    "searchPlaceholderMobile": "Primäre EU-Rechtsakte suchen",
+    "mcpEyebrow": "KI-Integration",
+    "mcpTitle": "LegalViz in ChatGPT, Claude & Co. nutzen",
+    "mcpDescription": "LegalViz bietet einen kostenlosen MCP-Server (Model Context Protocol). Verbinden Sie ihn mit Ihrem KI-Assistenten – dieser kann dann EU-Rechtsvorschriften durchsuchen, einzelne Artikel und Erwägungsgründe lesen und EuGH-Rechtsprechung nachschlagen, gestützt auf die amtlichen Texte.",
+    "mcpUrlLabel": "MCP-Server-URL",
+    "mcpCopy": "Kopieren",
+    "mcpCopied": "Kopiert!",
+    "mcpChatgptSteps": "Einstellungen → Konnektoren → Erweiterte Einstellungen → Eigenen Konnektor hinzufügen, dann die URL einfügen.",
+    "mcpClaudeSteps": "Einstellungen → Konnektoren → Eigenen Konnektor hinzufügen, dann die URL einfügen.",
+    "mcpOthersName": "Cursor, VS Code & andere MCP-Clients",
+    "mcpOthersSteps": "Fügen Sie die URL als Streamable-HTTP-Server in die MCP-Konfiguration des Clients ein. Kein API-Schlüssel und kein Konto erforderlich.",
+    "mcpDocs": "Vollständige Anleitung und verfügbare Tools",
+    "mcpShortLabel": "KI"
   },
   "resetFooter": {
     "title": "Funktioniert etwas nicht?",

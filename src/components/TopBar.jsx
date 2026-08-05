@@ -12,6 +12,7 @@ import { buildImportedLawCandidate, getCanonicalLawRoute, parseCelexQuery } from
 import { inferOfficialReferenceFromCelex, saveLawMeta } from "../utils/library.js";
 import { cleanLawTitle, extractShortLawTitle, formatOfficialReference } from "../utils/lawDisplay.js";
 import { DefinitionSearchResult } from "./search/DefinitionSearchResult.jsx";
+import { McpTopBarButton } from "./McpPromo.jsx";
 
 // Law search hits the network per query, so wait for a typing pause before
 // firing to avoid a request per keystroke (which trips the API rate limiter).
@@ -1416,6 +1417,8 @@ export function TopBar({
             disabled={formexLangLocked}
             excludeLanguages={formexLanguageExclusions}
           />
+
+          <McpTopBarButton />
 
           <div className="relative flex items-center">
             <ToolsMenu

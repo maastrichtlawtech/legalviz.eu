@@ -148,7 +148,19 @@
     "searchCta": "Hitta en lag snabbt",
     "searchHint": "Sök efter primära EU-rättsakter efter titel, referens eller CELEX och öppna dem direkt.",
     "searchPlaceholder": "Sök primära EU-rättsakter efter titel, referens eller CELEX",
-    "searchPlaceholderMobile": "Sök primära EU-rättsakter"
+    "searchPlaceholderMobile": "Sök primära EU-rättsakter",
+    "mcpEyebrow": "AI-integration",
+    "mcpTitle": "Använd LegalViz i ChatGPT, Claude med flera",
+    "mcpDescription": "LegalViz erbjuder en gratis MCP-server (Model Context Protocol). Anslut den till din AI-assistent så kan den söka i EU-lagstiftning, läsa enskilda artiklar och skäl och slå upp EU-domstolens rättspraxis — baserat på de officiella texterna.",
+    "mcpUrlLabel": "MCP-serverns URL",
+    "mcpCopy": "Kopiera",
+    "mcpCopied": "Kopierat!",
+    "mcpChatgptSteps": "Inställningar → Anslutningar → Avancerade inställningar → Lägg till anpassad anslutning och klistra sedan in URL:en.",
+    "mcpClaudeSteps": "Inställningar → Anslutningar → Lägg till anpassad anslutning och klistra sedan in URL:en.",
+    "mcpOthersName": "Cursor, VS Code och andra MCP-klienter",
+    "mcpOthersSteps": "Lägg till URL:en i klientens MCP-konfiguration som en Streamable HTTP-server. Ingen API-nyckel eller konto krävs.",
+    "mcpDocs": "Fullständig guide och tillgängliga verktyg",
+    "mcpShortLabel": "AI"
   },
   "resetFooter": {
     "title": "Är det något som inte fungerar?",

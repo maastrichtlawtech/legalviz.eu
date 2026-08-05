@@ -148,7 +148,19 @@
     "searchCta": "Atrodiet likumu ātri",
     "searchHint": "Meklējiet ES primāros tiesību aktus pēc nosaukuma, atsauces vai CELEX.",
     "searchPlaceholder": "Meklēt ES primāros tiesību aktus pēc nosaukuma, atsauces vai CELEX",
-    "searchPlaceholderMobile": "Meklēt ES primāros tiesību aktus"
+    "searchPlaceholderMobile": "Meklēt ES primāros tiesību aktus",
+    "mcpEyebrow": "MI integrācija",
+    "mcpTitle": "Izmantojiet LegalViz pakalpojumos ChatGPT, Claude u.c.",
+    "mcpDescription": "LegalViz piedāvā bezmaksas MCP serveri (Model Context Protocol). Pievienojiet to savam MI asistentam, lai tas varētu meklēt ES tiesību aktos, lasīt atsevišķus pantus un apsvērumus un pārbaudīt EST judikatūru — balstoties uz oficiālajiem tekstiem.",
+    "mcpUrlLabel": "MCP servera URL",
+    "mcpCopy": "Kopēt",
+    "mcpCopied": "Nokopēts!",
+    "mcpChatgptSteps": "Iestatījumi → Savienotāji → Papildu iestatījumi → Pievienot pielāgotu savienotāju, pēc tam ielīmējiet URL.",
+    "mcpClaudeSteps": "Iestatījumi → Savienotāji → Pievienot pielāgotu savienotāju, pēc tam ielīmējiet URL.",
+    "mcpOthersName": "Cursor, VS Code un citi MCP klienti",
+    "mcpOthersSteps": "Pievienojiet URL klienta MCP konfigurācijā kā Streamable HTTP serveri. API atslēga vai konts nav nepieciešami.",
+    "mcpDocs": "Pilna pamācība un pieejamie rīki",
+    "mcpShortLabel": "MI"
   },
   "resetFooter": {
     "title": "Kaut kas nedarbojas?",

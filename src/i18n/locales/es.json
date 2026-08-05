@@ -148,7 +148,19 @@
     "searchCta": "Encuentre una ley rápidamente",
     "searchHint": "Busque actos primarios de la UE por título, referencia o CELEX y ábralos directamente.",
     "searchPlaceholder": "Buscar actos primarios de la UE por título, referencia o CELEX",
-    "searchPlaceholderMobile": "Buscar actos primarios de la UE"
+    "searchPlaceholderMobile": "Buscar actos primarios de la UE",
+    "mcpEyebrow": "Integración con IA",
+    "mcpTitle": "Use LegalViz en ChatGPT, Claude y otros",
+    "mcpDescription": "LegalViz ofrece un servidor MCP (Model Context Protocol) gratuito. Conéctelo a su asistente de IA y este podrá buscar en la legislación de la UE, leer artículos y considerandos concretos y consultar la jurisprudencia del TJUE, basándose en los textos oficiales.",
+    "mcpUrlLabel": "URL del servidor MCP",
+    "mcpCopy": "Copiar",
+    "mcpCopied": "¡Copiado!",
+    "mcpChatgptSteps": "Configuración → Conectores → Configuración avanzada → Añadir conector personalizado y pegue la URL.",
+    "mcpClaudeSteps": "Configuración → Conectores → Añadir conector personalizado y pegue la URL.",
+    "mcpOthersName": "Cursor, VS Code y otros clientes MCP",
+    "mcpOthersSteps": "Añada la URL a la configuración MCP del cliente como servidor Streamable HTTP. No se necesita clave de API ni cuenta.",
+    "mcpDocs": "Guía completa y herramientas disponibles",
+    "mcpShortLabel": "IA"
   },
   "resetFooter": {
     "title": "¿Algo no funciona?",

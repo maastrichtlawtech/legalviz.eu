@@ -148,7 +148,19 @@
     "searchCta": "Aimsigh dlí go tapa",
     "searchHint": "Cuardaigh gníomhartha príomha an AE de réir teidil, tagartha nó CELEX agus oscail iad go díreach.",
     "searchPlaceholder": "Cuardaigh gníomhartha príomha an AE de réir teidil, tagartha nó CELEX",
-    "searchPlaceholderMobile": "Cuardaigh gníomhartha príomha an AE"
+    "searchPlaceholderMobile": "Cuardaigh gníomhartha príomha an AE",
+    "mcpEyebrow": "Comhtháthú IS",
+    "mcpTitle": "Úsáid LegalViz in ChatGPT, Claude agus eile",
+    "mcpDescription": "Cuireann LegalViz freastalaí MCP (Model Context Protocol) ar fáil saor in aisce. Ceangail le do chúntóir IS é le go bhféadfaidh sé cuardach a dhéanamh i reachtaíocht an AE, ailt agus aithrisí ar leith a léamh, agus cásdlí CBAE a sheiceáil — bunaithe ar na téacsanna oifigiúla.",
+    "mcpUrlLabel": "URL an fhreastalaí MCP",
+    "mcpCopy": "Cóipeáil",
+    "mcpCopied": "Cóipeáilte!",
+    "mcpChatgptSteps": "Socruithe → Nascóirí → Ardsocruithe → Cuir nascóir saincheaptha leis, ansin greamaigh an URL.",
+    "mcpClaudeSteps": "Socruithe → Nascóirí → Cuir nascóir saincheaptha leis, ansin greamaigh an URL.",
+    "mcpOthersName": "Cursor, VS Code agus cliaint MCP eile",
+    "mcpOthersSteps": "Cuir an URL le cumraíocht MCP an chliaint mar fhreastalaí Streamable HTTP. Ní gá eochair API ná cuntas.",
+    "mcpDocs": "Treoir iomlán agus uirlisí atá ar fáil",
+    "mcpShortLabel": "IS"
   },
   "resetFooter": {
     "title": "Nach bhfuil rud éigin ag obair?",

@@ -148,7 +148,19 @@
     "searchCta": "Löydä laki nopeasti",
     "searchHint": "Hae EU:n ensisijaisia säädöksiä otsikon, viitteen tai CELEX-tunnuksen mukaan ja avaa ne suoraan.",
     "searchPlaceholder": "Hae EU:n ensisijaisia säädöksiä otsikon, viitteen tai CELEX-tunnuksen mukaan",
-    "searchPlaceholderMobile": "Hae EU:n ensisijaisia säädöksiä"
+    "searchPlaceholderMobile": "Hae EU:n ensisijaisia säädöksiä",
+    "mcpEyebrow": "Tekoälyintegraatio",
+    "mcpTitle": "Käytä LegalViziä ChatGPT:ssä, Claudessa ja muissa",
+    "mcpDescription": "LegalViz tarjoaa ilmaisen MCP-palvelimen (Model Context Protocol). Yhdistä se tekoälyavustajaasi, niin avustaja voi hakea EU-lainsäädännöstä, lukea yksittäisiä artikloja ja johdanto-osan kappaleita sekä tarkistaa EU-tuomioistuimen oikeuskäytäntöä — virallisten tekstien pohjalta.",
+    "mcpUrlLabel": "MCP-palvelimen URL",
+    "mcpCopy": "Kopioi",
+    "mcpCopied": "Kopioitu!",
+    "mcpChatgptSteps": "Asetukset → Liittimet → Lisäasetukset → Lisää mukautettu liitin ja liitä sitten URL.",
+    "mcpClaudeSteps": "Asetukset → Liittimet → Lisää mukautettu liitin ja liitä sitten URL.",
+    "mcpOthersName": "Cursor, VS Code ja muut MCP-asiakkaat",
+    "mcpOthersSteps": "Lisää URL asiakasohjelman MCP-määritykseen Streamable HTTP -palvelimena. API-avainta tai tiliä ei tarvita.",
+    "mcpDocs": "Täydellinen ohje ja käytettävissä olevat työkalut",
+    "mcpShortLabel": "AI"
   },
   "resetFooter": {
     "title": "Eikö jokin toimi?",

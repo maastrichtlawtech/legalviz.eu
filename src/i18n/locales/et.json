@@ -148,7 +148,19 @@
     "searchCta": "Leidke seadus kiiresti",
     "searchHint": "Otsige ELi esmaseid õigusakte pealkirja, viite või CELEXi järgi ja avage need otse.",
     "searchPlaceholder": "Otsi ELi esmaseid õigusakte pealkirja, viite või CELEXi järgi",
-    "searchPlaceholderMobile": "Otsi ELi esmaseid õigusakte"
+    "searchPlaceholderMobile": "Otsi ELi esmaseid õigusakte",
+    "mcpEyebrow": "Tehisintellekti integratsioon",
+    "mcpTitle": "Kasutage LegalVizi ChatGPT-s, Claude'is jm",
+    "mcpDescription": "LegalViz pakub tasuta MCP-serverit (Model Context Protocol). Ühendage see oma tehisintellekti assistendiga, et see saaks otsida ELi õigusaktidest, lugeda üksikuid artikleid ja põhjendusi ning vaadata Euroopa Kohtu praktikat — ametlike tekstide põhjal.",
+    "mcpUrlLabel": "MCP-serveri URL",
+    "mcpCopy": "Kopeeri",
+    "mcpCopied": "Kopeeritud!",
+    "mcpChatgptSteps": "Seaded → Konnektorid → Täpsemad seaded → Lisa kohandatud konnektor, seejärel kleepige URL.",
+    "mcpClaudeSteps": "Seaded → Konnektorid → Lisa kohandatud konnektor, seejärel kleepige URL.",
+    "mcpOthersName": "Cursor, VS Code ja muud MCP-kliendid",
+    "mcpOthersSteps": "Lisage URL kliendi MCP-konfiguratsiooni Streamable HTTP serverina. API-võtit ega kontot pole vaja.",
+    "mcpDocs": "Täielik juhend ja saadaolevad tööriistad",
+    "mcpShortLabel": "AI"
   },
   "resetFooter": {
     "title": "Kas miski ei tööta?",

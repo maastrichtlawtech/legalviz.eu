@@ -148,7 +148,19 @@
     "searchCta": "Rychle najděte zákon",
     "searchHint": "Vyhledávejte primární právní akty EU podle názvu, reference nebo CELEX a otevírejte je přímo.",
     "searchPlaceholder": "Vyhledávání primárních právních aktů EU podle názvu, reference nebo CELEX",
-    "searchPlaceholderMobile": "Vyhledávání primárních právních aktů EU"
+    "searchPlaceholderMobile": "Vyhledávání primárních právních aktů EU",
+    "mcpEyebrow": "Integrace s AI",
+    "mcpTitle": "Používejte LegalViz v ChatGPT, Claude a dalších",
+    "mcpDescription": "LegalViz nabízí bezplatný MCP server (Model Context Protocol). Připojte jej ke svému AI asistentovi a ten bude moci vyhledávat v právních předpisech EU, číst jednotlivé články a body odůvodnění a dohledávat judikaturu Soudního dvora EU — na základě úředních textů.",
+    "mcpUrlLabel": "URL MCP serveru",
+    "mcpCopy": "Kopírovat",
+    "mcpCopied": "Zkopírováno!",
+    "mcpChatgptSteps": "Nastavení → Konektory → Pokročilá nastavení → Přidat vlastní konektor a poté vložte URL.",
+    "mcpClaudeSteps": "Nastavení → Konektory → Přidat vlastní konektor a poté vložte URL.",
+    "mcpOthersName": "Cursor, VS Code a další MCP klienti",
+    "mcpOthersSteps": "Přidejte URL do MCP konfigurace klienta jako Streamable HTTP server. Není potřeba API klíč ani účet.",
+    "mcpDocs": "Kompletní návod a dostupné nástroje",
+    "mcpShortLabel": "AI"
   },
   "resetFooter": {
     "title": "Něco nefunguje?",

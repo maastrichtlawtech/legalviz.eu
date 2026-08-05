@@ -148,7 +148,19 @@
     "searchCta": "Greitai raskite įstatymą",
     "searchHint": "Ieškokite pirminių ES teisės aktų pagal pavadinimą, nuorodą arba CELEX.",
     "searchPlaceholder": "Ieškoti pirminių ES teisės aktų pagal pavadinimą, nuorodą arba CELEX",
-    "searchPlaceholderMobile": "Ieškoti pirminių ES teisės aktų"
+    "searchPlaceholderMobile": "Ieškoti pirminių ES teisės aktų",
+    "mcpEyebrow": "DI integracija",
+    "mcpTitle": "Naudokite „LegalViz“ ChatGPT, Claude ir kitur",
+    "mcpDescription": "„LegalViz“ siūlo nemokamą MCP (Model Context Protocol) serverį. Prijunkite jį prie savo DI asistento, kad šis galėtų ieškoti ES teisės aktuose, skaityti atskirus straipsnius bei konstatuojamąsias dalis ir tikrinti ESTT praktiką — remdamasis oficialiais tekstais.",
+    "mcpUrlLabel": "MCP serverio URL",
+    "mcpCopy": "Kopijuoti",
+    "mcpCopied": "Nukopijuota!",
+    "mcpChatgptSteps": "Nustatymai → Jungtys → Išplėstiniai nustatymai → Pridėti pasirinktinę jungtį, tada įklijuokite URL.",
+    "mcpClaudeSteps": "Nustatymai → Jungtys → Pridėti pasirinktinę jungtį, tada įklijuokite URL.",
+    "mcpOthersName": "Cursor, VS Code ir kiti MCP klientai",
+    "mcpOthersSteps": "Įtraukite URL į kliento MCP konfigūraciją kaip „Streamable HTTP“ serverį. API rakto ar paskyros nereikia.",
+    "mcpDocs": "Išsamus vadovas ir galimi įrankiai",
+    "mcpShortLabel": "DI"
   },
   "resetFooter": {
     "title": "Kažkas neveikia?",

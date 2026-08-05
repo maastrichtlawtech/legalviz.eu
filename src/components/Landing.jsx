@@ -5,6 +5,7 @@ import { Github } from "lucide-react";
 import { TopBar, SearchBox } from "./TopBar.jsx";
 import { SEO } from "./SEO.jsx";
 import { LandingLibrary } from "./LandingLibrary.jsx";
+import { McpLandingTeaser } from "./McpPromo.jsx";
 import { useI18n } from "../i18n/useI18n.js";
 import { lawLangFromUiLocale, uiLocaleFromLawLang } from "../i18n/localeMeta.js";
 import { resetWholeApp } from "../utils/resetApp.js";
@@ -177,6 +178,10 @@ export function Landing({ forcedLocale = null }) {
             locale={activeLocale}
             t={t}
           />
+        </div>
+
+        <div className="mt-10 flex justify-center">
+          <McpLandingTeaser t={t} />
         </div>
 
         <Motion.div

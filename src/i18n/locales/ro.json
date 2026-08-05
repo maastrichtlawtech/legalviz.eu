@@ -148,7 +148,19 @@
     "searchCta": "Găsiți o lege rapid",
     "searchHint": "Căutați acte primare UE după titlu, referință sau CELEX și deschideți-le direct.",
     "searchPlaceholder": "Căutați acte primare UE după titlu, referință sau CELEX",
-    "searchPlaceholderMobile": "Căutați acte primare UE"
+    "searchPlaceholderMobile": "Căutați acte primare UE",
+    "mcpEyebrow": "Integrare cu IA",
+    "mcpTitle": "Folosiți LegalViz în ChatGPT, Claude și altele",
+    "mcpDescription": "LegalViz oferă un server MCP (Model Context Protocol) gratuit. Conectați-l la asistentul dumneavoastră de IA, iar acesta va putea căuta în legislația UE, citi articole și considerente individuale și consulta jurisprudența CJUE — pe baza textelor oficiale.",
+    "mcpUrlLabel": "URL-ul serverului MCP",
+    "mcpCopy": "Copiați",
+    "mcpCopied": "Copiat!",
+    "mcpChatgptSteps": "Setări → Conectori → Setări avansate → Adăugare conector personalizat, apoi lipiți URL-ul.",
+    "mcpClaudeSteps": "Setări → Conectori → Adăugare conector personalizat, apoi lipiți URL-ul.",
+    "mcpOthersName": "Cursor, VS Code și alți clienți MCP",
+    "mcpOthersSteps": "Adăugați URL-ul în configurația MCP a clientului ca server Streamable HTTP. Nu este nevoie de cheie API sau cont.",
+    "mcpDocs": "Ghid complet și instrumente disponibile",
+    "mcpShortLabel": "IA"
   },
   "resetFooter": {
     "title": "Ceva nu funcționează?",

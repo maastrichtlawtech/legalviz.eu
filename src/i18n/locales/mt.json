@@ -148,7 +148,19 @@
     "searchCta": "Sib liġi malajr",
     "searchHint": "Fittex atti primarji tal-UE skont it-titlu, ir-referenza jew CELEX.",
     "searchPlaceholder": "Fittex atti primarji tal-UE skont it-titlu, ir-referenza jew CELEX",
-    "searchPlaceholderMobile": "Fittex atti primarji tal-UE"
+    "searchPlaceholderMobile": "Fittex atti primarji tal-UE",
+    "mcpEyebrow": "Integrazzjoni tal-IA",
+    "mcpTitle": "Uża LegalViz f'ChatGPT, Claude u oħrajn",
+    "mcpDescription": "LegalViz joffri server MCP (Model Context Protocol) b'xejn. Qabbdu mal-assistent tal-IA tiegħek biex ikun jista' jfittex fil-leġiżlazzjoni tal-UE, jaqra artikoli u premessi individwali, u jiċċekkja l-ġurisprudenza tal-QĠUE — abbażi tat-testi uffiċjali.",
+    "mcpUrlLabel": "URL tas-server MCP",
+    "mcpCopy": "Ikkopja",
+    "mcpCopied": "Ikkupjat!",
+    "mcpChatgptSteps": "Settings → Connectors → Advanced settings → Add custom connector, imbagħad waħħal il-URL.",
+    "mcpClaudeSteps": "Settings → Connectors → Add custom connector, imbagħad waħħal il-URL.",
+    "mcpOthersName": "Cursor, VS Code u klijenti MCP oħra",
+    "mcpOthersSteps": "Żid il-URL fil-konfigurazzjoni MCP tal-klijent bħala server Streamable HTTP. L-ebda ċavetta API jew kont meħtieġa.",
+    "mcpDocs": "Gwida sħiħa u għodod disponibbli",
+    "mcpShortLabel": "IA"
   },
   "resetFooter": {
     "title": "Xi ħaġa ma taħdimx?",

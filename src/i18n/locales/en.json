@@ -224,7 +224,19 @@
     "pasteEurlexUrlHelper": "Paste the URL of a EUR-Lex law page.",
     "addFromUrl": "Add from URL",
     "invalidEurlexUrl": "Enter a valid EUR-Lex URL.",
-    "importResolveFailed": "This EUR-Lex page could not be resolved to a law LegalViz can open."
+    "importResolveFailed": "This EUR-Lex page could not be resolved to a law LegalViz can open.",
+    "mcpEyebrow": "AI integration",
+    "mcpTitle": "Use LegalViz in ChatGPT, Claude & co.",
+    "mcpDescription": "LegalViz offers a free MCP (Model Context Protocol) server. Connect it to your AI assistant, and it can search EU legislation, read individual articles and recitals, and look up CJEU case law — grounded in the official texts.",
+    "mcpUrlLabel": "MCP server URL",
+    "mcpCopy": "Copy",
+    "mcpCopied": "Copied!",
+    "mcpChatgptSteps": "Settings → Connectors → Advanced settings → Add custom connector, then paste the URL.",
+    "mcpClaudeSteps": "Settings → Connectors → Add custom connector, then paste the URL.",
+    "mcpOthersName": "Cursor, VS Code & other MCP clients",
+    "mcpOthersSteps": "Add the URL to the client's MCP configuration as a Streamable HTTP server. No API key or account required.",
+    "mcpDocs": "Full setup guide and available tools",
+    "mcpShortLabel": "AI"
   },
   "resetFooter": {
     "title": "Something isn't working?",

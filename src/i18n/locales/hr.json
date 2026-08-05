@@ -148,7 +148,19 @@
     "searchCta": "Brzo pronađite zakon",
     "searchHint": "Pretražujte primarne akte EU prema naslovu, referenci ili CELEX-u i otvorite ih izravno.",
     "searchPlaceholder": "Pretraži primarne akte EU prema naslovu, referenci ili CELEX-u",
-    "searchPlaceholderMobile": "Pretraži primarne akte EU"
+    "searchPlaceholderMobile": "Pretraži primarne akte EU",
+    "mcpEyebrow": "Integracija s UI",
+    "mcpTitle": "Koristite LegalViz u ChatGPT-u, Claudeu i drugima",
+    "mcpDescription": "LegalViz nudi besplatan MCP poslužitelj (Model Context Protocol). Povežite ga sa svojim UI asistentom kako bi mogao pretraživati zakonodavstvo EU-a, čitati pojedine članke i uvodne izjave te provjeravati sudsku praksu Suda EU-a — na temelju službenih tekstova.",
+    "mcpUrlLabel": "URL MCP poslužitelja",
+    "mcpCopy": "Kopiraj",
+    "mcpCopied": "Kopirano!",
+    "mcpChatgptSteps": "Postavke → Konektori → Napredne postavke → Dodaj prilagođeni konektor, zatim zalijepite URL.",
+    "mcpClaudeSteps": "Postavke → Konektori → Dodaj prilagođeni konektor, zatim zalijepite URL.",
+    "mcpOthersName": "Cursor, VS Code i drugi MCP klijenti",
+    "mcpOthersSteps": "Dodajte URL u MCP konfiguraciju klijenta kao Streamable HTTP poslužitelj. Nisu potrebni API ključ ni račun.",
+    "mcpDocs": "Potpuni vodič i dostupni alati",
+    "mcpShortLabel": "UI"
   },
   "resetFooter": {
     "title": "Nešto ne radi?",

@@ -7,7 +7,7 @@ const { parseFmxXml } = require("../shared/fmx-parser-node");
 const { createSearchHandler } = require("../search/search-route");
 const { createTopicsHandler } = require("../search/topics-route");
 const { createDefinitionCompareHandler, createDefinitionSearchHandler } = require("../search/definitions-route");
-const { fetchMetadata, fetchAmendments, fetchImplementing, fetchCaseLaw } = require("../shared/law-queries");
+const { fetchMetadata, fetchAmendments, fetchConsolidatedVersions, fetchImplementing, fetchCaseLaw } = require("../shared/law-queries");
 const { ChatProviderError } = require("../shared/openrouter-chat");
 const { ensureRecitalTitles } = require("../shared/recital-title-service");
 const {
@@ -359,6 +359,28 @@ function registerApiRoutes(app, deps) {
       res.json(payload);
     } catch (err) {
       safeErrorResponse(res, err, 'Failed to fetch amendment history');
+    }
+  });
+
+  app.get('/api/laws/:celex/consolidated', rateLimitMiddleware, async (req, res) => {
+    try {
+      const { celex } = req.params;
+
+      if (!validateCelex(celex)) {
+        return res.status(400).json({ error: 'Invalid CELEX format' });
+      }
+
+      const cacheKey = `consolidated:${celex}`;
+      const cached = cacheGet(resolutionCache, cacheKey);
+      if (cached) {
+        return res.json(cached);
+      }
+
+      const payload = await fetchConsolidatedVersions(celex, runSparqlQuery);
+      cacheSet(resolutionCache, cacheKey, payload, RESOLUTION_CACHE_MS);
+      res.json(payload);
+    } catch (err) {
+      safeErrorResponse(res, err, 'Failed to fetch consolidated versions');
     }
   });
 

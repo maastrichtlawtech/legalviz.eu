@@ -3,6 +3,7 @@ import { Loader2, Printer, Scale } from "lucide-react";
 import { LawSummary } from "../LawSummary.jsx";
 import { MetadataPanel } from "../MetadataPanel.jsx";
 import { CaseLawModal } from "../CaseLawModal.jsx";
+import { ConsolidationNotice } from "../ConsolidationNotice.jsx";
 import { formatMetaDate } from "../../utils/formatMetaDate.js";
 import { Pill } from "../ui/Pill.jsx";
 import { useLawMetadata } from "../../hooks/useLawMetadata.js";
@@ -176,6 +177,12 @@ export function LawOverviewPage({
           </a>
         ) : null}
       </div>
+
+      <ConsolidationNotice
+        celex={effectiveCelex}
+        currentLang={formexLang}
+        locale={locale}
+      />
 
       {/* Actions */}
       <div className="mb-8 flex flex-wrap gap-3">

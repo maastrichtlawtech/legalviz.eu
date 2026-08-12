@@ -87,6 +87,53 @@ LIMIT 50`;
   return { celex, amendments };
 }
 
+// Consolidated ("as amended") versions live in CELEX sector 0 under a
+// point-in-time id: 32013R0575 -> 02013R0575-20260626. Only sector-3 acts have
+// them, so anything else short-circuits without a SPARQL round trip.
+const SECTOR_3_CELEX = /^3\d{4}[A-Z]{1,2}\d{4}$/;
+const CONSOLIDATED_CELEX = /^(0\d{4}[A-Z]{1,2}\d{4})-(\d{4})(\d{2})(\d{2})$/;
+
+function consolidatedBaseCelex(celex) {
+  const normalized = String(celex || '').toUpperCase();
+  return SECTOR_3_CELEX.test(normalized) ? `0${normalized.slice(1)}` : null;
+}
+
+/**
+ * List the consolidated versions EUR-Lex publishes for an act, oldest first.
+ *
+ * Cellar has no "consolidated version of" predicate that resolves from the base
+ * act, so this matches on the point-in-time CELEX id instead. Consolidations can
+ * be dated in the future (a version prepared for an amendment that has not yet
+ * applied); the whole list is returned unfiltered and callers decide which one
+ * is current, so the payload stays cacheable without a "today" baked into it.
+ */
+async function fetchConsolidatedVersions(celex, runSparqlQuery) {
+  const base = consolidatedBaseCelex(celex);
+  if (!base) return { celex, base: null, versions: [] };
+
+  const query = `
+PREFIX cdm: <http://publications.europa.eu/ontology/cdm#>
+SELECT DISTINCT ?id WHERE {
+  ?work cdm:resource_legal_id_celex ?id .
+  FILTER(STRSTARTS(STR(?id), "${base}-"))
+}
+ORDER BY ?id
+LIMIT 200`;
+
+  const data = await runSparqlQuery(query);
+  const versions = (data.results?.bindings || [])
+    .map((binding) => {
+      const id = String(binding.id?.value || '').toUpperCase();
+      const match = CONSOLIDATED_CELEX.exec(id);
+      if (!match || match[1] !== base) return null;
+      return { celex: id, date: `${match[2]}-${match[3]}-${match[4]}` };
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  return { celex, base, versions };
+}
+
 async function fetchImplementing(celex, runSparqlQuery) {
   const celexUri = `http://publications.europa.eu/resource/celex/${celex}`;
   const query = `
@@ -627,6 +674,7 @@ module.exports = {
   ACT_CELEX_MAP,
   fetchMetadata,
   fetchAmendments,
+  fetchConsolidatedVersions,
   fetchImplementing,
   fetchCaseLaw,
   parseCitationsToRefs,

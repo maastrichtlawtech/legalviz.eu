@@ -837,6 +837,14 @@ export async function fetchAmendments(celex) {
   }));
 }
 
+export async function fetchConsolidatedVersions(celex) {
+  return getInFlightRequest(`consolidated:${celex}`, () => fetchJsonWithCache({
+    cacheKey: `${celex}_consolidated`,
+    url: `${API_BASE}/api/laws/${encodeURIComponent(celex)}/consolidated`,
+    errorLabel: "Consolidated version lookup failed",
+  }));
+}
+
 export async function fetchLawMetadata(celex) {
   return getInFlightRequest(`metadata:${celex}`, () => fetchJsonWithCache({
     cacheKey: `${celex}_metadata`,

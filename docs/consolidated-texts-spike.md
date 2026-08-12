@@ -22,7 +22,8 @@ rest of the app is indexed against.
 | act | amendments | versions | not yet applied | newest applied | uri shape |
 |---|---:|---:|---:|---|---|
 | GDPR | 0 | 1 | 0 | 2016-05-04 | `/celex/` |
-| Digital Services Act | — | — | — | *406 from Cellar* | — |
+| Digital Services Act | 0 | 1 | 0 | *406 from Cellar* | — |
+| Digital Markets Act | 0 | 1 | 0 | 2022-10-12 | `/consolidation/` |
 | AI Act | 1 | 2 | 0 | 2026-07-27 | `/consolidation/` |
 | Consumer Rights Directive | 4 | 4 | 1 | 2022-05-28 | `/consolidation/` |
 | PSD2 | 2 | 3 | 0 | 2025-01-17 | `/consolidation/` |
@@ -36,30 +37,56 @@ rest of the app is indexed against.
 | Emissions Trading Directive | 18 | 16 | 0 | 2024-03-01 | `/consolidation/` |
 | REACH | 42 | 68 | 0 | 2026-05-11 | `/consolidation/` |
 
-- **13 of 14 acts have consolidated Formex**, and every one of those parsed.
+- **14 of 15 acts have consolidated Formex**, and every one of those parsed.
   Consolidation chains are long where it matters (REACH 68 versions, CRR 22),
   which is the opposite of the "there usually aren't super long consolidations"
   assumption — that holds only for young or lightly amended acts.
-- **Consolidation is not stale.** In 12 of 13 cases the newest consolidated
+- **Consolidation is not stale.** In 13 of 14 cases the newest consolidated
   version is *newer* than the newest amending act. The one exception is the
   Consumer Rights Directive, where consolidation trails by 641 days. Whatever
   the risk of this feature is, serving out-of-date consolidations is not it.
-- **Future-dated versions are real but rare**: 2 of 13 acts carry a
+- **Future-dated versions are real but rare**: 2 of 14 acts carry a
   consolidation dated after today. Any consumer must filter them or it will
   present a text that has not yet applied.
 - **One act is indexed but unservable.** SPARQL lists `02022R2065-20221027` for
   the DSA; Cellar answers `406` for the resource, on every Accept header tried.
   That is the "Cellar data might be incomplete" concern, quantified at roughly
-  1 in 14 — low, but non-zero, so the UI cannot assume a listed version resolves.
+  1 in 15 — low, but non-zero, so the UI cannot assume a listed version resolves.
+
+### 1a. The featured laws specifically
+
+The eight acts on the landing page are the ones most readers actually open, so
+they were checked separately — both for what the data says and for what the
+#144 notice renders:
+
+| act | amendment history | consolidated | notice shown |
+|---|---|---:|---|
+| GDPR | 3 corrigenda, 0 amendments | 1 | no |
+| DMA | 2 corrigenda, 0 amendments | 1 | no |
+| DSA | 10 corrigenda, 0 amendments | 1 (unservable) | no |
+| AI Act | 4 corrigenda, **1 amendment** | 2 | **yes** |
+| Data Act | 5 corrigenda, 0 amendments | 1 | no |
+| Data Governance Act | 6 corrigenda, 0 amendments | 1 | no |
+| P2B Regulation | 2 corrigenda, 0 amendments | 1 | no |
+| NIS2 | 9 corrigenda, 0 amendments | 1 | no |
+
+Seven of the eight are corrigendum-only. Had corrigenda counted as amendments,
+**every featured law would carry a warning banner** — permanent noise on the
+app's most-visited pages, for acts whose text has never changed. The one that
+fires is the AI Act (amended 2026-07-08, consolidated 2026-07-27), verified in a
+browser end to end alongside GDPR, DSA and DMA rendering nothing.
+
+It also means the DSA's unservable consolidation never reaches a reader: the
+notice does not fire for an unamended act, so the broken link is never offered.
 
 ## 2. Plumbing: three concrete gaps, all small
 
 **The parser already handles the body.** Consolidated Formex is a `<CONS.ACT>`
 root wrapping the same `ENACTING.TERMS → DIVISION → ARTICLE → TI.ART/PARAG`
 structure as an OJ act. `parseFmxToCombined` walks it unmodified and produced
-plausible articles and definitions for all 13. No parser rewrite is implied.
+plausible articles and definitions for all 14. No parser rewrite is implied.
 
-**Gap 1 — `isFmxDocument` rejects every consolidated document** (all 13 rows
+**Gap 1 — `isFmxDocument` rejects every consolidated document** (all 14 rows
 report `FAIL`). It requires the literal `<ACT`, which `<CONS.ACT` does not
 contain. Worth being precise about where this bites: the backend `/parsed` route
 never consults it (`parsed-law-service.js` parses whatever the FMX service
@@ -112,7 +139,7 @@ definition counts are unaffected; the serving path combines all members.
 
 ## 3. The two findings that should actually drive the decision
 
-**Consolidated texts have no recitals. None, anywhere.** Every one of the 13
+**Consolidated texts have no recitals. None, anywhere.** Every one of the 14
 acts parsed to `0` recitals against 49–180 in the as-adopted text. This is not a
 GDPR quirk; it is what EUR-Lex consolidation does. Rendering a consolidated
 version therefore blanks the recital grid, the TF-IDF recital→article map, the
@@ -124,6 +151,7 @@ distinguish this reader from EUR-Lex's own.
 | act | articles consolidated vs adopted | added | removed |
 |---|---|---:|---:|
 | GDPR | 99 vs 99 | 0 | 0 |
+| Digital Markets Act | 54 vs 54 | 0 | 0 |
 | Consumer Rights Directive | 36 vs 37 | 1 | 1 |
 | PSD2 | 118 vs 117 | 1 | 0 |
 | AI Act | 119 vs 113 | 6 | 0 |
@@ -140,7 +168,7 @@ The "only changes a few things" intuition is correct for the GDPR and for young
 acts, and badly wrong for the acts that motivate the feature. Running the probe
 with `--articles 32013R0575` confirms the CRR delta is real, not parser noise:
 **all 265 added articles are suffixed insertions** — `5a`, `10a`, `47a`, `47b`,
-`47c`, `72a`…`72l`, `78a`. Half the operative text of the CRR that a
+`47c`, `72a`…`72l`, `78a`. A third of the operative text of the CRR that a
 practitioner needs does not exist in what LegalViz renders today.
 
 That cuts both ways. It is the strongest argument *for* the feature — and the
@@ -173,7 +201,7 @@ Build it, but not as a second law.
    and its cohort the choice is not "adopted vs consolidated", it is "nothing vs
    something", and none of the index-identity problems apply because there is no
    as-adopted parse to conflict with.
-4. **Do not trust the version list to resolve.** ~1 in 14 is indexed but
+4. **Do not trust the version list to resolve.** ~1 in 15 is indexed but
    unservable; fall back to the as-adopted text rather than erroring.
 
 Not recommended: rendering consolidated text under its own `0…` CELEX as the

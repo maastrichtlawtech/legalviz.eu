@@ -45,6 +45,7 @@ const TIMEOUT_MS = 120_000;
 const SAMPLE = [
   { celex: '32016R0679', label: 'GDPR' },
   { celex: '32022R2065', label: 'Digital Services Act' },
+  { celex: '32022R1925', label: 'Digital Markets Act' },
   { celex: '32024R1689', label: 'AI Act' },
   { celex: '32011L0083', label: 'Consumer Rights Directive' },
   { celex: '32015L2366', label: 'PSD2' },

@@ -1765,63 +1765,130 @@ export function parseFmxToCombined(xmlText) {
 
   // --- Definitions ---
   const definitions = [];
-  // Find the definitions article by matching its title against the language-specific pattern
-  const defArticle = articles.find(a => a.article_title && lang.definition.test(a.article_title));
-  if (defArticle) {
-    // Try multiple IDENTIFIER formats (3-digit padding is standard, but try others too)
-    const artNum = defArticle.article_number;
-    const candidates = [
-      artNum.padStart(3, "0"),
-      artNum.padStart(4, "0"),
-      artNum,
-    ];
-    let artEl = null;
-    for (const id of candidates) {
-      artEl = root.querySelector(`ARTICLE[IDENTIFIER="${id}"]`);
-      if (artEl) break;
+
+  // Resolve every article's element once. Looking each one up with a
+  // `[IDENTIFIER=…]` query instead would be quadratic on acts like the CRR
+  // (521 articles), and identifiers are zero-padded to a width that varies by
+  // act, so compare them stripped. Elements inside a quotation define terms in
+  // the act being *amended*, not this one, and must not be indexed.
+  const articleElementsByNumber = new Map();
+  for (const element of root.querySelectorAll("ARTICLE")) {
+    if (element.closest("QUOT\\.S")) continue;
+    const id = (element.getAttribute("IDENTIFIER") || "").replace(/^0+/, "").toUpperCase();
+    if (id && !articleElementsByNumber.has(id)) articleElementsByNumber.set(id, element);
+  }
+
+  // One definition per list point, and per numbered paragraph in the acts that
+  // use paragraphs instead — the VAT Directive states "'Telecommunications
+  // services' shall mean …" as Article 24(2), with no list in sight. A PARAG
+  // that contains points is skipped: its ITEMs already stand for its content,
+  // and taking both would define every term twice.
+  function definitionEntries(artEl) {
+    const entries = [];
+
+    // A prose definition block states one definition per <P> — VAT Article 48
+    // runs "'Intra-Community transport of goods' shall mean …", "'Place of
+    // departure' shall mean …", "'Place of arrival' shall mean …" as three
+    // sibling paragraphs. Reading the block as one entry would match only the
+    // first term and swallow the other two into its definition text.
+    const pushBody = (bodyEl, pointEl) => {
+      if (!bodyEl) return;
+      const paragraphs = Array.from(bodyEl.children).filter((child) => child.tagName === "P");
+      if (paragraphs.length > 1) {
+        for (const paragraph of paragraphs) entries.push({ textEl: paragraph, pointEl });
+      } else {
+        entries.push({ textEl: bodyEl, pointEl });
+      }
+    };
+
+    for (const item of artEl.querySelectorAll("ITEM")) {
+      // Points quoted from another act are that act's definitions.
+      if (item.closest("QUOT\\.S")) continue;
+      // The TXT might be inside NP > TXT or directly under ITEM
+      const txtEl = item.querySelector("TXT") || item.querySelector("NP");
+      if (txtEl) {
+        entries.push({ textEl: txtEl, pointEl: item.querySelector("NO\\.P") || item.querySelector("NP > NO") });
+      }
     }
 
-    if (artEl) {
-      for (const item of artEl.querySelectorAll("ITEM")) {
-        // The TXT might be inside NP > TXT or directly under ITEM
-        const txtEl = item.querySelector("TXT") || item.querySelector("NP");
-        if (!txtEl) continue;
-        const text = allText(txtEl);
-        if (!text) continue;
-        const sourcePoint = allText(item.querySelector("NO\\.P") || item.querySelector("NP > NO")) || null;
-        const makeDefinition = (term, definition) => ({
-          term,
-          definition,
-          sourceArticle: artNum,
-          sourcePoint,
-          references: [
-            ...extractCrossRefsFromText(definition, lang),
-            ...extractOjRefsFromElement(txtEl),
-          ],
-        });
+    for (const parag of artEl.querySelectorAll("PARAG")) {
+      if (parag.closest("QUOT\\.S")) continue;
+      if (parag.querySelector("ITEM")) continue;
+      pushBody(parag.querySelector("ALINEA") || parag, parag.querySelector("NO\\.PARAG"));
+    }
 
-        // Verb-first languages (GA, IT, ES, PT): meansVerb 'term' definition.
-        // Term-first languages: 'term' meansVerb definition.
-        // Either way, try the configured meansVerb first, then fall back to the
-        // quoted-term pattern for languages where the verb appears only in the
-        // article intro (DE, FR, CS, SK, HU, FI, ET, LV, LT, EL, NL, DA, SV …).
-        // The verb-first languages need that fallback too: FR/IT/ES/PT state
-        // the verb once ("on entend par:") and then list «terme», définition.
-        const termMatch = text.match(meansRegex);
-        if (termMatch?.[1]) {
-          const term = termMatch[1].trim();
-          const definition = text.slice(termMatch[0].length).trim();
-          definitions.push(makeDefinition(term, definition));
-        } else {
-          const fbMatch = text.match(fallbackDefRegex);
-          if (fbMatch?.[1]) {
-            const term = fbMatch[1].trim();
-            const definition = text.slice(fbMatch[0].length).trim();
-            if (term && definition) definitions.push(makeDefinition(term, definition));
-          }
+    // Articles with neither points nor numbered paragraphs hang their text
+    // straight off the ARTICLE (VAT Article 48 again).
+    for (const child of artEl.children) {
+      if (child.tagName !== "ALINEA") continue;
+      if (child.querySelector("ITEM")) continue;
+      pushBody(child, null);
+    }
+
+    return entries;
+  }
+
+  function definitionsInArticle(artEl, artNum) {
+    const found = [];
+    for (const { textEl, pointEl } of definitionEntries(artEl)) {
+      const text = allText(textEl);
+      if (!text) continue;
+      const txtEl = textEl;
+      const sourcePoint = allText(pointEl) || null;
+      const makeDefinition = (term, definition) => ({
+        term,
+        definition,
+        sourceArticle: artNum,
+        sourcePoint,
+        references: [
+          ...extractCrossRefsFromText(definition, lang),
+          ...extractOjRefsFromElement(txtEl),
+        ],
+      });
+
+      // Verb-first languages (GA, IT, ES, PT): meansVerb 'term' definition.
+      // Term-first languages: 'term' meansVerb definition.
+      // Either way, try the configured meansVerb first, then fall back to the
+      // quoted-term pattern for languages where the verb appears only in the
+      // article intro (DE, FR, CS, SK, HU, FI, ET, LV, LT, EL, NL, DA, SV …).
+      // The verb-first languages need that fallback too: FR/IT/ES/PT state
+      // the verb once ("on entend par:") and then list «terme», définition.
+      const termMatch = text.match(meansRegex);
+      if (termMatch?.[1]) {
+        const term = termMatch[1].trim();
+        const definition = text.slice(termMatch[0].length).trim();
+        found.push(makeDefinition(term, definition));
+      } else {
+        const fbMatch = text.match(fallbackDefRegex);
+        if (fbMatch?.[1]) {
+          const term = fbMatch[1].trim();
+          const definition = text.slice(fbMatch[0].length).trim();
+          if (term && definition) found.push(makeDefinition(term, definition));
         }
       }
     }
+    return found;
+  }
+
+  // Definitions are not always in an article that says so in its title. Older
+  // acts routinely carry no STI.ART at all — the VAT Directive defines
+  // "Community", "Member State" and "third territories" in an Article 5 whose
+  // only heading is "Article 5" — and several acts spread definitions over more
+  // than one article. So every article is examined, and an article that does
+  // not declare itself has to corroborate itself with two or more entries
+  // before its matches count. That is the same bar `eurlex-html-parser.js`
+  // applies for the same reason; a single quoted phrase followed by "means"
+  // occurs often enough in ordinary operative text to be worth discounting.
+  for (const article of articles) {
+    const artNum = String(article.article_number);
+    const artEl = articleElementsByNumber.get(artNum.toUpperCase());
+    if (!artEl) continue;
+
+    const found = definitionsInArticle(artEl, artNum);
+    if (!found.length) continue;
+
+    const declaresItself = Boolean(article.article_title && lang.definition.test(article.article_title));
+    if (declaresItself || found.length >= 2) definitions.push(...found);
   }
 
   // --- Sort recitals ---

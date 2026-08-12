@@ -1322,3 +1322,122 @@ describe("recital extraction", () => {
     expect(result.recitals[0]).toMatchObject({ recital_number: "1", recital_text: "Only recital." });
   });
 });
+
+// ---------------------------------------------------------------------------
+// Definitions outside a titled "Definitions" article
+// ---------------------------------------------------------------------------
+
+describe("definition extraction beyond the titled definitions article", () => {
+  function actWithArticles(articlesXml) {
+    return `<?xml version="1.0" encoding="UTF-8"?>
+<COMBINED.FMX>
+  <ACT>
+    <TITLE><TI><P>Directive 2006/112/EC of the Council</P></TI></TITLE>
+    <ENACTING.TERMS>${articlesXml}</ENACTING.TERMS>
+  </ACT>
+</COMBINED.FMX>`;
+  }
+
+  const quoted = (term) => `<QUOT.START CODE="2018"/>${term}<QUOT.END CODE="2019"/>`;
+
+  it("reads definitions from an article whose only heading is its number", () => {
+    // The VAT Directive's Article 5 carries no STI.ART, so keying off the
+    // article title alone found nothing at all for the whole act.
+    const result = parseFmxToCombined(actWithArticles(`
+      <ARTICLE IDENTIFIER="005">
+        <TI.ART>Article 5</TI.ART>
+        <ALINEA>
+          <P>For the purposes of applying this Directive, the following definitions shall apply:</P>
+          <LIST TYPE="ARAB">
+            <ITEM><NP><NO.P>(1)</NO.P><TXT>${quoted("Community")} means the territories of the Member States;</TXT></NP></ITEM>
+            <ITEM><NP><NO.P>(2)</NO.P><TXT>${quoted("third territories")} means those territories referred to in Article 6;</TXT></NP></ITEM>
+          </LIST>
+        </ALINEA>
+      </ARTICLE>`));
+
+    expect(result.definitions.map((d) => d.term)).toEqual(["Community", "third territories"]);
+    expect(result.definitions[0]).toMatchObject({ sourceArticle: "5", sourcePoint: "(1)" });
+  });
+
+  it("reads one definition per paragraph of a prose definition block", () => {
+    // VAT Article 48: three definitions as sibling <P> in one ALINEA, with no
+    // points and no numbered paragraphs. Read as a single entry, only the first
+    // term matches and it swallows the other two as its definition text.
+    const result = parseFmxToCombined(actWithArticles(`
+      <ARTICLE IDENTIFIER="048">
+        <TI.ART>Article 48</TI.ART>
+        <ALINEA>
+          <P>${quoted("Intra-Community transport of goods")} shall mean any transport of goods between two Member States.</P>
+          <P>${quoted("Place of departure")} shall mean the place where transport of the goods actually begins.</P>
+          <P>${quoted("Place of arrival")} shall mean the place where transport of the goods actually ends.</P>
+        </ALINEA>
+      </ARTICLE>`));
+
+    expect(result.definitions.map((d) => d.term)).toEqual([
+      "Intra-Community transport of goods",
+      "Place of departure",
+      "Place of arrival",
+    ]);
+    expect(result.definitions[2].definition).toBe("the place where transport of the goods actually ends.");
+  });
+
+  it("reads definitions stated as numbered paragraphs", () => {
+    const result = parseFmxToCombined(actWithArticles(`
+      <ARTICLE IDENTIFIER="024">
+        <TI.ART>Article 24</TI.ART>
+        <PARAG IDENTIFIER="024.001"><NO.PARAG>1.</NO.PARAG>
+          <ALINEA>${quoted("Supply of services")} shall mean any transaction which does not constitute a supply of goods.</ALINEA>
+        </PARAG>
+        <PARAG IDENTIFIER="024.002"><NO.PARAG>2.</NO.PARAG>
+          <ALINEA>${quoted("Telecommunications services")} shall mean services relating to the transmission of signals.</ALINEA>
+        </PARAG>
+      </ARTICLE>`));
+
+    expect(result.definitions.map((d) => d.term)).toEqual(["Supply of services", "Telecommunications services"]);
+    expect(result.definitions[1].sourcePoint).toBe("2.");
+  });
+
+  it("ignores a lone quoted term in an ordinary article", () => {
+    // The corroboration bar: without it, scanning every article turns any
+    // operative sentence that happens to quote a term into a definition.
+    const result = parseFmxToCombined(actWithArticles(`
+      <ARTICLE IDENTIFIER="010">
+        <TI.ART>Article 10</TI.ART>
+        <ALINEA>
+          <P>The condition that a supply be made ${quoted("independently")} shall mean that employed persons are excluded.</P>
+        </ALINEA>
+      </ARTICLE>`));
+
+    expect(result.definitions).toEqual([]);
+  });
+
+  it("does not adopt definitions quoted from the act being amended", () => {
+    // CRR Article 520 inserts a chapter into Regulation 648/2012; the terms it
+    // quotes belong to that regulation, not to the act being parsed.
+    const result = parseFmxToCombined(actWithArticles(`
+      <ARTICLE IDENTIFIER="520">
+        <TI.ART>Article 520</TI.ART>
+        <STI.ART>Amendment of Regulation (EU) No 648/2012</STI.ART>
+        <ALINEA>
+          <P>Regulation (EU) No 648/2012 is amended as follows:</P>
+          <LIST TYPE="ARAB">
+            <ITEM><NP><NO.P>(1)</NO.P><TXT>the following Chapter is added:</TXT>
+              <P><QUOT.S LEVEL="1">
+                <DIVISION>
+                  <ARTICLE IDENTIFIER="050A">
+                    <TI.ART>Article 50a</TI.ART>
+                    <ALINEA>
+                      <P>${quoted("hypothetical capital")} means the capital calculated under this Chapter.</P>
+                      <P>${quoted("clearing member")} means an undertaking participating in a CCP.</P>
+                    </ALINEA>
+                  </ARTICLE>
+                </DIVISION>
+              </QUOT.S></P>
+            </NP></ITEM>
+          </LIST>
+        </ALINEA>
+      </ARTICLE>`));
+
+    expect(result.definitions).toEqual([]);
+  });
+});

@@ -10,7 +10,8 @@ const { createParsedLawResolver } = require('./shared/parsed-law-service');
 const { createFmxService } = require('./shared/fmx-service');
 const { fetchEurlexHtmlLaw, parseEurlexHtmlToCombined, closeSharedPlaywrightBrowser } = require('./shared/eurlex-html-parser');
 const { createHtmlCacheService } = require('./shared/html-cache-service');
-const { createRateLimitMiddleware } = require('./shared/rate-limit');
+const { createGenerationLimitMiddleware, createRateLimitMiddleware } = require('./shared/rate-limit');
+const { createOriginAllowlistMiddleware } = require('./shared/origin-guard');
 const {
   createReferenceResolver,
   parseReferenceText,
@@ -18,12 +19,14 @@ const {
   validateCelex,
 } = require('./shared/reference-utils');
 const {
+  ClientError,
   cacheGet,
   cacheSet,
   safeErrorResponse,
   toSearchLang,
   validateLang
 } = require('./shared/api-utils');
+const { CapacityError, createSemaphore } = require('./shared/concurrency');
 const { createAnalytics } = require('./shared/analytics');
 
 const app = express();
@@ -43,6 +46,12 @@ const TIMEOUT_MS = 30_000;
 const RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000; // 15 minutes
 const RATE_LIMIT_MAX = parseInt(process.env.RATE_LIMIT_MAX) || 500; // requests per window (shared across all /api endpoints; one law view is ~6+ calls)
 
+// Separate, far tighter budget for the routes that can trigger a billed model
+// call. Charged only when a generation actually happens (see api-routes), so
+// reading laws whose titles/summaries/digests are already cached is unaffected.
+const GENERATION_LIMIT_WINDOW_MS = parseInt(process.env.GENERATION_LIMIT_WINDOW_MS) || 60 * 60 * 1000; // 1 hour
+const GENERATION_LIMIT_MAX = parseInt(process.env.GENERATION_LIMIT_MAX) || 10; // generations per IP per window
+
 // === Storage limits (each type evicts independently within the shared dir) ===
 const STORAGE_LIMIT_MB = parseInt(process.env.STORAGE_LIMIT_MB) || 500; // FMX files
 const HTML_CACHE_LIMIT_MB = parseInt(process.env.HTML_CACHE_LIMIT_MB) || 200; // parsed HTML
@@ -58,6 +67,13 @@ const rateLimitMiddleware = createRateLimitMiddleware({
   windowMs: RATE_LIMIT_WINDOW_MS,
   max: RATE_LIMIT_MAX
 });
+const generationLimitMiddleware = createGenerationLimitMiddleware({
+  windowMs: GENERATION_LIMIT_WINDOW_MS,
+  max: GENERATION_LIMIT_MAX
+});
+// CORS stays permissive everywhere else — the public API and the MCP endpoint
+// are meant to be callable from anywhere; only generation is origin-restricted.
+const generationOriginMiddleware = createOriginAllowlistMiddleware();
 
 // Ensure cache directory exists
 if (!fs.existsSync(CACHE_DIR)) {
@@ -124,6 +140,33 @@ function hasParsedLawContent(parsed) {
 const HTML_FALLBACK_SERVED_LANG = 'ENG';
 
 /**
+ * A fetch that ends in a WAF challenge launches a fresh Chromium (see
+ * `closeBrowserAfterFetch` below), which is by far the most expensive thing a
+ * single request can make this process do. Cap how many can be in flight at
+ * once and reject the overflow, so a burst degrades the HTML fallback instead
+ * of OOM-ing the container and taking law serving, search and MCP with it.
+ */
+const HTML_FETCH_CONCURRENCY = parseInt(process.env.HTML_FETCH_CONCURRENCY) || 2;
+const HTML_FETCH_QUEUE_LIMIT = parseInt(process.env.HTML_FETCH_QUEUE_LIMIT) || 20;
+// Parsed-empty results are deliberately not written to the HTML disk cache
+// (the raw HTML is worthless), which without a negative cache means every
+// repeat request re-fetches — and, during a challenge period, re-launches.
+const HTML_EMPTY_PARSE_TTL_MS = parseInt(process.env.HTML_EMPTY_PARSE_TTL_MS) || 10 * 60 * 1000;
+const HTML_EMPTY_PARSE_MAX_ENTRIES = 500;
+
+const htmlFetchSemaphore = createSemaphore({
+  limit: HTML_FETCH_CONCURRENCY,
+  maxQueue: HTML_FETCH_QUEUE_LIMIT,
+  name: 'EUR-Lex HTML fetch',
+});
+// Both are keyed on CELEX alone, not `celex:lang`: the fetch always serves
+// English (see HTML_FALLBACK_SERVED_LANG), so requests differing only in the
+// requested language would otherwise each launch their own browser for the
+// very same page.
+const inFlightHtmlLoads = new Map(); // celex -> Promise<{ servedLang, parsed }>
+const emptyHtmlParseCache = new Map(); // celex -> { servedLang, parsed }
+
+/**
  * On-demand HTML law fetcher with disk caching.
  *
  * Caches raw HTML so parser improvements apply without re-fetching.
@@ -134,20 +177,32 @@ const HTML_FALLBACK_SERVED_LANG = 'ENG';
  * 3. Store raw HTML to disk cache (same served-language key)
  * 4. Parse and return, including the requested `lang` and the honest `servedLang`
  */
-async function fetchAndParseHtmlLawCached(celex, lang) {
+async function loadHtmlLaw(celex, lang) {
   let servedLang = HTML_FALLBACK_SERVED_LANG;
   let rawHtml = await htmlCache.get(celex, servedLang);
   let fromCache = Boolean(rawHtml);
 
   async function fetchFreshHtml() {
-    const fetched = await fetchEurlexHtmlLaw({
-      celex,
-      lang,
-      eurlexBase: EURLEX_BASE,
-      timeoutMs: TIMEOUT_MS,
-      usePlaywrightOnChallenge: true,
-      closeBrowserAfterFetch: true,
-    });
+    let fetched;
+    try {
+      fetched = await htmlFetchSemaphore.run(() => fetchEurlexHtmlLaw({
+        celex,
+        lang,
+        eurlexBase: EURLEX_BASE,
+        timeoutMs: TIMEOUT_MS,
+        usePlaywrightOnChallenge: true,
+        closeBrowserAfterFetch: true,
+      }));
+    } catch (err) {
+      if (err instanceof CapacityError) {
+        throw new ClientError(
+          'EUR-Lex HTML fetching is busy; please retry shortly',
+          503,
+          'html_fetch_busy',
+        );
+      }
+      throw err;
+    }
     servedLang = fetched.servedLang || HTML_FALLBACK_SERVED_LANG;
     return fetched.rawHtml;
   }
@@ -171,7 +226,8 @@ async function fetchAndParseHtmlLawCached(celex, lang) {
     }
   }
 
-  if (!fromCache && hasParsedLawContent(parsed)) {
+  const hasContent = hasParsedLawContent(parsed);
+  if (!fromCache && hasContent) {
     htmlCache.put(celex, servedLang, rawHtml).catch((err) => {
       console.error(`[HtmlCache] Failed to cache ${celex}_${servedLang}:`, err.message);
     });
@@ -179,14 +235,45 @@ async function fetchAndParseHtmlLawCached(celex, lang) {
     console.warn(`[HtmlCache] Skipping cache for ${celex}_${servedLang}: parsed HTML did not yield law content`);
   }
 
-  return {
-    celex,
-    lang,
-    servedLang,
-    source: 'eurlex-html',
-    format: 'combined-v1',
-    ...parsed,
-  };
+  return { servedLang, parsed, empty: !hasContent };
+}
+
+async function fetchAndParseHtmlLawCached(celex, lang) {
+  function withRequestedLang({ servedLang, parsed }) {
+    return {
+      celex,
+      lang,
+      servedLang,
+      source: 'eurlex-html',
+      format: 'combined-v1',
+      ...parsed,
+    };
+  }
+
+  const negative = cacheGet(emptyHtmlParseCache, celex);
+  if (negative) return withRequestedLang(negative);
+
+  // Single-flight, mirroring `inFlightDownloads` on the FMX path: N concurrent
+  // requests for the same CELEX must not launch N browsers.
+  const inFlight = inFlightHtmlLoads.get(celex);
+  if (inFlight) return withRequestedLang(await inFlight);
+
+  const promise = loadHtmlLaw(celex, lang).finally(() => {
+    inFlightHtmlLoads.delete(celex);
+  });
+  inFlightHtmlLoads.set(celex, promise);
+
+  const result = await promise;
+  if (result.empty) {
+    cacheSet(
+      emptyHtmlParseCache,
+      celex,
+      { servedLang: result.servedLang, parsed: result.parsed },
+      HTML_EMPTY_PARSE_TTL_MS,
+      HTML_EMPTY_PARSE_MAX_ENTRIES,
+    );
+  }
+  return withRequestedLang(result);
 }
 
 const resolveParsedLaw = createParsedLawResolver({
@@ -212,6 +299,8 @@ registerApiRoutes(app, {
   parseStructuredReference,
   prepareLawPayload,
   rateLimitMiddleware,
+  generationLimitMiddleware,
+  generationOriginMiddleware,
   resolutionCache,
   resolveEurlexUrl,
   resolveParsedLaw,

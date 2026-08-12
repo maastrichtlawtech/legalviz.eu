@@ -451,5 +451,14 @@
     "keyPoints": "Key points",
     "structure": "Structure",
     "generatedOn": "Static summary generated {date}"
+  },
+  "consolidation": {
+    "asAdopted": "You are reading this law as adopted.",
+    "amendedWithDate": "It has been amended {count} times since, most recently on {date}.",
+    "amendedOnceWithDate": "It has been amended once since, on {date}.",
+    "amended": "It has been amended {count} times since.",
+    "amendedOnce": "It has been amended once since.",
+    "readConsolidated": "Read the consolidated text as of {date} on EUR-Lex",
+    "noConsolidatedVersion": "EUR-Lex has not published a consolidated version."
   }
 }

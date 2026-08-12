@@ -48,6 +48,7 @@ import { LawViewerReadingFooter } from "./law-viewer/LawViewerReadingFooter.jsx"
 import { LawViewerContextRail } from "./law-viewer/LawViewerContextRail.jsx";
 import { LawOverviewPage } from "./law-viewer/LawOverviewPage.jsx";
 import { DefinitionComparisonSheet } from "./law-viewer/DefinitionComparisonSheet.jsx";
+import { ConsolidationNotice } from "./ConsolidationNotice.jsx";
 
 export function LawViewer() {
   const { locale: routeLocale, slug, key, kind, id } = useParams();
@@ -405,6 +406,13 @@ export function LawViewer() {
                       {getSelectionTitle(selection.selected, t)}
                     </h2>
                   </div>
+
+                  <ConsolidationNotice
+                    celex={source.effectiveCelex}
+                    currentLang={displayedFormexLang}
+                    locale={locale}
+                    variant="inline"
+                  />
 
                   {interactions.isResolvingExternalLaw ? (
                     <div className="mb-4 flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-200">

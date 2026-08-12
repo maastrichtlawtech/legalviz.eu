@@ -195,6 +195,7 @@ cat input.xml | parse-fmx > output.json
 | `GET` | `/api/laws/:celex/info?lang=ENG` | Law type and format metadata |
 | `GET` | `/api/laws/:celex/metadata` | SPARQL metadata (entry into force, ELI, etc.) |
 | `GET` | `/api/laws/:celex/amendments` | Amendment and corrigendum history |
+| `GET` | `/api/laws/:celex/consolidated` | Consolidated ("as amended") versions EUR-Lex publishes for the act, oldest first. Future-dated versions are included — the caller decides which one is current. |
 | `GET` | `/api/laws/:celex/implementing` | Implementing and delegated acts |
 | `GET` | `/api/laws/:celex/case-law?lang=ENG` | CJEU judgments citing this act, with operative parts and structured `articleRefs` |
 | `GET` | `/api/laws/:celex/recital-titles?lang=ENG` | Cached AI-generated short titles for recitals. Requires `RECITAL_TITLE_OPENROUTER_API_KEY` or `OPENROUTER_API_KEY` on cache miss. |

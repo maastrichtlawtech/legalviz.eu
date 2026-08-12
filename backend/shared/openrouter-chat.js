@@ -1,4 +1,23 @@
+const { CapacityError, createSemaphore } = require('./concurrency');
+
 const DEFAULT_BASE_URL = 'https://openrouter.ai/api/v1';
+
+// Nothing else bounds how many model calls this process can have in flight:
+// each cache miss on an AI endpoint starts one, and a burst of distinct laws
+// means a burst of concurrent (billed) generations. Queue them instead, and
+// shed load once the queue is deep enough that waiting is pointless.
+const OPENROUTER_MAX_CONCURRENCY = Number(process.env.OPENROUTER_MAX_CONCURRENCY) > 0
+  ? Number(process.env.OPENROUTER_MAX_CONCURRENCY)
+  : 3;
+const OPENROUTER_MAX_QUEUE = Number(process.env.OPENROUTER_MAX_QUEUE) > 0
+  ? Number(process.env.OPENROUTER_MAX_QUEUE)
+  : 20;
+
+const chatSemaphore = createSemaphore({
+  limit: OPENROUTER_MAX_CONCURRENCY,
+  maxQueue: OPENROUTER_MAX_QUEUE,
+  name: 'OpenRouter chat',
+});
 
 // Hard ceiling on a single chat call. Without it a stalled provider holds the
 // HTTP request open for as long as undici tolerates a trickling body — minutes
@@ -80,25 +99,40 @@ async function chatComplete({
   if (reasoning) {
     body.reasoning = reasoning;
   }
-  const res = await fetch(url, {
-    method: 'POST',
-    signal,
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
-      'HTTP-Referer': 'https://legalviz.local',
-      'X-Title': 'EUR-Lex Visualiser',
-    },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) {
-    const body = await readErrorBody(res);
-    throw new ChatProviderError(
-      body?.error?.message || body?.message || res.statusText || 'Chat request failed',
-      { status: res.status, code: body?.error?.code || null, details: body }
-    );
+  let data;
+  try {
+    // The slot is held until the response body has been read, so `limit` is
+    // really the number of generations this process can be paying for at once.
+    data = await chatSemaphore.run(async () => {
+      const res = await fetch(url, {
+        method: 'POST',
+        signal,
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${apiKey}`,
+          'HTTP-Referer': 'https://legalviz.local',
+          'X-Title': 'EUR-Lex Visualiser',
+        },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) {
+        const errorBody = await readErrorBody(res);
+        throw new ChatProviderError(
+          errorBody?.error?.message || errorBody?.message || res.statusText || 'Chat request failed',
+          { status: res.status, code: errorBody?.error?.code || null, details: errorBody }
+        );
+      }
+      return res.json();
+    });
+  } catch (err) {
+    if (err instanceof CapacityError) {
+      throw new ChatProviderError('Too many AI generations in progress; please retry shortly', {
+        status: 429,
+        code: 'chat_capacity_exceeded',
+      });
+    }
+    throw err;
   }
-  const data = await res.json();
   const msg = data?.choices?.[0]?.message || {};
   // Some reasoning models (e.g. gpt-oss) put the final answer in `content`
   // but burn tokens on `reasoning` first; if content is empty, fall back to reasoning.

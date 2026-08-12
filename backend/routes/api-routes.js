@@ -36,18 +36,20 @@ function getRecitalTitleApiKey() {
 
 /**
  * Normalise an upstream chat error into a user-facing message + stable code.
- * Maps OpenRouter's 402/429 into friendlier text while still exposing the raw
- * upstream detail for debugging.
+ * Maps OpenRouter's 402/429/401 into friendlier text; anything else collapses
+ * to a generic 502 so provider internals (raw upstream messages, upstream
+ * status codes) stay server-side. The raw detail is returned for logging only
+ * — see sendChatError, which is the only intended caller.
  */
 function mapChatError(err) {
   const status = err?.status || 502;
-  const rawMessage = err?.message || 'Upstream chat request failed';
+  const detail = err?.message || 'Upstream chat request failed';
   if (status === 402) {
     return {
       status: 503,
       code: 'ai_service_unavailable',
       message: 'The AI service is temporarily unavailable (out of credits). Please try again later or contact the administrator.',
-      detail: rawMessage,
+      detail,
     };
   }
   if (status === 429) {
@@ -55,7 +57,7 @@ function mapChatError(err) {
       status: 429,
       code: 'ai_rate_limited',
       message: 'The AI service is rate-limiting requests — please wait a moment and try again.',
-      detail: rawMessage,
+      detail,
     };
   }
   if (status === 401 || status === 403) {
@@ -63,15 +65,22 @@ function mapChatError(err) {
       status: 503,
       code: 'ai_auth_failed',
       message: 'The AI service rejected our credentials — please contact the administrator.',
-      detail: rawMessage,
+      detail,
     };
   }
   return {
-    status,
-    code: err?.code || 'chat_upstream_failed',
-    message: rawMessage,
-    detail: rawMessage,
+    status: 502,
+    code: 'chat_upstream_failed',
+    message: 'The AI service could not be reached. Please try again later.',
+    detail,
   };
+}
+
+/** Log the upstream detail, respond with the sanitised mapping. */
+function sendChatError(res, err, context) {
+  const mapped = mapChatError(err);
+  console.error(`[API] ${context} (${mapped.code}):`, mapped.detail);
+  return res.status(mapped.status).json({ code: mapped.code, message: mapped.message });
 }
 
 const CASE_LAW_ROUTE_CACHE_MS = 5 * 60 * 1000;
@@ -102,6 +111,12 @@ function registerApiRoutes(app, deps) {
     parseStructuredReference,
     prepareLawPayload,
     rateLimitMiddleware,
+    // Guards applied *only* to the four routes that can trigger a billed model
+    // call, on top of the generic limiter: a tight per-IP generation budget
+    // (charged below on cache misses) and an origin allowlist that keeps the
+    // permissive CORS of the rest of the API from funding third-party pages.
+    generationLimitMiddleware = (req, res, next) => next(),
+    generationOriginMiddleware = (req, res, next) => next(),
     resolutionCache,
     legalCacheStore,
     resolveEurlexUrl,
@@ -398,7 +413,7 @@ function registerApiRoutes(app, deps) {
     }
   });
 
-  app.get('/api/laws/:celex/recital-titles', rateLimitMiddleware, async (req, res) => {
+  app.get('/api/laws/:celex/recital-titles', rateLimitMiddleware, generationOriginMiddleware, generationLimitMiddleware, async (req, res) => {
     try {
       const { celex } = req.params;
       const rawLang = req.query.lang || 'ENG';
@@ -426,6 +441,10 @@ function registerApiRoutes(app, deps) {
         model: DEFAULT_RECITAL_TITLE_MODEL,
       });
 
+      // Only a real generation costs money; a cache hit must not consume
+      // the caller's generation budget.
+      if (!result.cached) req.chargeGeneration?.();
+
       res.json({
         celex,
         lang,
@@ -435,14 +454,13 @@ function registerApiRoutes(app, deps) {
       });
     } catch (err) {
       if (err instanceof ChatProviderError) {
-        const mapped = mapChatError(err);
-        return res.status(mapped.status).json({ code: mapped.code, message: mapped.message, detail: mapped.detail });
+        return sendChatError(res, err, 'Failed to generate recital titles');
       }
       safeErrorResponse(res, err, 'Failed to generate recital titles');
     }
   });
 
-  app.get('/api/laws/:celex/summary', rateLimitMiddleware, async (req, res) => {
+  app.get('/api/laws/:celex/summary', rateLimitMiddleware, generationOriginMiddleware, generationLimitMiddleware, async (req, res) => {
     try {
       const { celex } = req.params;
 
@@ -500,6 +518,10 @@ function registerApiRoutes(app, deps) {
         },
       });
 
+      // Only a real generation costs money; a cache hit must not consume
+      // the caller's generation budget.
+      if (!result.cached) req.chargeGeneration?.();
+
       res.json({
         celex,
         lang,
@@ -513,14 +535,13 @@ function registerApiRoutes(app, deps) {
       });
     } catch (err) {
       if (err instanceof ChatProviderError) {
-        const mapped = mapChatError(err);
-        return res.status(mapped.status).json({ code: mapped.code, message: mapped.message, detail: mapped.detail });
+        return sendChatError(res, err, 'Failed to generate law summary');
       }
       safeErrorResponse(res, err, 'Failed to generate law summary');
     }
   });
 
-  app.get('/api/laws/:celex/articles/:n/case-law-digest', rateLimitMiddleware, async (req, res) => {
+  app.get('/api/laws/:celex/articles/:n/case-law-digest', rateLimitMiddleware, generationOriginMiddleware, generationLimitMiddleware, async (req, res) => {
     try {
       const { celex } = req.params;
       const articleNumber = String(req.params.n || '').trim();
@@ -555,6 +576,10 @@ function registerApiRoutes(app, deps) {
         model: DEFAULT_ARTICLE_DIGEST_MODEL,
       });
 
+      // Only a real generation costs money; a cache hit must not consume
+      // the caller's generation budget.
+      if (!result.cached) req.chargeGeneration?.();
+
       res.json({
         celex,
         articleNumber,
@@ -567,8 +592,7 @@ function registerApiRoutes(app, deps) {
       });
     } catch (err) {
       if (err instanceof ChatProviderError) {
-        const mapped = mapChatError(err);
-        return res.status(mapped.status).json({ code: mapped.code, message: mapped.message, detail: mapped.detail });
+        return sendChatError(res, err, 'Failed to generate article case-law digest');
       }
       if (/Article .+ not found/.test(err?.message || '')) {
         return res.status(404).json({ error: err.message, code: 'article_not_found' });
@@ -577,7 +601,7 @@ function registerApiRoutes(app, deps) {
     }
   });
 
-  app.get('/api/laws/:celex/case-law-digest', rateLimitMiddleware, async (req, res) => {
+  app.get('/api/laws/:celex/case-law-digest', rateLimitMiddleware, generationOriginMiddleware, generationLimitMiddleware, async (req, res) => {
     try {
       const { celex } = req.params;
       const rawLang = req.query.lang || 'ENG';
@@ -607,6 +631,10 @@ function registerApiRoutes(app, deps) {
         model: DEFAULT_CASE_LAW_DIGEST_MODEL,
       });
 
+      // Only a real generation costs money; a cache hit must not consume
+      // the caller's generation budget.
+      if (!result.cached) req.chargeGeneration?.();
+
       res.json({
         celex,
         lang,
@@ -618,8 +646,7 @@ function registerApiRoutes(app, deps) {
       });
     } catch (err) {
       if (err instanceof ChatProviderError) {
-        const mapped = mapChatError(err);
-        return res.status(mapped.status).json({ code: mapped.code, message: mapped.message, detail: mapped.detail });
+        return sendChatError(res, err, 'Failed to generate case-law digest');
       }
       safeErrorResponse(res, err, 'Failed to generate case-law digest');
     }

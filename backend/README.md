@@ -765,6 +765,14 @@ Current test coverage includes:
 | `STORAGE_LIMIT_MB` | Max size of the FMX download cache before eviction starts. Default `500`. |
 | `HTML_CACHE_LIMIT_MB` | Max size of the legacy-HTML fallback cache. Default `200`. |
 | `RATE_LIMIT_MAX` | Per-IP request cap for the 15-minute window. |
+| `GENERATION_LIMIT_MAX` | Per-IP cap on *billed* AI generations per window, applied to the four generation routes. Only cache misses are charged. Default `10`. |
+| `GENERATION_LIMIT_WINDOW_MS` | Window for `GENERATION_LIMIT_MAX`. Default `3600000` (1 hour). |
+| `AI_ALLOWED_ORIGINS` | Comma-separated browser origins allowed to call the generation routes. Requests with no `Origin` header are always allowed; `*` disables the check. Defaults to the legalviz.eu origins plus the Vite dev ports. |
+| `OPENROUTER_MAX_CONCURRENCY` | Max concurrent OpenRouter calls in this process. Default `3`. |
+| `OPENROUTER_MAX_QUEUE` | Max OpenRouter calls queued behind that limit before new ones are rejected with 429. Default `20`. |
+| `HTML_FETCH_CONCURRENCY` | Max concurrent EUR-Lex HTML fetches (each can launch a Chromium during a WAF challenge). Default `2`. |
+| `HTML_FETCH_QUEUE_LIMIT` | Max HTML fetches queued behind that limit before new ones get a 503. Default `20`. |
+| `HTML_EMPTY_PARSE_TTL_MS` | How long a CELEX that fetched but parsed to no content is remembered, so it isn't re-fetched on every request. Default `600000` (10 minutes). |
 | `TIMEOUT_MS` | HTTP request timeout in ms. Default `30000`. |
 | `DATA_SQLITE_PATH` | Optional strict path to the precomputed SQLite store. Missing or incompatible files do not fall back to JSON. |
 | `SEARCH_CACHE_PATH` | Optional override for the legacy/local search cache JSON path. An explicit non-default path forces JSON unless `DATA_SQLITE_PATH` is set. |
@@ -783,7 +791,7 @@ Current test coverage includes:
 | `RECITAL_TITLE_MODEL` | Model for cached AI-generated recital titles. Default `google/gemini-3.5-flash-lite`. |
 | `PLAYWRIGHT_HEADLESS` / `PLAYWRIGHT_BROWSERS_PATH` / `PLAYWRIGHT_MODULE_PATH` / `LEGALVIZ_PLAYWRIGHT_MODULE_PATH` | Playwright configuration for fetching laws that require rendering. |
 
-**OpenRouter spend cap:** the production deployment relies on an account-level spend limit configured in the OpenRouter dashboard as the hard ceiling on AI-feature cost — the API itself only applies the generic per-IP rate limit to these endpoints. Any key used in deployment should carry such a limit. When the limit is exhausted, cache misses on the AI endpoints start failing (OpenRouter rejects the calls) while already-cached titles, summaries, and digests keep serving normally.
+**OpenRouter spend cap:** the production deployment relies on an account-level spend limit configured in the OpenRouter dashboard as the hard ceiling on AI-feature cost. The API adds three softer guards in front of it: a per-IP generation budget charged only on cache misses (`GENERATION_LIMIT_MAX`), an origin allowlist on the generation routes (`AI_ALLOWED_ORIGINS`, while CORS stays permissive everywhere else), and a cap on concurrent model calls (`OPENROUTER_MAX_CONCURRENCY`). None of them replaces the dashboard limit — any key used in deployment should carry one. When the limit is exhausted, cache misses on the AI endpoints start failing (OpenRouter rejects the calls) while already-cached titles, summaries, and digests keep serving normally.
 
 ## Notes
 

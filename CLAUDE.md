@@ -27,6 +27,8 @@ The fmxParser.test.js is a vitest test (not part of the backend node:test glob).
 
 Backend CLI (`eurlex`) commands are documented in [backend/README.md](backend/README.md); run via `npx eurlex <command>` from `backend/` after `npm install`.
 
+The production API is live at `https://api.legalviz.eu` — useful for checking what the deployed parser/search actually returns without building the local data caches, e.g. `curl -s https://api.legalviz.eu/api/laws/32016R0679/parsed`. Routes are defined in [backend/routes/api-routes.js](backend/routes/api-routes.js). It is read-only from your side: never treat it as a place to write or mutate state, and remember it serves *deployed* code and *published* caches, so it can lag local changes (see [Cache & version invalidation](#cache--version-invalidation)).
+
 Requires Node.js v22.12+ (`engines` in root and backend `package.json`; the backend needs require(esm), unflagged since 22.12).
 
 Subtree-specific guidance lives in nested memory files that Claude Code loads on demand when you work in them: [backend/CLAUDE.md](backend/CLAUDE.md) (API, CLI, MCP, AI services) and [src/CLAUDE.md](src/CLAUDE.md) (React frontend). Keep this root file for cross-cutting concerns; push backend-only or frontend-only detail down into those.

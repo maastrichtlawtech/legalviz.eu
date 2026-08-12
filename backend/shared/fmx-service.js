@@ -4,6 +4,9 @@ const { execFileSync } = require('child_process');
 
 const { ClientError } = require('./api-utils');
 
+/** Trailing `.<LANG>.fmx4` on a Cellar manifestation URI, any 3-letter language. */
+const FMX4_ANY_LANG = /\.[A-Z]{3}\.fmx4$/;
+
 /** True when the system `unzip` binary is available. */
 const HAS_SYSTEM_UNZIP = (() => {
   try {
@@ -94,18 +97,36 @@ function createFmxService({
     return [...rdf.matchAll(/rdf:resource="([^"]+)"/g)].map((match) => match[1]);
   }
 
+  /**
+   * Locate the Formex manifestation for a CELEX, in the requested language.
+   *
+   * Match on the `.<LANG>.fmx4` suffix alone rather than on an allowlist of
+   * manifestation id formats. Cellar mints those ids from several production
+   * systems, and enumerating them silently loses acts: the previous pattern
+   * accepted only `/oj/L_<9 digits>` (post-2016) and `/oj/JOL_<year>_<issue>_R_
+   * <seq>`, so it missed the pre-2016 `…_R_<seq>_<part>` form (CRR, the VAT
+   * Directive, Solvency II), the `/immc/planjo%3A<date>-<seq>` form used for
+   * acts produced against a planned OJ slot (PSD2, MiFID II), and the
+   * `/celex/…` and `/consolidation/…` forms. `search/search-build.js` already
+   * matches this way, which is why the harvest saw acts the reader could not.
+   *
+   * A miss here is indistinguishable downstream from an act that genuinely has
+   * no Formex — `resolveParsedLaw` reads the 404 as "no FMX" and falls back to
+   * the EUR-Lex HTML parser — so narrowing this again degrades laws silently
+   * rather than failing.
+   */
   async function findFmx4Uri(celex, lang = 'ENG') {
     const rdf = await getRdf(`${CELLAR_BASE}/celex/${celex}`);
     const uris = extractUris(rdf);
 
-    const pattern = new RegExp(`\\/oj\\/(JOL_\\d{4}_\\d+_R_\\d+|L_\\d{9})\\.${lang}\\.fmx4$`);
-    let fmx4 = uris.find((uri) => pattern.test(uri));
+    let fmx4 = uris.find((uri) => uri.endsWith(`.${lang}.fmx4`));
 
     if (!fmx4) {
-      const engPattern = /\/oj\/(JOL_\d{4}_\d+_R_\d+|L_\d{9})\.ENG\.fmx4$/;
-      const engFmx4 = uris.find((uri) => engPattern.test(uri));
-      if (engFmx4) {
-        fmx4 = engFmx4.replace('.ENG.fmx4', `.${lang}.fmx4`);
+      // Cellar lists one manifestation per available language; when the
+      // requested one is absent, swap the language segment of any other.
+      const anyLang = uris.find((uri) => FMX4_ANY_LANG.test(uri));
+      if (anyLang) {
+        fmx4 = anyLang.replace(FMX4_ANY_LANG, `.${lang}.fmx4`);
       }
     }
 

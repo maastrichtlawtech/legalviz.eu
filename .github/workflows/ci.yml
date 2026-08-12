@@ -1,7 +1,8 @@
 name: CI
+# Pull requests only: pages.yml runs the same lint/test/build on every push to
+# main before deploying, so a push-triggered run here would duplicate it.
 on:
   pull_request:
-  push: { branches: [ main ] }
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
 permissions:

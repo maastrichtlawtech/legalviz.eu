@@ -523,7 +523,14 @@ class JsonLegalCacheStore {
       }
       for (const supplemental of SUPPLEMENTAL_RECORDS) {
         const key = normalizeCelexLookupKey(supplemental.celex);
-        if (key && !seen.has(key)) records.push(compactSqliteRecord(supplemental));
+        if (!key || seen.has(key)) continue;
+        // Same guard as the row loop above: compactSqliteRecord returns null
+        // for a record it can't compact, and a null in `records` crashes every
+        // consumer that reads `.celex` off it.
+        const record = compactSqliteRecord(supplemental);
+        if (!record) continue;
+        records.push(record);
+        seen.add(key);
       }
 
       this.database = database;

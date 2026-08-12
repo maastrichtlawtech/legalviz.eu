@@ -71,12 +71,37 @@ function getValidAnnexes(data) {
   return (data?.annexes || []).filter((annex) => String(annex?.annex_id || "").trim());
 }
 
-function getArticleTotal(law, data) {
-  return data?.articles?.length || law.articles || 0;
+/**
+ * The numbering actually used by the document, in document order.
+ *
+ * Never assume `1..N`: EU acts (and consolidated texts especially) carry
+ * inserted articles like "4a", so a contiguous range would both link to
+ * non-existent pages and skip real ones. The count is not a safe proxy either
+ * — the Data Act parses to 120 recital entries numbered only up to 119 (one
+ * duplicate), which is how `/data-act/recital/120` used to get a page and a
+ * sitemap entry. Only the metadata-only fallback — where FEATURED_LAWS gives a
+ * count and nothing else — has to guess.
+ */
+function numbersFromEntries(entries, key, fallbackCount) {
+  const numbers = [...new Set(
+    (entries || [])
+      .map((entry) => String(entry?.[key] ?? "").trim())
+      .filter(Boolean),
+  )];
+  if (numbers.length) return numbers;
+  return Array.from({ length: fallbackCount || 0 }, (_, index) => String(index + 1));
 }
 
-function getRecitalTotal(law, data) {
-  return data?.recitals?.length || law.recitals || 0;
+function getArticleNumbers(law, data) {
+  return numbersFromEntries(data?.articles, "article_number", law.articles);
+}
+
+function getRecitalNumbers(law, data) {
+  return numbersFromEntries(data?.recitals, "recital_number", law.recitals);
+}
+
+function numberHref(law, kind, number) {
+  return `/${law.slug}/${kind}/${encodeURIComponent(number)}`;
 }
 
 function readBuiltIndexHtml() {
@@ -159,18 +184,14 @@ function buildLawSummarySection(law, summaryPayload) {
 }
 
 function buildLawBody(law, data, summaryPayload) {
-  const articleTotal = getArticleTotal(law, data);
-  const recitalTotal = getRecitalTotal(law, data);
   const annexes = getValidAnnexes(data);
-  const articleLinks = Array.from({ length: articleTotal }, (_, index) => {
-    const number = String(index + 1);
-    return `<li><a href="/${law.slug}/article/${number}">Article ${number}</a></li>`;
-  }).join("");
+  const articleLinks = getArticleNumbers(law, data)
+    .map((number) => `<li><a href="${numberHref(law, "article", number)}">Article ${escapeHtml(number)}</a></li>`)
+    .join("");
 
-  const recitalLinks = Array.from({ length: recitalTotal }, (_, index) => {
-    const number = String(index + 1);
-    return `<li><a href="/${law.slug}/recital/${number}">Recital ${number}</a></li>`;
-  }).join("");
+  const recitalLinks = getRecitalNumbers(law, data)
+    .map((number) => `<li><a href="${numberHref(law, "recital", number)}">Recital ${escapeHtml(number)}</a></li>`)
+    .join("");
 
   const annexLinks = annexes.map((annex) => (
     `<li><a href="/${law.slug}/annex/${encodeURIComponent(annex.annex_id)}">Annex ${escapeHtml(annex.annex_id)}</a></li>`
@@ -211,23 +232,28 @@ function buildLawBody(law, data, summaryPayload) {
   `;
 }
 
-function buildNearbyNumberLinks(law, data, kind, currentNumber, total) {
-  const current = Number(currentNumber);
+function buildNearbyNumberLinks(law, data, kind, currentNumber) {
   const items = [];
-  const articleTotal = getArticleTotal(law, data);
-  const recitalTotal = getRecitalTotal(law, data);
+  const articleNumbers = getArticleNumbers(law, data);
+  const recitalNumbers = getRecitalNumbers(law, data);
+  // Neighbours are the adjacent entries in document order, not currentNumber
+  // ± 1 — "Article 4a" sits between 4 and 5 and has no numeric neighbours.
+  const siblings = kind === "article" ? articleNumbers : recitalNumbers;
+  const position = siblings.indexOf(String(currentNumber));
+  const previous = position > 0 ? siblings[position - 1] : null;
+  const next = position >= 0 && position < siblings.length - 1 ? siblings[position + 1] : null;
 
-  if (current > 1) {
-    items.push(`<a href="/${law.slug}/${kind}/${current - 1}">${kind === "article" ? "Previous article" : "Previous recital"}</a>`);
+  if (previous) {
+    items.push(`<a href="${numberHref(law, kind, previous)}">${kind === "article" ? "Previous article" : "Previous recital"}</a>`);
   }
-  if (current < total) {
-    items.push(`<a href="/${law.slug}/${kind}/${current + 1}">${kind === "article" ? "Next article" : "Next recital"}</a>`);
+  if (next) {
+    items.push(`<a href="${numberHref(law, kind, next)}">${kind === "article" ? "Next article" : "Next recital"}</a>`);
   }
-  if (kind !== "article" && articleTotal > 0) {
-    items.push(`<a href="/${law.slug}/article/1">Start with Article 1</a>`);
+  if (kind !== "article" && articleNumbers.length) {
+    items.push(`<a href="${numberHref(law, "article", articleNumbers[0])}">Start with Article ${escapeHtml(articleNumbers[0])}</a>`);
   }
-  if (kind !== "recital" && recitalTotal > 0) {
-    items.push(`<a href="/${law.slug}/recital/1">Start with Recital 1</a>`);
+  if (kind !== "recital" && recitalNumbers.length) {
+    items.push(`<a href="${numberHref(law, "recital", recitalNumbers[0])}">Start with Recital ${escapeHtml(recitalNumbers[0])}</a>`);
   }
 
   return items.length ? `<p class="lv-inline-links">${items.join(" · ")}</p>` : "";
@@ -238,7 +264,7 @@ function buildArticleBody(law, data, articleNumber) {
   const displayTitle = article?.article_title
     ? `Article ${articleNumber} - ${article.article_title}`
     : `Article ${articleNumber}`;
-  const articleTotal = getArticleTotal(law, data);
+  const recitalNumbers = getRecitalNumbers(law, data);
   const annexes = getValidAnnexes(data);
   const annexLinks = annexes.slice(0, 6).map((annex) => (
     `<li><a href="/${law.slug}/annex/${encodeURIComponent(annex.annex_id)}">Annex ${escapeHtml(annex.annex_id)}</a></li>`
@@ -257,8 +283,8 @@ function buildArticleBody(law, data, articleNumber) {
         <p>This page is part of LegalViz.EU, a tool that makes EU legislation easier to read by linking articles, recitals, and related references.</p>
       </header>
       <section class="lv-callout">
-        <p><strong>Navigate this law:</strong> <a href="/${law.slug}">Law overview</a> · <a href="/${law.slug}/recital/1">Recitals</a>${annexLinks ? ` · <a href="/${law.slug}/annex/${encodeURIComponent(annexes[0].annex_id)}">Annexes</a>` : ""}</p>
-        ${buildNearbyNumberLinks(law, data, "article", articleNumber, articleTotal)}
+        <p><strong>Navigate this law:</strong> <a href="/${law.slug}">Law overview</a>${recitalNumbers.length ? ` · <a href="${numberHref(law, "recital", recitalNumbers[0])}">Recitals</a>` : ""}${annexLinks ? ` · <a href="/${law.slug}/annex/${encodeURIComponent(annexes[0].annex_id)}">Annexes</a>` : ""}</p>
+        ${buildNearbyNumberLinks(law, data, "article", articleNumber)}
       </section>
       ${article?.article_html
         ? `<article class="lv-content">${article.article_html}</article>`
@@ -274,7 +300,7 @@ function buildArticleBody(law, data, articleNumber) {
 
 function buildRecitalBody(law, data, recitalNumber) {
   const recital = data?.recitals?.find((entry) => String(entry.recital_number) === String(recitalNumber));
-  const recitalTotal = getRecitalTotal(law, data);
+  const articleNumbers = getArticleNumbers(law, data);
   const annexes = getValidAnnexes(data);
 
   return `
@@ -290,8 +316,8 @@ function buildRecitalBody(law, data, recitalNumber) {
         <p>This page is part of LegalViz.EU, a tool that helps readers move through EU legislation more quickly and understand its structure.</p>
       </header>
       <section class="lv-callout">
-        <p><strong>Navigate this law:</strong> <a href="/${law.slug}">Law overview</a> · <a href="/${law.slug}/article/1">Articles</a>${annexes.length ? ` · <a href="/${law.slug}/annex/${encodeURIComponent(annexes[0].annex_id)}">Annexes</a>` : ""}</p>
-        ${buildNearbyNumberLinks(law, data, "recital", recitalNumber, recitalTotal)}
+        <p><strong>Navigate this law:</strong> <a href="/${law.slug}">Law overview</a>${articleNumbers.length ? ` · <a href="${numberHref(law, "article", articleNumbers[0])}">Articles</a>` : ""}${annexes.length ? ` · <a href="/${law.slug}/annex/${encodeURIComponent(annexes[0].annex_id)}">Annexes</a>` : ""}</p>
+        ${buildNearbyNumberLinks(law, data, "recital", recitalNumber)}
       </section>
       ${recital?.recital_html
         ? `<article class="lv-content">${recital.recital_html}</article>`
@@ -305,6 +331,8 @@ function buildAnnexBody(law, data, annexId) {
   const displayTitle = annex?.annex_title
     ? `Annex ${annexId} - ${annex.annex_title}`
     : `Annex ${annexId}`;
+  const articleNumbers = getArticleNumbers(law, data);
+  const recitalNumbers = getRecitalNumbers(law, data);
 
   return `
     <main class="lv-prerender">
@@ -319,7 +347,7 @@ function buildAnnexBody(law, data, annexId) {
         <p>This annex is part of the LegalViz.EU reading tool for EU legislation, with quick access back to the law overview, articles, and recitals.</p>
       </header>
       <section class="lv-callout">
-        <p><strong>Navigate this law:</strong> <a href="/${law.slug}">Law overview</a> · <a href="/${law.slug}/article/1">Articles</a> · <a href="/${law.slug}/recital/1">Recitals</a></p>
+        <p><strong>Navigate this law:</strong> <a href="/${law.slug}">Law overview</a>${articleNumbers.length ? ` · <a href="${numberHref(law, "article", articleNumbers[0])}">Articles</a>` : ""}${recitalNumbers.length ? ` · <a href="${numberHref(law, "recital", recitalNumbers[0])}">Recitals</a>` : ""}</p>
       </section>
       ${annex?.annex_html
         ? `<article class="lv-content">${annex.annex_html}</article>`
@@ -446,34 +474,31 @@ async function buildLawPages(template, law) {
     bodyHtml: buildLawBody(law, data, summaryPayload),
   }));
 
-  const articleTotal = getArticleTotal(law, data);
-  const recitalTotal = getRecitalTotal(law, data);
-
-  for (let index = 1; index <= articleTotal; index += 1) {
-    const article = data?.articles?.find((entry) => String(entry.article_number) === String(index));
+  for (const number of getArticleNumbers(law, data)) {
+    const article = data?.articles?.find((entry) => String(entry.article_number) === number);
     const articleTitle = article?.article_title
-      ? `Read Article ${index}: ${article.article_title} | ${lawTitle} | LegalViz.EU`
-      : `Read Article ${index} | ${lawTitle} | LegalViz.EU`;
-    const articleDescription = summarize(`${APP_BLURB} Article ${index} of ${lawTitle}. ${article?.article_html || ""}`);
+      ? `Read Article ${number}: ${article.article_title} | ${lawTitle} | LegalViz.EU`
+      : `Read Article ${number} | ${lawTitle} | LegalViz.EU`;
+    const articleDescription = summarize(`${APP_BLURB} Article ${number} of ${lawTitle}. ${article?.article_html || ""}`);
 
-    writePage(`/${law.slug}/article/${index}`, buildPageHtml(template, {
+    writePage(numberHref(law, "article", number), buildPageHtml(template, {
       title: articleTitle,
       description: articleDescription,
-      canonical: `${siteUrl}/${law.slug}/article/${index}/`,
-      bodyHtml: buildArticleBody(law, data, index),
+      canonical: `${siteUrl}${numberHref(law, "article", number)}/`,
+      bodyHtml: buildArticleBody(law, data, number),
     }));
   }
 
-  for (let index = 1; index <= recitalTotal; index += 1) {
-    const recital = data?.recitals?.find((entry) => String(entry.recital_number) === String(index));
-    const recitalTitle = `Read Recital ${index} | ${lawTitle} | LegalViz.EU`;
-    const recitalDescription = summarize(`${APP_BLURB} Recital ${index} of ${lawTitle}. ${recital?.recital_html || ""}`);
+  for (const number of getRecitalNumbers(law, data)) {
+    const recital = data?.recitals?.find((entry) => String(entry.recital_number) === number);
+    const recitalTitle = `Read Recital ${number} | ${lawTitle} | LegalViz.EU`;
+    const recitalDescription = summarize(`${APP_BLURB} Recital ${number} of ${lawTitle}. ${recital?.recital_html || ""}`);
 
-    writePage(`/${law.slug}/recital/${index}`, buildPageHtml(template, {
+    writePage(numberHref(law, "recital", number), buildPageHtml(template, {
       title: recitalTitle,
       description: recitalDescription,
-      canonical: `${siteUrl}/${law.slug}/recital/${index}/`,
-      bodyHtml: buildRecitalBody(law, data, index),
+      canonical: `${siteUrl}${numberHref(law, "recital", number)}/`,
+      bodyHtml: buildRecitalBody(law, data, number),
     }));
   }
 

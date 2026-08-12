@@ -209,6 +209,27 @@ function readCaseLawCacheFile(filePath) {
   return cache;
 }
 
+// Same memo contract as readCaseLawCacheFile, for the gzipped seed asset:
+// keyed on mtime + size so a rebuilt seed is picked up without a restart.
+let caseLawSeedMemo = null;
+
+function readCaseLawSeed() {
+  let stat;
+  try {
+    stat = fs.statSync(CASE_LAW_CACHE_SEED);
+  } catch {
+    return null;
+  }
+  if (caseLawSeedMemo
+    && caseLawSeedMemo.mtimeMs === stat.mtimeMs
+    && caseLawSeedMemo.size === stat.size) {
+    return caseLawSeedMemo.cache;
+  }
+  const cache = JSON.parse(zlib.gunzipSync(fs.readFileSync(CASE_LAW_CACHE_SEED)).toString('utf8'));
+  caseLawSeedMemo = { mtimeMs: stat.mtimeMs, size: stat.size, cache };
+  return cache;
+}
+
 function loadCaseLawCache(cacheDir, { readOnly = false } = {}) {
   try {
     const filePath = path.join(cacheDir, CASE_LAW_CACHE_FILE);
@@ -237,8 +258,15 @@ function loadCaseLawCache(cacheDir, { readOnly = false } = {}) {
     }
     if (fs.existsSync(CASE_LAW_CACHE_SEED)) {
       try {
+        // Read-only callers (the no-SQLite fallback) never write the seed out
+        // to `filePath`, so they'd gunzip and re-parse ~50 MB on every request
+        // without a memo of their own — readCaseLawCacheFile only memoises the
+        // on-disk cache.
+        if (readOnly) {
+          const memoizedSeed = readCaseLawSeed();
+          if (memoizedSeed) return memoizedSeed;
+        }
         const seedBytes = zlib.gunzipSync(fs.readFileSync(CASE_LAW_CACHE_SEED));
-        if (readOnly) return JSON.parse(seedBytes.toString('utf8'));
         fs.mkdirSync(cacheDir, { recursive: true });
         fs.writeFileSync(filePath, seedBytes);
         const seeded = readCaseLawCacheFile(filePath);

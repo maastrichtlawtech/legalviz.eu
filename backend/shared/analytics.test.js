@@ -28,6 +28,24 @@ test('classifies requests into mcp / web / api channels', () => {
   analytics.shutdown();
 });
 
+test('counts only well-formed CELEX ids from the request path', () => {
+  const analytics = createAnalytics({});
+  const route = { path: '/api/laws/:celex' };
+  hit(analytics, baseReq({ path: '/api/laws/32016R0679', route, params: { celex: '32016R0679' } }));
+  // Rejected by the routes with a 400; must not reach the counters.
+  hit(analytics, baseReq({ path: '/api/laws/..%2Fetc%2Fpasswd', route, params: { celex: '../etc/passwd' } }), 400);
+  hit(analytics, baseReq({ path: '/api/laws/nonsense', route, params: { celex: 'nonsense' } }), 400);
+  // A 404 on a valid id is real demand signal and stays counted.
+  hit(analytics, baseReq({ path: '/api/laws/32999R9999', route, params: { celex: '32999R9999' } }), 404);
+
+  const stats = analytics.getStats();
+  assert.deepEqual(
+    stats.topCelexes.map((entry) => entry.celex).sort(),
+    ['32016R0679', '32999R9999'],
+  );
+  analytics.shutdown();
+});
+
 test('recordMcpTool feeds route, celex, and search counters', () => {
   const analytics = createAnalytics({});
   analytics.recordMcpTool('get_law_part', { celex: '32016R0679' });

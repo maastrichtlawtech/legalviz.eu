@@ -2,6 +2,7 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const { CASE_LAW_CACHE_FILE } = require('./law-queries');
+const { validateCelex } = require('./reference-utils');
 
 const FLUSH_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 // Bump when the persisted analytics.json shape changes (see the cache-version
@@ -282,8 +283,13 @@ function createAnalytics({ cacheDir, dataStore, now = () => new Date(), hashKey 
         recordDailyRoute(route);
       }
 
+      // Only count CELEX ids that are at least well-formed. Without the shape
+      // check, a request with a malformed `:celex` is rejected with a 400 and
+      // still lands in the per-CELEX counters, filling /api/_stats with path
+      // garbage (and evicting real ids once COUNTER_CAP is reached). 4xx is
+      // still counted for valid ids — a 404 on a real CELEX is demand signal.
       const celex = req.params?.celex;
-      if (celex && res.statusCode < 500) {
+      if (celex && res.statusCode < 500 && validateCelex(celex)) {
         celexCounts.set(celex, (celexCounts.get(celex) || 0) + 1);
         capMap(celexCounts);
         recordDailyCelex(celex);

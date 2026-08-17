@@ -379,6 +379,66 @@ describe("parseFmxToCombined — AI Act", () => {
       expect(art.article_html).not.toMatch(/<TXT\b/);
     }
   });
+
+  it("keeps the two subparagraphs of Article 50(4) in separate blocks", () => {
+    const art50 = result.articles.find((a) => String(a.article_number) === "50");
+    // The second subparagraph used to be glued onto the first ("…work.Deployers…").
+    expect(art50.article_html).not.toMatch(/work\.\s*Deployers/);
+    expect(art50.article_html).toMatch(
+      /does not hamper the display or enjoyment of the work\.<\/p>\s*<p[^>]*>Deployers of an AI system that generates or manipulates text/,
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// parseFmxToCombined — subparagraphs (ALINEA)
+// ---------------------------------------------------------------------------
+
+describe("parseFmxToCombined — subparagraphs", () => {
+  const wrap = (articleXml) =>
+    `<ACT><BIB.INSTANCE><LG.DOC>EN</LG.DOC></BIB.INSTANCE><ENACTING.TERMS><DIVISION>${articleXml}</DIVISION></ENACTING.TERMS></ACT>`;
+
+  const articleHtml = (articleXml) =>
+    parseFmxToCombined(wrap(articleXml)).articles[0].article_html;
+
+  it("renders each ALINEA of a numbered paragraph as its own block", () => {
+    const html = articleHtml(
+      `<ARTICLE IDENTIFIER="001"><TI.ART>Article 1</TI.ART>` +
+      `<PARAG IDENTIFIER="001.001"><NO.PARAG>1.</NO.PARAG>` +
+      `<ALINEA>First subparagraph.</ALINEA><ALINEA>Second subparagraph.</ALINEA>` +
+      `</PARAG></ARTICLE>`,
+    );
+    expect(html).not.toContain("First subparagraph.Second");
+    expect(html).toMatch(/<p[^>]*>1\.(?:&nbsp;)+First subparagraph\.<\/p>/);
+    expect(html).toMatch(/<p[^>]*>Second subparagraph\.<\/p>/);
+  });
+
+  it("renders a lone unnumbered ALINEA as a single paragraph", () => {
+    const html = articleHtml(
+      `<ARTICLE IDENTIFIER="001"><TI.ART>Article 1</TI.ART><ALINEA>Only text.</ALINEA></ARTICLE>`,
+    );
+    expect(html).toMatch(/<p[^>]*>Only text\.<\/p>/);
+    expect(html.match(/<p\b/g)).toHaveLength(1);
+  });
+
+  it("does not double-wrap an ALINEA whose text already sits in a P", () => {
+    const html = articleHtml(
+      `<ARTICLE IDENTIFIER="001"><TI.ART>Article 1</TI.ART><ALINEA><P>Wrapped text.</P></ALINEA></ARTICLE>`,
+    );
+    expect(html).not.toMatch(/<p[^>]*>\s*<p\b/);
+    expect(html.match(/<p\b/g)).toHaveLength(1);
+  });
+
+  it("keeps a list inside an ALINEA outside the intro paragraph", () => {
+    const html = articleHtml(
+      `<ARTICLE IDENTIFIER="001"><TI.ART>Article 1</TI.ART>` +
+      `<PARAG IDENTIFIER="001.001"><NO.PARAG>1.</NO.PARAG>` +
+      `<ALINEA>The following apply:<LIST TYPE="ALPHA"><ITEM><NP><NO.P>(a)</NO.P><TXT>first item;</TXT></NP></ITEM></LIST></ALINEA>` +
+      `</PARAG></ARTICLE>`,
+    );
+    expect(html).toMatch(/<p[^>]*>1\.(?:&nbsp;)+The following apply:<\/p>/);
+    expect(html).toMatch(/<ol[^>]*class="[^"]*fmx-list/);
+  });
 });
 
 // ---------------------------------------------------------------------------

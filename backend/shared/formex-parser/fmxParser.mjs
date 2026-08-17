@@ -33,7 +33,7 @@ import {
  * Bump this whenever the parser output changes (new fields, bug fixes, etc.)
  * so that cached parsed results are automatically re-parsed from raw XML.
  */
-export const PARSER_VERSION = 20;
+export const PARSER_VERSION = 21;
 
 // ---------------------------------------------------------------------------
 // FMX → HTML conversion helpers
@@ -289,8 +289,12 @@ function fmxToHtml(el, ctx = null) {
     return body;
   }
 
-  // ALINEA — unnumbered paragraph block, render children directly
-  if (tag === "ALINEA") return childrenHtml(el, ctx);
+  // ALINEA — one (sub)paragraph. A PARAG may hold several of them (the
+  // "first subparagraph", "second subparagraph" … a law refers to), and FMX
+  // puts their text straight inside ALINEA with no P wrapper — so rendering
+  // the children directly ran consecutive subparagraphs together into one
+  // block ("…enjoyment of the work.Deployers of an AI system…").
+  if (tag === "ALINEA") return renderAlineaBlocks(el, ctx);
 
   // P — plain paragraph
   if (tag === "P") return `<p>${childrenHtml(el, ctx)}</p>`;
@@ -306,6 +310,39 @@ function fmxToHtml(el, ctx = null) {
 
   // Default: just recurse
   return childrenHtml(el, ctx);
+}
+
+// Rendered HTML that already opens with a block-level element and therefore
+// must not be folded into a wrapping <p>.
+const BLOCK_HTML_START = /^\s*<(?:p|div|ul|ol|li|table|aside|blockquote|h[1-6])[\s/>]/i;
+
+/**
+ * Render an ALINEA's children, wrapping runs of inline content in a paragraph
+ * so each ALINEA becomes its own block. Block children (P, LIST, tables …)
+ * pass through untouched.
+ */
+function renderAlineaBlocks(el, ctx = null) {
+  let out = "";
+  let inline = "";
+
+  const flushInline = () => {
+    if (inline.trim()) out += `<p class="oj-normal">${inline}</p>`;
+    inline = "";
+  };
+
+  for (const child of el.childNodes) {
+    const html = fmxToHtml(child, ctx);
+    if (!html) continue;
+    if (BLOCK_HTML_START.test(html)) {
+      flushInline();
+      out += html;
+    } else {
+      inline += html;
+    }
+  }
+  flushInline();
+
+  return out;
 }
 
 function childrenHtml(el, ctx = null) {

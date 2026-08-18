@@ -1,6 +1,26 @@
 # Full-text search for the API & MCP — implementation plan
 
-**Status: proposal — several decision points are deliberately left open, marked ⚖️ below.**
+**Status: decided — see the decision log below. The ⚖️ sections are kept for the rationale.**
+
+## Decision log (2026-08-18)
+
+- **D1 — Ship the endpoint directly.** Phases 0 and 1 merge into one build-and-ship effort. The
+  builder, recall eval, and size/latency measurements are still part of the work (the size number
+  still gates D4's fallback), but they are no longer a go/no-go gate before user-facing code.
+- **D2 — Articles + recitals.** Annexes stay out of v1.
+- **D3 — Option 1**: external-content FTS5 (`content='units'`, `detail=full`), text stored
+  uncompressed, native `snippet()`/`highlight()`. Artifact size is explicitly not a concern.
+- **D4 — GitHub Release asset baked into the Docker image**, provided the artifact isn't too
+  large (hard cap: 2 GiB/asset; soft cap: deploy-time/image-size tolerance). If the measured size
+  breaks that, fall back to option B (Railway volume + download-at-boot) — decide then.
+- **D5 — Separate `/api/fulltext-search` only.** No MCP tool for now; `search_law_text` is
+  deferred until the endpoint has proven itself.
+- **D6 — English-only.**
+- **D7 — Stay lexical.** Embedding the corpus is cheap on the API side (order of tens of dollars
+  one-off at current per-token embedding prices; see note in the D7 section) — the real cost is
+  serving: a vector index over 1–3M units means gigabytes of vectors plus ANN infrastructure and
+  a per-query embedding call, and #126 showed no measurable win from semantic signal on this eval
+  set. The `units` table is kept embedding-ready so this can be revisited with evidence.
 
 ## Why
 
@@ -206,6 +226,15 @@ inconclusive). Two cheap doors deliberately left open: the `units` table is exac
 inventory an embedding index would need, and a later hybrid could RRF-merge vector hits with FTS5
 hits per unit. Revisit only with eval evidence, per the #125 discipline. If #126 is not going to
 land, close it referencing this plan.
+
+*Cost note (2026 prices, rough):* embedding the whole English corpus once — ~1–3M units at a few
+hundred tokens each, call it 0.5–2B tokens — costs on the order of **$10–$40** with a budget
+embedding model (~$0.02/M tokens, e.g. `text-embedding-3-small` or `voyage-3.5-lite`) and
+**$60–$250** with a top-tier one (~$0.13/M). The one-off API spend is genuinely negligible; what
+isn't is *serving*: 1–3M vectors ≈ 2–12 GB uncompressed (less with int8/Matryoshka truncation),
+an ANN index to host, a per-query embedding call adding latency and a key dependency, and
+re-embedding on every corpus refresh. That ops cost — not the embedding bill — is why v1 stays
+lexical.
 
 ---
 

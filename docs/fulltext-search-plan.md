@@ -236,6 +236,14 @@ an ANN index to host, a per-query embedding call adding latency and a key depend
 re-embedding on every corpus refresh. That ops cost — not the embedding bill — is why v1 stays
 lexical.
 
+*On-device option considered (2026-08-18):* [ternlight](https://github.com/soycaporal/ternlight)
+— a 5–7 MB WASM embedding model (ternary-quantized MiniLM-L6 distillation) running on CPU in
+Node/browser with no API — removes every ops objection above, so it is the natural candidate for
+a later hybrid experiment (extra RRF source over the same `units` table, judged by the #125
+harness). Not adopted now: its own benchmark (SciFact nDCG@10 0.439–0.465) sits *below* plain
+BM25 (~0.665 on the same benchmark) and its teacher model (~0.645), and its 128-token input cap
+would force sub-chunking of most articles.
+
 ---
 
 ## Testing & acceptance

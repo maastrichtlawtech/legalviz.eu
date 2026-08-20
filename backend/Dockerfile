@@ -54,7 +54,7 @@ COPY search/build-sqlite-data.js search/search-ranking.js ./search/
 # Placed before `COPY . .` so this (large) layer stays cached across code
 # changes and only re-runs when DATA_RELEASE_TAG is bumped for a new data build.
 ARG DATA_RELEASE_REPO=maastrichtlawtech/legalviz.eu
-ARG DATA_RELEASE_TAG=data-v11
+ARG DATA_RELEASE_TAG=data-v12
 # The full-text index ships on its own release tag, decoupled from data-vN —
 # see FULLTEXT_RELEASE_TAG in the root CLAUDE.md cache-invalidation table.
 ARG FULLTEXT_RELEASE_TAG=fulltext-v2

@@ -668,6 +668,25 @@ node --max-old-space-size=8192 search/fetch-eurovoc.js
 node --max-old-space-size=8192 search/fetch-in-force.js
 ```
 
+`fetch-in-force.js` only ever fills a gap: it skips any record that already
+carries `inForce` and any celex already answered in `data/in-force.json`, so it
+never re-asks Cellar about a status once known. Because `inForce` is
+time-varying (an act can be repealed after its first harvest), that first-ever
+value would otherwise be carried forward indefinitely. `search/in-force-recheck.js`
+is the periodic counterpart: it clears both skips for a bounded slice — acts
+whose `endOfValidity` has passed but still read `inForce: true` first, then a
+rotating age-based batch ordered by `statusCheckedAt` — and re-queries just
+that slice, so the whole cache turns over on a known cycle without re-querying
+all ~80k acts on every run (issue #167). Not wired into any workflow — the
+schedule is a deploy decision, not a code one:
+
+```bash
+node --max-old-space-size=8192 search/in-force-recheck.js --batch-size 2000 --cycle-days 30
+```
+
+`--sweep` re-checks the entire cache in one run and must be passed explicitly;
+there is no unbounded default.
+
 If whole acts are missing rather than a field — a transient Cellar failure during
 the sweep, or an act Cellar had not indexed yet when it ran — add them by CELEX
 instead of re-sweeping the year around them:

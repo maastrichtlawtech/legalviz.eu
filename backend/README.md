@@ -592,16 +592,23 @@ backend files change, starts it, exercises SQLite-backed search, topics, and
 reference resolution, and verifies that the final image contains the database
 manifest but not the source JSON artifacts.
 
-`.github/workflows/refresh-case-law-data.yml` runs the offline judgment refresh
-monthly and on demand. Scheduled runs produce a validated candidate artifact and
-retain it for review; they never publish automatically. A manual run may opt into
-publication with a new immutable `data-vN` tag. Publication is attached to the
-`data-release` GitHub environment and opens a separate pull request that bumps
-the Docker release tag, keeping deployment reviewable and reversible.
+The automated release train is split across three workflows: `Refresh corpus`
+([`refresh-corpus.yml`](../.github/workflows/refresh-corpus.yml)) runs monthly at
+`43 3 5 * *`, then successful `workflow_run` events trigger `Refresh data`
+([`refresh-data.yml`](../.github/workflows/refresh-data.yml)) and `Refresh
+fulltext` ([`refresh-fulltext.yml`](../.github/workflows/refresh-fulltext.yml)).
+The chain publishes validated immutable `corpus-vN`, `data-vN`, and
+`fulltext-vN` releases automatically and opens separate Docker tag-bump PRs for
+`DATA_RELEASE_TAG` and `FULLTEXT_RELEASE_TAG`. Merging those PRs is the only
+human deploy gate; no environment approval is required.
 
 See the [case-law data refresh runbook](docs/case-law-data-refresh.md) for the
-schedule, incremental-update model, Chromium/WAF behavior, candidate review and
-approval procedure, recovery steps, and current operational limitations.
+corpus-stage schedule, Chromium/WAF behavior, candidate review, and recovery
+steps.
+
+See the [legislation data refresh runbook](docs/legislation-data-refresh.md) for
+the exact three-workflow corpus → data → full-text chain, release/PR
+behavior, manual recovery, flag traps, and accepted v1 limitations.
 
 ### Metadata that isn't in the corpus (dates, EuroVoc topics, in-force status)
 

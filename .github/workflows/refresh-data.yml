@@ -1,0 +1,523 @@
+name: Refresh data
+
+on:
+  workflow_run:
+    workflows: ["Refresh corpus"]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: refresh-derived-data
+  cancel-in-progress: false
+
+jobs:
+  build:
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'workflow_run' && github.event.workflow_run.name == 'Refresh corpus' && github.event.workflow_run.conclusion == 'success') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    outputs:
+      data_tag: ${{ steps.current-release.outputs.data_tag }}
+      corpus_tag: ${{ steps.corpus-release.outputs.corpus_tag }}
+      changed: ${{ steps.baseline.outputs.changed }}
+      artifact_name: derived-data-${{ github.run_id }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      # workflow_run jobs must execute trusted repository code, never the
+      # triggering workflow's head checkout. Manual runs use the same release
+      # branch so the Dockerfile and builders are deterministic.
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.15.0
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+      - name: Install backend dependencies
+        run: |
+          set -euo pipefail
+          pnpm install --dir backend --no-frozen-lockfile
+
+      - name: Resolve current data release
+        id: current-release
+        shell: bash
+        run: |
+          set -euo pipefail
+          data_tags=$(sed -n 's/^ARG DATA_RELEASE_TAG=//p' backend/Dockerfile)
+          test "$(printf '%s\n' "$data_tags" | sed '/^$/d' | wc -l | tr -d ' ')" = 1
+          data_tag=$(printf '%s\n' "$data_tags" | sed -n '1p')
+          [[ "$data_tag" =~ ^data-v[0-9]+$ ]]
+          echo "data_tag=$data_tag" >> "$GITHUB_OUTPUT"
+          echo "Current data release: $data_tag" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Resolve latest immutable corpus release
+        id: corpus-release
+        shell: bash
+        run: |
+          set -euo pipefail
+          corpus_tag=$(gh release list \
+            --repo "${{ github.repository }}" \
+            --limit 100 \
+            --json tagName,isDraft,isPrerelease \
+            --jq '[.[] | select(.isDraft == false and .isPrerelease == false) | select(.tagName | test("^corpus-v[0-9]+$"))] | sort_by(.tagName | sub("^corpus-v"; "") | tonumber) | if length == 0 then error("No immutable corpus-vN release found") else .[-1].tagName end')
+          [[ "$corpus_tag" =~ ^corpus-v[0-9]+$ ]]
+          echo "corpus_tag=$corpus_tag" >> "$GITHUB_OUTPUT"
+          echo "Latest immutable corpus: $corpus_tag" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Download current data assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p refresh-inputs refresh-output backend/search/data backend/law-cache
+          gh release download "${{ steps.current-release.outputs.data_tag }}" \
+            --repo "${{ github.repository }}" \
+            --pattern search-cache.json.gz \
+            --pattern case-law-cache.json.gz \
+            --pattern citation-graph.json.gz \
+            --dir refresh-inputs
+          # Definitions are optional at runtime, but a present asset must be
+          # downloaded successfully and carried forward unchanged.
+          release_assets=$(gh release view "${{ steps.current-release.outputs.data_tag }}" \
+            --repo "${{ github.repository }}" \
+            --json assets --jq '.assets[].name')
+          if grep -Fxq definitions.json.gz <<< "$release_assets"; then
+            gh release download "${{ steps.current-release.outputs.data_tag }}" \
+              --repo "${{ github.repository }}" \
+              --pattern definitions.json.gz \
+              --dir refresh-inputs
+          else
+            echo "No definitions.json.gz in current data release; continuing without the optional asset"
+          fi
+          for asset in search-cache.json.gz case-law-cache.json.gz citation-graph.json.gz; do
+            test -s "refresh-inputs/$asset" || { echo "Missing current data asset: $asset" >&2; exit 1; }
+          done
+
+      - name: Download latest corpus release
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release download "${{ steps.corpus-release.outputs.corpus_tag }}" \
+            --repo "${{ github.repository }}" \
+            --pattern laws.tar \
+            --pattern laws-html.tar \
+            --pattern case-law.tar \
+            --dir refresh-inputs
+          for archive in laws.tar laws-html.tar case-law.tar; do
+            test -s "refresh-inputs/$archive" || { echo "Missing corpus asset: $archive" >&2; exit 1; }
+            tar -xf "refresh-inputs/$archive" -C backend/search/data
+          done
+          for corpus in laws laws-html case-law; do
+            test -d "backend/search/data/$corpus" || { echo "Corpus archive did not restore $corpus/" >&2; exit 1; }
+          done
+
+      - name: Restore current derived inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f backend/search/data/search-cache.json
+          gzip -cd refresh-inputs/search-cache.json.gz \
+            > backend/search/data/search-cache.json
+          gzip -cd refresh-inputs/case-law-cache.json.gz \
+            > backend/law-cache/case-law-cache-v5.json
+          test -s backend/search/data/search-cache.json
+          test -s backend/law-cache/case-law-cache-v5.json
+
+      - name: Add corpus acts missing from the cache
+        working-directory: backend
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs = require("node:fs");
+          const path = require("node:path");
+
+          const cache = JSON.parse(fs.readFileSync("search/data/search-cache.json", "utf8"));
+          const present = new Set((cache.records || [])
+            .map((record) => String(record?.celex || "").trim().toUpperCase())
+            .filter(Boolean));
+          const missing = new Set();
+          for (const root of ["search/data/laws", "search/data/laws-html"]) {
+            if (!fs.existsSync(root)) continue;
+            for (const year of fs.readdirSync(root)) {
+              if (!/^\d{4}$/.test(year)) continue;
+              const yearDir = path.join(root, year);
+              for (const file of fs.readdirSync(yearDir)) {
+                const celex = file
+                  .replace(/\.xml\.gz$/i, "")
+                  .replace(/\.html\.gz$/i, "")
+                  .trim()
+                  .toUpperCase();
+                if (celex && !present.has(celex)) missing.add(celex);
+              }
+            }
+          }
+          const ids = [...missing].sort();
+          fs.writeFileSync("corpus-missing.txt", ids.length ? `${ids.join("\n")}\n` : "", "utf8");
+          console.log(`[derived-data] corpus contains ${ids.length} CELEX ids absent from the current search cache`);
+          NODE
+          if [ -s corpus-missing.txt ]; then
+            node --max-old-space-size=8192 search/backfill-cache.js \
+              --celex @corpus-missing.txt \
+              --cachePath search/data/search-cache.json \
+              | tee ../refresh-output/backfill.log
+          else
+            : > ../refresh-output/backfill.log
+          fi
+
+      - name: Parse case-law corpus
+        working-directory: backend
+        shell: bash
+        run: node search/case-law-parse.js
+
+      - name: Capture search and case-law counts
+        id: baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          search_before=$(gzip -cd refresh-inputs/search-cache.json.gz \
+            | jq -er 'if (.records|type) == "array" then (.records|length) else error("search cache has no records array") end')
+          search_after=$(jq -er 'if (.records|type) == "array" then (.records|length) else error("search cache has no records array") end' backend/search/data/search-cache.json)
+          case_law_before=$(gzip -cd refresh-inputs/case-law-cache.json.gz | jq -er 'length')
+          case_law_after=$(jq -er 'length' backend/law-cache/case-law-cache-v5.json)
+          [[ "$search_before" =~ ^[0-9]+$ && "$search_after" =~ ^[0-9]+$ ]]
+          [[ "$case_law_before" =~ ^[0-9]+$ && "$case_law_after" =~ ^[0-9]+$ ]]
+          test "$search_after" -ge "$search_before" || { echo "Search cache regressed ($search_before → $search_after)" >&2; exit 1; }
+          test "$case_law_after" -ge "$case_law_before" || { echo "Case-law cache regressed ($case_law_before → $case_law_after)" >&2; exit 1; }
+          backfill_json=$(sed -n 's/^.*\[backfill\] done: //p' refresh-output/backfill.log | tail -n 1)
+          if [ -n "$backfill_json" ]; then
+            backfill_added=$(jq -er '.added | numbers' <<< "$backfill_json")
+          else
+            backfill_added=0
+          fi
+          search_delta=$((search_after - search_before))
+          test "$search_delta" -eq "$backfill_added" || {
+            echo "Search cache delta $search_delta does not match backfill reported added=$backfill_added" >&2
+            exit 1
+          }
+          search_before_hash=$(gzip -cd refresh-inputs/search-cache.json.gz | jq -S -c . | sha256sum | cut -d ' ' -f 1)
+          search_after_hash=$(jq -S -c . backend/search/data/search-cache.json | sha256sum | cut -d ' ' -f 1)
+          case_law_before_hash=$(gzip -cd refresh-inputs/case-law-cache.json.gz | jq -S -c . | sha256sum | cut -d ' ' -f 1)
+          case_law_after_hash=$(jq -S -c . backend/law-cache/case-law-cache-v5.json | sha256sum | cut -d ' ' -f 1)
+          changed=false
+          if [ "$search_before_hash" != "$search_after_hash" ] || [ "$case_law_before_hash" != "$case_law_after_hash" ]; then
+            changed=true
+          fi
+          {
+            echo "search_before=$search_before"
+            echo "search_after=$search_after"
+            echo "case_law_before=$case_law_before"
+            echo "case_law_after=$case_law_after"
+            echo "backfill_added=$backfill_added"
+            echo "search_before_hash=$search_before_hash"
+            echo "search_after_hash=$search_after_hash"
+            echo "case_law_before_hash=$case_law_before_hash"
+            echo "case_law_after_hash=$case_law_after_hash"
+            echo "changed=$changed"
+          } >> "$GITHUB_OUTPUT"
+          echo "Derived counts: search $search_before → $search_after; case law $case_law_before → $case_law_after; changed=$changed." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Package derived JSON assets
+        if: ${{ steps.baseline.outputs.changed == 'true' }}
+        working-directory: backend
+        shell: bash
+        run: |
+          set -euo pipefail
+          gzip --best --stdout search/data/search-cache.json \
+            > ../refresh-output/search-cache.json.gz
+          gzip --best --stdout law-cache/case-law-cache-v5.json \
+            > ../refresh-output/case-law-cache.json.gz
+          cp ../refresh-inputs/citation-graph.json.gz ../refresh-output/citation-graph.json.gz
+          if [ -f ../refresh-inputs/definitions.json.gz ]; then
+            cp ../refresh-inputs/definitions.json.gz ../refresh-output/definitions.json.gz
+          fi
+          for asset in search-cache.json.gz case-law-cache.json.gz citation-graph.json.gz; do
+            test -s "../refresh-output/$asset" || { echo "Missing derived asset: $asset" >&2; exit 1; }
+          done
+
+      - name: Build and validate SQLite data
+        if: ${{ steps.baseline.outputs.changed == 'true' }}
+        working-directory: backend
+        shell: bash
+        run: |
+          set -euo pipefail
+          node search/build-sqlite-data.js \
+            --search ../refresh-output/search-cache.json.gz \
+            --case-law ../refresh-output/case-law-cache.json.gz \
+            --citation-graph ../refresh-output/citation-graph.json.gz \
+            --definitions ../refresh-output/definitions.json.gz \
+            --output ../refresh-output/data.sqlite \
+            --manifest ../refresh-output/data.sqlite.manifest.json \
+            | tee ../refresh-output/sqlite-build.log
+          test -s ../refresh-output/data.sqlite
+          test -s ../refresh-output/data.sqlite.manifest.json
+          jq -e '
+            .integrity.sqlite == "ok" and
+            .integrity.orphanLawMappings == 0 and
+            .integrity.orphanFtsMappings == 0 and
+            (.source.search.records | numbers) and
+            (.source.caseLaw.records | numbers)
+          ' ../refresh-output/data.sqlite.manifest.json >/dev/null
+          manifest_search=$(jq -er '.source.search.records | numbers' ../refresh-output/data.sqlite.manifest.json)
+          manifest_case_law=$(jq -er '.source.caseLaw.records | numbers' ../refresh-output/data.sqlite.manifest.json)
+          test "$manifest_search" -eq "${{ steps.baseline.outputs.search_after }}" || {
+            echo "SQLite search record count $manifest_search does not match cache ${{ steps.baseline.outputs.search_after }}" >&2
+            exit 1
+          }
+          test "$manifest_case_law" -eq "${{ steps.baseline.outputs.case_law_after }}" || {
+            echo "SQLite case-law count $manifest_case_law does not match cache ${{ steps.baseline.outputs.case_law_after }}" >&2
+            exit 1
+          }
+          jq -n \
+            --arg generatedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --argjson searchBefore "${{ steps.baseline.outputs.search_before }}" \
+            --argjson searchAfter "${{ steps.baseline.outputs.search_after }}" \
+            --argjson caseLawBefore "${{ steps.baseline.outputs.case_law_before }}" \
+            --argjson caseLawAfter "${{ steps.baseline.outputs.case_law_after }}" \
+            '{generatedAt: $generatedAt, search: {baselineRecords: $searchBefore, candidateRecords: $searchAfter}, caseLaw: {baselineRecords: $caseLawBefore, candidateRecords: $caseLawAfter}}' \
+            > ../refresh-output/refresh-summary.json
+
+      - name: Upload derived data candidate
+        if: ${{ steps.baseline.outputs.changed == 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: derived-data-${{ github.run_id }}
+          path: refresh-output/
+          if-no-files-found: error
+          retention-days: 14
+
+  publish:
+    needs: build
+    if: ${{ needs.build.result == 'success' && needs.build.outputs.changed == 'true' }}
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      contents: write
+      pull-requests: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 0
+      - uses: actions/download-artifact@v4
+        with:
+          name: derived-data-${{ github.run_id }}
+          path: release-assets
+
+      - name: Resolve and validate next data release tag
+        id: tags
+        shell: bash
+        run: |
+          set -euo pipefail
+          current_data=$(sed -n 's/^ARG DATA_RELEASE_TAG=//p' backend/Dockerfile)
+          [[ "$current_data" =~ ^data-v([0-9]+)$ ]]
+          expected_data="data-v$((BASH_REMATCH[1] + 1))"
+          release_state=absent
+          if release_meta=$(gh release view "$expected_data" \
+            --repo "${{ github.repository }}" --json isDraft,isPrerelease 2>/dev/null); then
+            if [ "$(jq -r '.isDraft' <<< "$release_meta")" = true ]; then
+              release_state=draft
+              echo "Resuming interrupted draft release: $expected_data." >> "$GITHUB_STEP_SUMMARY"
+            else
+              test "$(jq -r '.isPrerelease' <<< "$release_meta")" = false
+              release_state=published
+              echo "Immutable release already exists: $expected_data; recovering its Docker tag PR." >> "$GITHUB_STEP_SUMMARY"
+            fi
+          fi
+          echo "data_tag=$expected_data" >> "$GITHUB_OUTPUT"
+          echo "release_state=$release_state" >> "$GITHUB_OUTPUT"
+          echo "Next data release: $expected_data" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Verify complete candidate asset set
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker_assets=$(sed -n 's/.*for asset in \(.*\); do.*/\1/p' backend/Dockerfile)
+          test -n "$docker_assets"
+          read -r -a docker_asset_list <<< "$docker_assets"
+          for asset in "${docker_asset_list[@]}"; do
+            test -s "release-assets/$asset" || { echo "Missing Docker build input: $asset" >&2; exit 1; }
+          done
+          for asset in data.sqlite data.sqlite.manifest.json; do
+            test -s "release-assets/$asset" || { echo "Missing candidate asset: $asset" >&2; exit 1; }
+          done
+          jq -e '
+            .integrity.sqlite == "ok" and
+            .integrity.orphanLawMappings == 0 and
+            .integrity.orphanFtsMappings == 0
+          ' release-assets/data.sqlite.manifest.json >/dev/null
+          if [ "${{ steps.tags.outputs.release_state }}" = published ]; then
+            existing_meta=$(gh release view "${{ steps.tags.outputs.data_tag }}" \
+              --repo "${{ github.repository }}" \
+              --json isDraft,isPrerelease)
+            test "$(jq -r '.isDraft' <<< "$existing_meta")" = false || {
+              echo "Existing ${{ steps.tags.outputs.data_tag }} is still a draft; refusing to publish or overwrite it." >&2
+              exit 1
+            }
+            test "$(jq -r '.isPrerelease' <<< "$existing_meta")" = false || {
+              echo "Existing ${{ steps.tags.outputs.data_tag }} is a prerelease; refusing to reuse it." >&2
+              exit 1
+            }
+            existing_assets=$(gh release view "${{ steps.tags.outputs.data_tag }}" \
+              --repo "${{ github.repository }}" \
+              --json assets --jq '.assets[].name')
+            expected_assets=("${docker_asset_list[@]}" data.sqlite data.sqlite.manifest.json)
+            if [ -f release-assets/definitions.json.gz ]; then
+              expected_assets+=(definitions.json.gz)
+            fi
+            for asset in "${expected_assets[@]}"; do
+              grep -Fxq "$asset" <<< "$existing_assets" || {
+                echo "Existing ${{ steps.tags.outputs.data_tag }} is missing mandatory asset: $asset" >&2
+                exit 1
+              }
+            done
+            while IFS= read -r asset; do
+              [ -z "$asset" ] && continue
+              case " ${expected_assets[*]} " in
+                *" $asset "*) ;;
+                *) echo "Existing ${{ steps.tags.outputs.data_tag }} has unexpected asset: $asset" >&2; exit 1;;
+              esac
+            done <<< "$existing_assets"
+            recovery_dir=$(mktemp -d)
+            gh release download "${{ steps.tags.outputs.data_tag }}" \
+              --repo "${{ github.repository }}" \
+              --pattern data.sqlite.manifest.json \
+              --dir "$recovery_dir"
+            jq -e '
+              .integrity.sqlite == "ok" and
+              .integrity.orphanLawMappings == 0 and
+              .integrity.orphanFtsMappings == 0 and
+              (.source.search.records | numbers) and
+              (.source.caseLaw.records | numbers)
+            ' "$recovery_dir/data.sqlite.manifest.json" >/dev/null || {
+              echo "Existing ${{ steps.tags.outputs.data_tag }} has an invalid SQLite manifest" >&2
+              exit 1
+            }
+          fi
+
+      - name: Publish complete data release from a draft
+        id: draft-release
+        if: ${{ steps.tags.outputs.release_state != 'published' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          data_tag="${{ steps.tags.outputs.data_tag }}"
+          data_assets=(
+            release-assets/search-cache.json.gz
+            release-assets/case-law-cache.json.gz
+            release-assets/citation-graph.json.gz
+            release-assets/data.sqlite
+            release-assets/data.sqlite.manifest.json
+          )
+          if [ -f release-assets/definitions.json.gz ]; then
+            data_assets+=(release-assets/definitions.json.gz)
+          fi
+          if [ "${{ steps.tags.outputs.release_state }}" = absent ]; then
+            gh release create "$data_tag" \
+              --repo "${{ github.repository }}" \
+              --draft \
+              --title "$data_tag" \
+              --notes "Automated derived-data refresh from corpus ${{ needs.build.outputs.corpus_tag }} (workflow run ${{ github.run_id }})."
+          fi
+          gh release upload "$data_tag" "${data_assets[@]}" \
+            --repo "${{ github.repository }}" \
+            --clobber
+          release_assets=$(gh release view "$data_tag" \
+            --repo "${{ github.repository }}" \
+            --json isDraft,isPrerelease,assets --jq '.assets[].name')
+          test "$(gh release view "$data_tag" --repo "${{ github.repository }}" --json isDraft --jq '.isDraft')" = true
+          test "$(gh release view "$data_tag" --repo "${{ github.repository }}" --json isPrerelease --jq '.isPrerelease')" = false
+          for asset in search-cache.json.gz case-law-cache.json.gz citation-graph.json.gz \
+            data.sqlite data.sqlite.manifest.json; do
+            grep -Fxq "$asset" <<< "$release_assets" || { echo "Draft release is missing $asset" >&2; exit 1; }
+          done
+          if [ -f release-assets/definitions.json.gz ]; then
+            grep -Fxq definitions.json.gz <<< "$release_assets" || { echo "Draft release is missing definitions.json.gz" >&2; exit 1; }
+          fi
+          gh release edit "$data_tag" --repo "${{ github.repository }}" --draft=false
+          echo "Published complete immutable data release $data_tag." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Open or update Docker data-tag pull request
+        shell: bash
+        run: |
+          set -euo pipefail
+          data_tag="${{ steps.tags.outputs.data_tag }}"
+          branch="automation/$data_tag"
+          remote_sha=$(git ls-remote origin "refs/heads/$branch" | awk 'NR==1 {print $1}')
+          if [ -n "$remote_sha" ]; then
+            git fetch origin "$branch"
+            changed_files=$(git diff --name-only "origin/${{ github.event.repository.default_branch }}...origin/$branch")
+            test "$changed_files" = "backend/Dockerfile" || {
+              echo "Refusing to overwrite $branch: it contains changes outside backend/Dockerfile" >&2
+              exit 1
+            }
+            changed_lines=$(git diff --unified=0 "origin/${{ github.event.repository.default_branch }}...origin/$branch" -- backend/Dockerfile \
+              | awk '/^[+-]/ && !/^(---|\+\+\+)/ {print}')
+            unexpected_lines=$(grep -Ev '^[+-]ARG DATA_RELEASE_TAG=data-v[0-9]+$' <<< "$changed_lines" || true)
+            test -z "$unexpected_lines" || {
+              echo "Refusing to overwrite $branch: its Dockerfile diff changes more than DATA_RELEASE_TAG" >&2
+              exit 1
+            }
+            remote_data_tag=$(git show "origin/$branch:backend/Dockerfile" \
+              | sed -n 's/^ARG DATA_RELEASE_TAG=//p')
+            test "$(printf '%s\n' "$remote_data_tag" | sed '/^$/d' | wc -l | tr -d ' ')" = 1
+            [[ "$remote_data_tag" =~ ^data-v[0-9]+$ ]]
+            git switch --create "$branch" "origin/$branch"
+            if [ "$remote_data_tag" != "$data_tag" ]; then
+              sed -i "s/^ARG DATA_RELEASE_TAG=.*/ARG DATA_RELEASE_TAG=$data_tag/" backend/Dockerfile
+            fi
+          else
+            git switch --create "$branch"
+            sed -i "s/^ARG DATA_RELEASE_TAG=.*/ARG DATA_RELEASE_TAG=$data_tag/" backend/Dockerfile
+          fi
+          final_data_tags=$(sed -n 's/^ARG DATA_RELEASE_TAG=//p' backend/Dockerfile)
+          test "$(printf '%s\n' "$final_data_tags" | sed '/^$/d' | wc -l | tr -d ' ')" = 1
+          test "$(printf '%s\n' "$final_data_tags" | sed -n '1p')" = "$data_tag"
+          git add backend/Dockerfile
+          changed_files=$(git diff --cached --name-only)
+          test -z "$changed_files" || test "$changed_files" = "backend/Dockerfile" || {
+            echo "PR update would change files outside backend/Dockerfile" >&2
+            exit 1
+          }
+          if ! git diff --cached --quiet; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git commit -m "Deploy $data_tag"
+          fi
+          if [ -n "$remote_sha" ]; then
+            git push origin "$branch"
+          else
+            git push --set-upstream origin "$branch"
+          fi
+          pr_number=$(gh pr list \
+            --repo "${{ github.repository }}" \
+            --head "$branch" \
+            --state open \
+            --json number \
+            --jq '.[0].number // empty')
+          title="Deploy $data_tag"
+          body="Updates only backend/Dockerfile DATA_RELEASE_TAG to the validated immutable $data_tag release from workflow run ${{ github.run_id }}. Merge this PR to deploy the release."
+          if [ -n "$pr_number" ]; then
+            gh pr edit "$pr_number" --repo "${{ github.repository }}" --title "$title" --body "$body"
+          else
+            gh pr create \
+              --repo "${{ github.repository }}" \
+              --base "${{ github.event.repository.default_branch }}" \
+              --head "$branch" \
+              --title "$title" \
+              --body "$body"
+          fi
+
+      - name: Dispatch Docker validation for the tag PR
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh workflow run backend-docker.yml \
+            --repo "${{ github.repository }}" \
+            --ref "automation/${{ steps.tags.outputs.data_tag }}"

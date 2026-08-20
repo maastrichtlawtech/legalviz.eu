@@ -1,0 +1,409 @@
+name: Refresh fulltext
+
+on:
+  workflow_run:
+    workflows:
+      - Refresh data
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish the validated candidate as a fulltext-vN release
+        type: boolean
+        default: true
+      release_tag:
+        description: Optional next fulltext-vN tag when publishing
+        type: string
+        required: false
+
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  group: fulltext-refresh
+  cancel-in-progress: false
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    outputs:
+      proceed: ${{ steps.verify.outputs.proceed }}
+    permissions:
+      actions: read
+      contents: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Verify the upstream data build completed
+        id: verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = workflow_dispatch ]; then
+            echo "proceed=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ "${{ github.event.workflow_run.conclusion }}" != success ]; then
+            echo "proceed=false" >> "$GITHUB_OUTPUT"
+            echo "Refresh data did not finish successfully; fulltext refresh is skipped." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          conclusion=$(gh api \
+            "repos/${{ github.repository }}/actions/runs/${{ github.event.workflow_run.id }}/jobs" \
+            --paginate \
+            --jq '[.jobs[] | select(.name == "build") | .conclusion][0] // ""')
+          if [ "$conclusion" = success ]; then
+            echo "proceed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "proceed=false" >> "$GITHUB_OUTPUT"
+            echo "Refresh data did not complete its build job; fulltext refresh is skipped." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  refresh:
+    needs: gate
+    if: ${{ needs.gate.outputs.proceed == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    outputs:
+      changed: ${{ steps.validate.outputs.changed }}
+      baseline_act_count: ${{ steps.baseline.outputs.baseline_act_count }}
+      candidate_act_count: ${{ steps.validate.outputs.candidate_act_count }}
+      failures: ${{ steps.validate.outputs.failures }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.repository.default_branch || github.ref }}
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.15.0
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+      - name: Install backend dependencies
+        run: |
+          set -euo pipefail
+          pnpm install --dir backend --no-frozen-lockfile
+
+      - name: Resolve current releases and corpus
+        id: versions
+        shell: bash
+        run: |
+          set -euo pipefail
+          fulltext_tag=$(sed -n 's/^ARG FULLTEXT_RELEASE_TAG=//p' backend/Dockerfile)
+          [[ "$fulltext_tag" =~ ^fulltext-v[0-9]+$ ]]
+          data_tag=$(gh release list \
+            --repo "${{ github.repository }}" \
+            --limit 100 \
+            --json tagName,isDraft,isPrerelease \
+            | jq -er '[.[] | select(.isDraft == false and .isPrerelease == false) | select(.tagName | test("^data-v[0-9]+$"))] | sort_by((.tagName | ltrimstr("data-v") | tonumber)) | .[-1].tagName')
+          [[ "$data_tag" =~ ^data-v[0-9]+$ ]]
+          corpus_tag=$(gh release list \
+            --repo "${{ github.repository }}" \
+            --limit 100 \
+            --json tagName,isDraft,isPrerelease \
+            | jq -er '[.[] | select(.isDraft == false and .isPrerelease == false) | select(.tagName | test("^corpus-v[0-9]+$"))] | sort_by((.tagName | ltrimstr("corpus-v") | tonumber)) | .[-1].tagName')
+          [[ "$corpus_tag" =~ ^corpus-v[0-9]+$ ]]
+          {
+            echo "data_tag=$data_tag"
+            echo "fulltext_tag=$fulltext_tag"
+            echo "corpus_tag=$corpus_tag"
+          } >> "$GITHUB_OUTPUT"
+          echo "Using $data_tag, $fulltext_tag, and $corpus_tag." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Download current data, fulltext, and corpus assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p refresh-inputs refresh-output backend/search/data
+          gh release download "${{ steps.versions.outputs.data_tag }}" \
+            --repo "${{ github.repository }}" \
+            --pattern search-cache.json.gz \
+            --dir refresh-inputs
+          gh release download "${{ steps.versions.outputs.fulltext_tag }}" \
+            --repo "${{ github.repository }}" \
+            --pattern fulltext.sqlite.gz \
+            --pattern fulltext.sqlite.manifest.json \
+            --dir refresh-inputs
+          gh release download "${{ steps.versions.outputs.corpus_tag }}" \
+            --repo "${{ github.repository }}" \
+            --pattern laws.tar \
+            --pattern laws-html.tar \
+            --dir refresh-inputs
+          for asset in search-cache.json.gz fulltext.sqlite.gz fulltext.sqlite.manifest.json laws.tar laws-html.tar; do
+            test -s "refresh-inputs/$asset" || { echo "Missing current refresh asset: $asset" >&2; exit 1; }
+          done
+          rm -f backend/search/data/search-cache.json
+          cp refresh-inputs/search-cache.json.gz backend/search/data/search-cache.json.gz
+          tar -xf refresh-inputs/laws.tar -C backend/search/data
+          tar -xf refresh-inputs/laws-html.tar -C backend/search/data
+          test -d backend/search/data/laws
+          test -d backend/search/data/laws-html
+          mkdir -p backend/search/data/fulltext-corpus
+          cp -al backend/search/data/laws/. backend/search/data/fulltext-corpus/
+          cp -al backend/search/data/laws-html/. backend/search/data/fulltext-corpus/
+
+      - name: Restore and validate the current fulltext index
+        shell: bash
+        run: |
+          set -euo pipefail
+          gzip --decompress --stdout refresh-inputs/fulltext.sqlite.gz > refresh-output/fulltext.sqlite
+          node <<'NODE'
+          const fs = require("node:fs");
+          const crypto = require("node:crypto");
+          const Database = require("better-sqlite3");
+
+          const normalize = (value) => String(value || "").trim().toUpperCase();
+          const db = new Database("refresh-output/fulltext.sqlite", { readonly: true });
+          const fulltextCelex = new Set(db.prepare("SELECT DISTINCT celex FROM units").all().map((row) => normalize(row.celex)).filter(Boolean));
+          db.close();
+
+          const manifest = JSON.parse(fs.readFileSync("refresh-inputs/fulltext.sqlite.manifest.json", "utf8"));
+          const stat = fs.statSync("refresh-output/fulltext.sqlite");
+          const sha256 = crypto.createHash("sha256").update(fs.readFileSync("refresh-output/fulltext.sqlite")).digest("hex");
+          if (manifest.bytes !== stat.size || manifest.sha256 !== sha256) {
+            throw new Error("current fulltext manifest does not match the SQLite asset");
+          }
+          if (manifest.actCount !== fulltextCelex.size) {
+            throw new Error(`current fulltext manifest actCount ${manifest.actCount} != database ${fulltextCelex.size}`);
+          }
+
+          fs.writeFileSync("refresh-output/fulltext-baseline.json", `${JSON.stringify({
+            baselineActCount: fulltextCelex.size,
+          }, null, 2)}\n`);
+          console.log(`Current fulltext has ${fulltextCelex.size} acts.`);
+          NODE
+
+      - name: Capture baseline fulltext count
+        id: baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          baseline_act_count=$(jq -er '.baselineActCount | numbers' refresh-output/fulltext-baseline.json)
+          [[ "$baseline_act_count" =~ ^[0-9]+$ ]]
+          echo "baseline_act_count=$baseline_act_count" >> "$GITHUB_OUTPUT"
+          echo "Resuming from $baseline_act_count indexed acts." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Incrementally build fulltext index
+        working-directory: backend
+        shell: bash
+        run: |
+          set -euo pipefail
+          SEARCH_CACHE_PATH="$PWD/search/data/search-cache.json.gz" \
+            node --max-old-space-size=8192 search/fulltext-index-build.js \
+              --corpusDir search/data/fulltext-corpus \
+              --out ../refresh-output/fulltext.sqlite \
+            | tee ../refresh-output/fulltext-build.log
+          test -s ../refresh-output/fulltext.sqlite
+          # The builder runs in WAL mode. Checkpoint the main file before it is
+          # compressed, then make sure sidecars cannot leak into the release.
+          node -e 'const Database=require("better-sqlite3"); const db=new Database("../refresh-output/fulltext.sqlite"); db.pragma("wal_checkpoint(TRUNCATE)"); db.close();'
+          rm -f ../refresh-output/fulltext.sqlite-wal ../refresh-output/fulltext.sqlite-shm
+          test ! -e ../refresh-output/fulltext.sqlite-wal
+          test ! -e ../refresh-output/fulltext.sqlite-shm
+
+      - name: Validate candidate coverage and manifest
+        id: validate
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs = require("node:fs");
+          const crypto = require("node:crypto");
+          const Database = require("better-sqlite3");
+
+          const normalize = (value) => String(value || "").trim().toUpperCase();
+          const baseline = JSON.parse(fs.readFileSync("refresh-output/fulltext-baseline.json", "utf8"));
+          const db = new Database("refresh-output/fulltext.sqlite", { readonly: true });
+          const rows = db.prepare("SELECT DISTINCT celex FROM units").all();
+          const celex = new Set(rows.map((row) => normalize(row.celex)).filter(Boolean));
+          const counts = {
+            unitCount: db.prepare("SELECT COUNT(*) n FROM units").get().n,
+            articleCount: db.prepare("SELECT COUNT(*) n FROM units WHERE unit_type='article'").get().n,
+            recitalCount: db.prepare("SELECT COUNT(*) n FROM units WHERE unit_type='recital'").get().n,
+            actCount: celex.size,
+          };
+          db.close();
+          if (counts.actCount < baseline.baselineActCount) {
+            throw new Error(`fulltext actCount regressed (${baseline.baselineActCount} -> ${counts.actCount})`);
+          }
+          const changed = counts.actCount > baseline.baselineActCount;
+          const log = fs.readFileSync("refresh-output/fulltext-build.log", "utf8");
+          const failureMatch = [...log.matchAll(/done:.*; (\d+) failures/g)].at(-1);
+          const failures = failureMatch ? Number(failureMatch[1]) : 0;
+
+          const manifestPath = "refresh-output/fulltext.sqlite.manifest.json";
+          const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+          const stat = fs.statSync("refresh-output/fulltext.sqlite");
+          const sha256 = crypto.createHash("sha256").update(fs.readFileSync("refresh-output/fulltext.sqlite")).digest("hex");
+          Object.assign(manifest, counts, { bytes: stat.size, sha256 });
+          for (const key of ["unitCount", "articleCount", "recitalCount", "actCount"]) {
+            if (manifest[key] !== counts[key]) throw new Error(`fulltext manifest ${key} does not match database`);
+          }
+          fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+          fs.writeFileSync("refresh-output/fulltext-validation.json", `${JSON.stringify({
+            baselineActCount: baseline.baselineActCount,
+            candidateActCount: counts.actCount,
+            changed,
+            failures,
+            manifest,
+          }, null, 2)}\n`);
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `changed=${changed}\ncandidate_act_count=${counts.actCount}\nfailures=${failures}\n`);
+          console.log(`Fulltext manifest validated: ${baseline.baselineActCount} -> ${counts.actCount} acts; ${failures} parse failures.`);
+          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `Fulltext candidate: ${baseline.baselineActCount} -> ${counts.actCount} acts; ${failures} parse failures.\n`);
+          NODE
+          if [ "$(jq -r '.changed' refresh-output/fulltext-validation.json)" = true ]; then
+            gzip --best --stdout refresh-output/fulltext.sqlite > refresh-output/fulltext.sqlite.gz
+            gzip --test refresh-output/fulltext.sqlite.gz
+            test -s refresh-output/fulltext.sqlite.gz
+          fi
+          rm refresh-output/fulltext.sqlite
+          test -s refresh-output/fulltext.sqlite.manifest.json
+
+      - name: Upload fulltext candidate
+        uses: actions/upload-artifact@v4
+        with:
+          name: fulltext-data-${{ github.run_id }}
+          path: refresh-output/
+          if-no-files-found: error
+          retention-days: 14
+
+  publish:
+    if: ${{ needs.refresh.outputs.changed == 'true' && (github.event_name == 'workflow_run' || (github.event_name == 'workflow_dispatch' && inputs.publish)) }}
+    needs: refresh
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      contents: write
+      pull-requests: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_TAG: ${{ inputs.release_tag }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.repository.default_branch || github.ref }}
+          fetch-depth: 0
+      - uses: actions/download-artifact@v4
+        with:
+          name: fulltext-data-${{ github.run_id }}
+          path: release-assets
+
+      - name: Resolve and validate the next fulltext tag
+        id: tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          current=$(sed -n 's/^ARG FULLTEXT_RELEASE_TAG=//p' backend/Dockerfile)
+          [[ "$current" =~ ^fulltext-v([0-9]+)$ ]]
+          expected="fulltext-v$((BASH_REMATCH[1] + 1))"
+          requested="${RELEASE_TAG:-$expected}"
+          test "$requested" = "$expected" || {
+            echo "release_tag must be the next fulltext tag ($expected), got: $requested" >&2
+            exit 1
+          }
+          {
+            echo "current=$current"
+            echo "next=$requested"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Create or resume a draft fulltext release
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="${{ steps.tag.outputs.next }}"
+          if release_json=$(gh release view "$tag" --repo "${{ github.repository }}" --json isDraft,isPrerelease,assets 2>/dev/null); then
+            is_draft=$(jq -r '.isDraft' <<< "$release_json")
+            if [ "$is_draft" = true ]; then
+              echo "Resuming existing draft release $tag."
+              gh release upload "$tag" \
+                release-assets/fulltext.sqlite.gz \
+                release-assets/fulltext.sqlite.manifest.json \
+                --repo "${{ github.repository }}" \
+                --clobber
+              release_json=$(gh release view "$tag" --repo "${{ github.repository }}" --json isDraft,isPrerelease,assets)
+              jq -e '([.assets[].name] | sort) == ["fulltext.sqlite.gz", "fulltext.sqlite.manifest.json"] and ([.assets[] | select(.size > 0) | .name] | sort) == ["fulltext.sqlite.gz", "fulltext.sqlite.manifest.json"]' <<< "$release_json" >/dev/null
+              gh release edit "$tag" --repo "${{ github.repository }}" --draft=false
+            else
+              echo "Release $tag is already published; verifying its exact assets."
+              test "$(jq -r '.isPrerelease' <<< "$release_json")" = false || {
+                echo "Existing release $tag is a prerelease; refusing to reuse it." >&2
+                exit 1
+              }
+              jq -e '([.assets[].name] | sort) == ["fulltext.sqlite.gz", "fulltext.sqlite.manifest.json"] and ([.assets[] | select(.size > 0) | .name] | sort) == ["fulltext.sqlite.gz", "fulltext.sqlite.manifest.json"]' <<< "$release_json" >/dev/null
+              mkdir -p published-assets
+              gh release download "$tag" \
+                --repo "${{ github.repository }}" \
+                --pattern fulltext.sqlite.manifest.json \
+                --dir published-assets
+              jq -e '
+                (.actCount | numbers) > 0 and
+                (.bytes | numbers) > 0 and
+                (.sha256 | strings | test("^[0-9a-f]{64}$"))
+              ' published-assets/fulltext.sqlite.manifest.json >/dev/null
+            fi
+          else
+            gh release create "$tag" \
+              --repo "${{ github.repository }}" \
+              --draft \
+              --title "$tag" \
+              --notes "Incremental fulltext index produced by workflow run ${{ github.run_id }}."
+            gh release upload "$tag" \
+              release-assets/fulltext.sqlite.gz \
+              release-assets/fulltext.sqlite.manifest.json \
+              --repo "${{ github.repository }}" \
+              --clobber
+            release_json=$(gh release view "$tag" --repo "${{ github.repository }}" --json isDraft,isPrerelease,assets)
+            jq -e '([.assets[].name] | sort) == ["fulltext.sqlite.gz", "fulltext.sqlite.manifest.json"] and ([.assets[] | select(.size > 0) | .name] | sort) == ["fulltext.sqlite.gz", "fulltext.sqlite.manifest.json"]' <<< "$release_json" >/dev/null
+            # Make the release visible only after both assets are uploaded and verified.
+            gh release edit "$tag" --repo "${{ github.repository }}" --draft=false
+          fi
+
+      - name: Open or update the Docker tag-bump pull request
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="${{ steps.tag.outputs.next }}"
+          branch="automation/$tag"
+          git fetch origin main
+          if git ls-remote --exit-code origin "refs/heads/$branch" >/dev/null 2>&1; then
+            git fetch origin "$branch"
+            git switch --create "$branch" "origin/$branch"
+            test "$(git diff --name-only origin/main...HEAD)" = "backend/Dockerfile"
+            test "$(sed -n 's/^ARG FULLTEXT_RELEASE_TAG=//p' backend/Dockerfile)" = "$tag"
+          else
+            git switch --create "$branch" origin/main
+            sed -i "s/^ARG FULLTEXT_RELEASE_TAG=.*/ARG FULLTEXT_RELEASE_TAG=$tag/" backend/Dockerfile
+            test "$(git diff --name-only)" = "backend/Dockerfile"
+            git diff --quiet -- backend/Dockerfile && { echo "FULLTEXT_RELEASE_TAG did not change" >&2; exit 1; }
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add backend/Dockerfile
+            git commit -m "Deploy fulltext release $tag"
+            test "$(git diff --name-only origin/main...HEAD)" = "backend/Dockerfile"
+            git push --set-upstream origin "$branch"
+          fi
+          pr_number=$(gh pr list \
+            --repo "${{ github.repository }}" \
+            --head "$branch" \
+            --state open \
+            --json number \
+            --jq '.[0].number // empty')
+          title="Deploy fulltext release $tag"
+          body="Updates only FULLTEXT_RELEASE_TAG to the validated $tag release from workflow run ${{ github.run_id }}. Merge this PR to deploy the immutable fulltext asset."
+          if [ -n "$pr_number" ]; then
+            gh pr edit "$pr_number" --repo "${{ github.repository }}" --title "$title" --body "$body"
+            echo "Updated PR #$pr_number."
+          else
+            gh pr create \
+              --repo "${{ github.repository }}" \
+              --base main \
+              --head "$branch" \
+              --title "$title" \
+              --body "$body"
+          fi
+          # GITHUB_TOKEN pushes do not reliably emit pull_request events; run
+          # the Docker smoke/evaluation gates explicitly for this exact branch.
+          gh workflow run backend-docker.yml --repo "${{ github.repository }}" --ref "$branch"

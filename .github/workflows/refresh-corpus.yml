@@ -1,0 +1,430 @@
+name: Refresh corpus
+
+on:
+  schedule:
+    - cron: "43 3 5 * *"
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Optional exact next corpus-vN tag; otherwise derive it from the latest published corpus release
+        type: string
+        required: false
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: monthly-corpus-refresh
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    outputs:
+      corpus_tag: ${{ steps.resolve-corpus.outputs.next_tag }}
+      resume_draft: ${{ steps.resolve-corpus.outputs.resume_draft }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.15.0
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+      # The repository currently has no pnpm lockfile; allow pnpm to resolve the
+      # existing package.json dependencies without creating a committed change.
+      - run: pnpm install --dir backend --no-frozen-lockfile
+
+      - name: Resolve current and next corpus release
+        id: resolve-corpus
+        env:
+          REQUESTED_TAG: ${{ inputs.release_tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          release_list=$(gh release list \
+            --repo "${{ github.repository }}" \
+            --limit 100 \
+            --json tagName,isDraft,isPrerelease)
+          current_tag=$(jq -er '
+            [ .[]
+              | select(.tagName | test("^corpus-v[0-9]+$"))
+              | select(.isDraft == false and .isPrerelease == false)
+              | .tagName
+            ]
+            | if length == 0 then "corpus-v1" else max_by(sub("corpus-v"; "") | tonumber) end
+          ' <<< "$release_list")
+          [[ "$current_tag" =~ ^corpus-v([0-9]+)$ ]]
+          next_tag="corpus-v$((BASH_REMATCH[1] + 1))"
+          requested_tag="$REQUESTED_TAG"
+          if [ -n "$requested_tag" ]; then
+            test "$requested_tag" = "$next_tag" || {
+              echo "release_tag must be the next corpus tag ($next_tag), got $requested_tag" >&2
+              exit 1
+            }
+          fi
+          resume_draft=false
+          if existing=$(gh release view "$next_tag" --repo "${{ github.repository }}" --json isDraft 2>/dev/null); then
+            jq -e '.isDraft == true' <<< "$existing" >/dev/null || {
+              echo "A published release already exists for $next_tag; resolve it before retrying." >&2
+              exit 1
+            }
+            resume_draft=true
+          fi
+          {
+            echo "current_tag=$current_tag"
+            echo "next_tag=$next_tag"
+            echo "resume_draft=$resume_draft"
+          } >> "$GITHUB_OUTPUT"
+          echo "Refreshing $current_tag; validated output will be published as $next_tag." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Resolve current Docker data release
+        id: current-data
+        shell: bash
+        run: |
+          set -euo pipefail
+          data_tag=$(sed -n 's/^ARG DATA_RELEASE_TAG=//p' backend/Dockerfile)
+          test "$(printf '%s\n' "$data_tag" | sed '/^$/d' | wc -l | tr -d ' ')" = 1
+          [[ "$data_tag" =~ ^data-v[0-9]+$ ]]
+          echo "tag=$data_tag" >> "$GITHUB_OUTPUT"
+
+      - name: Download current corpus and cache inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p refresh-inputs refresh-output backend/search/data
+          gh release download "${{ steps.resolve-corpus.outputs.current_tag }}" \
+            --repo "${{ github.repository }}" \
+            --pattern laws.tar \
+            --pattern laws-html.tar \
+            --pattern case-law.tar \
+            --pattern case-law-harvest-state.json \
+            --pattern case-law-misses.json \
+            --pattern case-law-targets.txt \
+            --dir refresh-inputs
+          corpus_assets=$(gh release view "${{ steps.resolve-corpus.outputs.current_tag }}" \
+            --repo "${{ github.repository }}" --json assets --jq '.assets[].name')
+          for journal in law-dates.json eurovoc.json in-force.json; do
+            if grep -Fxq "$journal" <<< "$corpus_assets"; then
+              gh release download "${{ steps.resolve-corpus.outputs.current_tag }}" \
+                --repo "${{ github.repository }}" \
+                --pattern "$journal" \
+                --dir refresh-inputs
+            fi
+          done
+          gh release download "${{ steps.current-data.outputs.tag }}" \
+            --repo "${{ github.repository }}" \
+            --pattern search-cache.json.gz \
+            --dir refresh-inputs
+          for asset in laws.tar laws-html.tar case-law.tar \
+            case-law-harvest-state.json case-law-misses.json case-law-targets.txt \
+            search-cache.json.gz; do
+            test -s "refresh-inputs/$asset" || { echo "Missing required corpus input: $asset" >&2; exit 1; }
+          done
+
+      - name: Restore corpus and reset resumable harvest state
+        shell: bash
+        run: |
+          set -euo pipefail
+          for archive in laws.tar laws-html.tar case-law.tar; do
+            tar -xf "refresh-inputs/$archive" -C backend/search/data
+          done
+          for corpus in laws laws-html case-law; do
+            test -d "backend/search/data/$corpus" || { echo "Corpus archive did not restore $corpus/" >&2; exit 1; }
+          done
+          cp refresh-inputs/case-law-harvest-state.json backend/search/data/
+          cp refresh-inputs/case-law-misses.json backend/search/data/
+          cp refresh-inputs/case-law-targets.txt backend/search/data/
+          for journal in law-dates.json eurovoc.json in-force.json; do
+            if [ -f "refresh-inputs/$journal" ]; then
+              cp "refresh-inputs/$journal" "backend/search/data/$journal"
+            fi
+          done
+          # Discovery rewrites the sorted target list. A previous finished
+          # nextIndex would skip newly inserted CELEX IDs, so start a fresh
+          # state/miss/failure pass; existing files remain cheap corpus skips.
+          rm -f backend/search/data/case-law-harvest-state.json \
+            backend/search/data/case-law-harvest-state.json.misses.txt \
+            backend/search/data/case-law-harvest-state.json.fails.txt
+          rm -f backend/search/data/search-cache.json
+          cp refresh-inputs/search-cache.json.gz backend/search/data/search-cache.json.gz
+
+      - name: Capture baseline corpus counts
+        id: baseline-corpus
+        shell: bash
+        run: |
+          set -euo pipefail
+          laws=$(find backend/search/data/laws -type f -name '*.xml.gz' | wc -l | tr -d ' ')
+          laws_html=$(find backend/search/data/laws-html -type f -name '*.html.gz' | wc -l | tr -d ' ')
+          case_law=$(find backend/search/data/case-law -type f -name '*.html.gz' | wc -l | tr -d ' ')
+          for count in "$laws" "$laws_html" "$case_law"; do [[ "$count" =~ ^[0-9]+$ ]]; done
+          {
+            echo "laws=$laws"
+            echo "laws_html=$laws_html"
+            echo "case_law=$case_law"
+          } >> "$GITHUB_OUTPUT"
+          echo "Baseline corpus files: laws=$laws, laws-html=$laws_html, case-law=$case_law." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Audit recent legislation gaps
+        id: legislation-audit
+        working-directory: backend
+        shell: bash
+        run: |
+          set -euo pipefail
+          node search/cellar-gap-audit.js \
+            --cachePath search/data/search-cache.json.gz \
+            --out missing.txt \
+            2>&1 | tee ../refresh-output/legislation-gap-audit.log
+          test -f missing.txt
+          sed -i '/^[[:space:]]*$/d' missing.txt
+          missing_count=$(wc -l < missing.txt | tr -d ' ')
+          [[ "$missing_count" =~ ^[0-9]+$ ]]
+          changed=false
+          if [ "$missing_count" -gt 0 ]; then changed=true; fi
+          {
+            echo "changed=$changed"
+            echo "missing_count=$missing_count"
+          } >> "$GITHUB_OUTPUT"
+          cp missing.txt ../refresh-output/missing.txt
+          echo "Legislation gap audit found $missing_count missing CELEX IDs; changed=$changed." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Backfill missing legislation corpus files
+        if: ${{ steps.legislation-audit.outputs.changed == 'true' }}
+        working-directory: backend
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --max-old-space-size=8192 search/backfill-cache.js \
+            --celex @missing.txt \
+            --cachePath search/data/search-cache.json.gz \
+            --no-eurovoc \
+            --no-in-force \
+            2>&1 | tee ../refresh-output/legislation-backfill.log
+          test -s search/data/search-cache.json.gz
+
+      - name: Record no-op legislation backfill
+        if: ${{ steps.legislation-audit.outputs.changed != 'true' }}
+        shell: bash
+        run: echo "No new legislation corpus files were required." > refresh-output/legislation-backfill.log
+
+      - name: Install Chromium for EUR-Lex harvesting
+        working-directory: backend
+        shell: bash
+        run: node node_modules/playwright-core/cli.js install --with-deps chromium
+
+      - name: Discover case-law targets
+        working-directory: backend
+        shell: bash
+        run: |
+          set -euo pipefail
+          node search/case-law-discover.js \
+            2>&1 | tee ../refresh-output/case-law-discover.log
+          test -s search/data/case-law-targets.txt
+
+      - name: Harvest case-law corpus
+        working-directory: backend
+        shell: bash
+        run: |
+          set -euo pipefail
+          node search/case-law-harvest.js --skipDiscover \
+            2>&1 | tee ../refresh-output/case-law-harvest.log
+          test -s search/data/case-law-harvest-state.json
+
+      - name: Validate case-law harvest state and diagnostics
+        working-directory: backend
+        shell: bash
+        run: |
+          set -euo pipefail
+          state=search/data/case-law-harvest-state.json
+          targets=search/data/case-law-targets.txt
+          test -s "$state"
+          test -s "$targets"
+          node -e 'const fs=require("fs"); const state="search/data/case-law-harvest-state.json"; const miss=`${state}.misses.txt`; const fail=`${state}.fails.txt`; const lines=(p)=>fs.existsSync(p)?fs.readFileSync(p,"utf8").split(/\r?\n/).filter(Boolean):[]; const payload={generatedAt:new Date().toISOString(),missing:lines(miss),failed:lines(fail)}; fs.writeFileSync("search/data/case-law-misses.json",`${JSON.stringify(payload,null,2)}\n`);'
+          cp search/data/case-law-misses.json ../refresh-output/case-law-misses.json
+          cp "$state" ../refresh-output/case-law-harvest-state.json
+          cp "$targets" ../refresh-output/case-law-targets.txt
+          cp "${state}.misses.txt" ../refresh-output/case-law-misses.txt 2>/dev/null || :
+          cp "${state}.fails.txt" ../refresh-output/case-law-fails.txt 2>/dev/null || :
+          jq -e '
+            .finished == true and
+            (.nextIndex | numbers) == (.total | numbers) and
+            (.failed | numbers) == 0 and
+            (.saved | numbers) + (.skipped | numbers) + (.missing | numbers) == (.total | numbers)
+          ' "$state" >/dev/null
+          jq -e '.failed | length == 0' search/data/case-law-misses.json >/dev/null
+          echo "Case-law harvest finished with zero transient failures." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Package and validate corpus candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p refresh-output
+          for corpus in laws laws-html case-law; do
+            test -d "backend/search/data/$corpus"
+            tar -cf "refresh-output/$corpus.tar" -C backend/search/data "$corpus"
+            test -s "refresh-output/$corpus.tar"
+            tar -tf "refresh-output/$corpus.tar" | awk -v root="$corpus/" 'index($0, root) == 1 { found=1 } END { exit found ? 0 : 1 }'
+          done
+          cp backend/search/data/case-law-harvest-state.json refresh-output/case-law-harvest-state.json
+          cp backend/search/data/case-law-misses.json refresh-output/case-law-misses.json
+          cp backend/search/data/case-law-targets.txt refresh-output/case-law-targets.txt
+          for asset in laws.tar laws-html.tar case-law.tar \
+            case-law-harvest-state.json case-law-misses.json case-law-targets.txt; do
+            test -s "refresh-output/$asset" || { echo "Candidate asset is missing or empty: $asset" >&2; exit 1; }
+          done
+          law_count=$(find backend/search/data/laws -type f -name '*.xml.gz' | wc -l | tr -d ' ')
+          html_count=$(find backend/search/data/laws-html -type f -name '*.html.gz' | wc -l | tr -d ' ')
+          case_count=$(find backend/search/data/case-law -type f -name '*.html.gz' | wc -l | tr -d ' ')
+          test "$law_count" -gt 0
+          test "$html_count" -gt 0
+          test "$case_count" -gt 0
+          test "$law_count" -ge "${{ steps.baseline-corpus.outputs.laws }}" || { echo "laws corpus regressed" >&2; exit 1; }
+          test "$html_count" -ge "${{ steps.baseline-corpus.outputs.laws_html }}" || { echo "laws-html corpus regressed" >&2; exit 1; }
+          test "$case_count" -ge "${{ steps.baseline-corpus.outputs.case_law }}" || { echo "case-law corpus regressed" >&2; exit 1; }
+          jq -n \
+            --arg corpusTag "${{ steps.resolve-corpus.outputs.next_tag }}" \
+            --argjson laws "$law_count" \
+            --argjson lawsHtml "$html_count" \
+            --argjson caseLaw "$case_count" \
+            --argjson legislationMissing "${{ steps.legislation-audit.outputs.missing_count }}" \
+            '{corpusTag:$corpusTag, files:{laws:$laws, lawsHtml:$lawsHtml, caseLaw:$caseLaw}, legislationMissing:$legislationMissing}' \
+            > refresh-output/corpus-summary.json
+          echo "Corpus candidate validated: laws=$law_count, laws-html=$html_count, case-law=$case_count." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Preserve corpus diagnostics after failure
+        if: always()
+        shell: bash
+        run: |
+          set -u
+          mkdir -p refresh-output
+          for corpus in laws laws-html case-law; do
+            if [ ! -s "refresh-output/$corpus.tar" ] && [ -d "backend/search/data/$corpus" ]; then
+              tar -cf "refresh-output/$corpus.tar" -C backend/search/data "$corpus" \
+                || echo "Could not package diagnostic corpus: $corpus" >&2
+            fi
+          done
+          for asset in case-law-harvest-state.json case-law-misses.json case-law-targets.txt; do
+            if [ -f "backend/search/data/$asset" ]; then
+              cp "backend/search/data/$asset" "refresh-output/$asset"
+            fi
+          done
+          for journal in law-dates.json eurovoc.json in-force.json; do
+            if [ -f "backend/search/data/$journal" ]; then
+              cp "backend/search/data/$journal" "refresh-output/$journal"
+            fi
+          done
+
+      - name: Upload corpus diagnostics and candidate
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: corpus-data-${{ github.run_id }}
+          path: refresh-output/
+          if-no-files-found: warn
+          retention-days: 14
+
+  publish:
+    if: ${{ needs.refresh.result == 'success' }}
+    needs: refresh
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      CORPUS_TAG: ${{ needs.refresh.outputs.corpus_tag }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v4
+        with:
+          name: corpus-data-${{ github.run_id }}
+          path: release-assets
+
+      - name: Verify complete corpus candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          for asset in laws.tar laws-html.tar case-law.tar \
+            case-law-harvest-state.json case-law-misses.json case-law-targets.txt; do
+            test -s "release-assets/$asset" || { echo "Missing candidate corpus asset: $asset" >&2; exit 1; }
+          done
+          for journal in law-dates.json eurovoc.json in-force.json; do
+            if [ -f "release-assets/$journal" ]; then
+              test -s "release-assets/$journal" || { echo "Empty optional journal: $journal" >&2; exit 1; }
+            fi
+          done
+          jq -e '.finished == true and (.failed | numbers) == 0' \
+            release-assets/case-law-harvest-state.json >/dev/null
+          jq -e '.failed | length == 0' release-assets/case-law-misses.json >/dev/null
+          for spec in "laws.tar:laws/" "laws-html.tar:laws-html/" "case-law.tar:case-law/"; do
+            archive=${spec%%:*}
+            root=${spec#*:}
+            tar -tf "release-assets/$archive" \
+              | awk -v root="$root" 'index($0, root) == 1 { found=1 } END { exit found ? 0 : 1 }'
+          done
+
+      - name: Create draft corpus release
+        if: ${{ needs.refresh.outputs.resume_draft != 'true' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release create "$CORPUS_TAG" \
+            --repo "${{ github.repository }}" \
+            --draft \
+            --title "$CORPUS_TAG" \
+            --notes "Validated raw legislation and case-law corpus from workflow run ${{ github.run_id }}."
+
+      - name: Upload complete corpus asset set to draft
+        shell: bash
+        run: |
+          set -euo pipefail
+          assets=(
+            release-assets/laws.tar
+            release-assets/laws-html.tar
+            release-assets/case-law.tar
+            release-assets/case-law-harvest-state.json
+            release-assets/case-law-misses.json
+            release-assets/case-law-targets.txt
+          )
+          for journal in law-dates.json eurovoc.json in-force.json; do
+            if [ -f "release-assets/$journal" ]; then
+              assets+=("release-assets/$journal")
+            fi
+          done
+          gh release upload "$CORPUS_TAG" \
+            "${assets[@]}" \
+            --repo "${{ github.repository }}" \
+            --clobber
+
+      - name: Verify draft release asset completeness
+        shell: bash
+        run: |
+          set -euo pipefail
+          release=$(gh release view "$CORPUS_TAG" --repo "${{ github.repository }}" --json isDraft,assets)
+          jq -e '.isDraft == true' <<< "$release" >/dev/null
+          for asset in laws.tar laws-html.tar case-law.tar \
+            case-law-harvest-state.json case-law-misses.json case-law-targets.txt; do
+            jq -e --arg name "$asset" 'any(.assets[]; .name == $name and (.size | numbers) > 0)' \
+              <<< "$release" >/dev/null || { echo "Draft release is missing $asset" >&2; exit 1; }
+          done
+          for journal in law-dates.json eurovoc.json in-force.json; do
+            if [ -f "release-assets/$journal" ]; then
+              jq -e --arg name "$journal" 'any(.assets[]; .name == $name and (.size | numbers) > 0)' \
+                <<< "$release" >/dev/null || { echo "Draft release is missing $journal" >&2; exit 1; }
+            fi
+          done
+
+      - name: Publish validated corpus release
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release edit "$CORPUS_TAG" \
+            --repo "${{ github.repository }}" \
+            --draft=false
+          published=$(gh release view "$CORPUS_TAG" --repo "${{ github.repository }}" --json isDraft)
+          jq -e '.isDraft == false' <<< "$published" >/dev/null
+          echo "Published complete corpus release $CORPUS_TAG." >> "$GITHUB_STEP_SUMMARY"

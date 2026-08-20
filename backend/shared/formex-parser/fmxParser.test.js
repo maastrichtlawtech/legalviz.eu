@@ -1338,6 +1338,17 @@ describe("definition extraction beyond the titled definitions article", () => {
 </COMBINED.FMX>`;
   }
 
+  function actWithArticlesLang(langCode, articlesXml) {
+    return `<?xml version="1.0" encoding="UTF-8"?>
+<COMBINED.FMX>
+  <ACT>
+    <BIB.INSTANCE><LG.DOC>${langCode}</LG.DOC></BIB.INSTANCE>
+    <TITLE><TI><P>Regulation (EU) No 575/2013</P></TI></TITLE>
+    <ENACTING.TERMS>${articlesXml}</ENACTING.TERMS>
+  </ACT>
+</COMBINED.FMX>`;
+  }
+
   const quoted = (term) => `<QUOT.START CODE="2018"/>${term}<QUOT.END CODE="2019"/>`;
 
   it("reads definitions from an article whose only heading is its number", () => {
@@ -1439,5 +1450,202 @@ describe("definition extraction beyond the titled definitions article", () => {
       </ARTICLE>`));
 
     expect(result.definitions).toEqual([]);
+  });
+
+  it("does not let a nested group-heading ITEM self-corroborate an untitled article", () => {
+    // CRR Article 272 wraps its real ITEMs in a "the following definitions
+    // relating to X apply:" group-heading ITEM. An unscoped TXT lookup on
+    // that heading item falls through into its first nested ITEM's TXT,
+    // duplicating that one real definition — enough on its own to clear the
+    // two-or-more corroboration bar for an untitled article.
+    const result = parseFmxToCombined(actWithArticles(`
+      <ARTICLE IDENTIFIER="272">
+        <TI.ART>Article 272</TI.ART>
+        <ALINEA>
+          <P>For the purposes of this Chapter, the following definitions apply:</P>
+          <LIST TYPE="ARAB">
+            <ITEM>
+              <P>the following definitions relating to close-out amount apply:</P>
+              <LIST TYPE="ALPHA">
+                <ITEM><NP><NO.P>(a)</NO.P><TXT>${quoted("close-out amount")} means the amount owed following the termination of a transaction;</TXT></NP></ITEM>
+              </LIST>
+            </ITEM>
+          </LIST>
+        </ALINEA>
+      </ARTICLE>`));
+
+    expect(result.definitions).toEqual([]);
+  });
+
+  it("reads a nested group-heading ITEM's single definition exactly once", () => {
+    // Same shape as above, but in a titled Definitions article, where a
+    // single entry is enough to be accepted — this isolates the "exactly
+    // once, not duplicated" half of the fix from the corroboration bar.
+    const result = parseFmxToCombined(actWithArticles(`
+      <ARTICLE IDENTIFIER="002">
+        <TI.ART>Article 2</TI.ART>
+        <STI.ART>Definitions</STI.ART>
+        <ALINEA>
+          <P>For the purposes of this Regulation, the following definitions apply:</P>
+          <LIST TYPE="ARAB">
+            <ITEM>
+              <P>the following definitions relating to own funds apply:</P>
+              <LIST TYPE="ALPHA">
+                <ITEM><NP><NO.P>(a)</NO.P><TXT>${quoted("own funds")} means the sum of Tier 1 capital and Tier 2 capital;</TXT></NP></ITEM>
+              </LIST>
+            </ITEM>
+          </LIST>
+        </ALINEA>
+      </ARTICLE>`));
+
+    expect(result.definitions).toHaveLength(1);
+    expect(result.definitions[0]).toMatchObject({ term: "own funds" });
+  });
+
+  it("appends a non-matching <P> to the preceding entry as a continuation", () => {
+    // A definition whose text continues into a second <P> must not lose that
+    // tail — only a <P> that does not itself match a definition pattern gets
+    // folded back into the entry that precedes it.
+    const result = parseFmxToCombined(actWithArticles(`
+      <ARTICLE IDENTIFIER="004">
+        <TI.ART>Article 4</TI.ART>
+        <STI.ART>Definitions</STI.ART>
+        <ALINEA>
+          <P>${quoted("own funds requirement")} shall mean:</P>
+          <P>the amount calculated in accordance with Article 92, without any deduction for provisions.</P>
+        </ALINEA>
+      </ARTICLE>`));
+
+    expect(result.definitions).toHaveLength(1);
+    expect(result.definitions[0]).toMatchObject({
+      term: "own funds requirement",
+      definition: "the amount calculated in accordance with Article 92, without any deduction for provisions.",
+    });
+  });
+
+  it("does not let a QUOT.S-nested STI.ART leak into the enclosing article's title", () => {
+    // An amending article with no STI.ART of its own must not inherit the
+    // subtitle of an article it quotes from the act it is amending — that
+    // would wrongly mark it as self-declaring and accept a single lone match.
+    const result = parseFmxToCombined(actWithArticles(`
+      <ARTICLE IDENTIFIER="521">
+        <TI.ART>Article 521</TI.ART>
+        <ALINEA>
+          <P>For the purposes of this Article:</P>
+          <LIST TYPE="ARAB">
+            <ITEM><NP><NO.P>(a)</NO.P><TXT>${quoted("relevant capital instrument")} means an instrument issued under Article 52.</TXT></NP></ITEM>
+          </LIST>
+        </ALINEA>
+        <ALINEA>
+          <P>Regulation (EU) No 1093/2010 is amended as follows:</P>
+          <LIST TYPE="ARAB">
+            <ITEM><NP><NO.P>(1)</NO.P><TXT>the following Article is inserted:</TXT>
+              <P><QUOT.S LEVEL="1">
+                <DIVISION>
+                  <ARTICLE IDENTIFIER="004A">
+                    <TI.ART>Article 4a</TI.ART>
+                    <STI.ART>Definitions</STI.ART>
+                    <ALINEA>
+                      <P>${quoted("winding-up authority")} means the authority designated under national law.</P>
+                    </ALINEA>
+                  </ARTICLE>
+                </DIVISION>
+              </QUOT.S></P>
+            </NP></ITEM>
+          </LIST>
+        </ALINEA>
+      </ARTICLE>`));
+
+    const outer = result.articles.find((a) => a.article_number === "521");
+    expect(outer.article_title).toBe("");
+    // A single quoted match in an article that does not genuinely declare
+    // itself as a definitions article must not corroborate on its own.
+    expect(result.definitions).toEqual([]);
+  });
+
+  it("does not let an annex article shadow an enacting article of the same number", () => {
+    // A standalone (non-combined) <ACT> nests its <ANNEX> directly inside the
+    // act, so an unscoped articleElementsByNumber scan reaches annex articles
+    // too. An enacting Article 1 with no IDENTIFIER of its own must not
+    // first-wins-resolve to the ANNEX's own "Article 1" and inherit its
+    // definitions.
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<ACT>
+  <TITLE><TI><P>Directive 2006/112/EC of the Council</P></TI></TITLE>
+  <ENACTING.TERMS>
+    <ARTICLE>
+      <TI.ART>Article 1</TI.ART>
+      <ALINEA><P>This Directive establishes the common system of value added tax.</P></ALINEA>
+    </ARTICLE>
+  </ENACTING.TERMS>
+  <ANNEX>
+    <TITLE><TI>ANNEX</TI></TITLE>
+    <CONTENTS>
+      <ARTICLE IDENTIFIER="001">
+        <TI.ART>Article 1</TI.ART>
+        <ALINEA>
+          <P>For the purposes of this Annex, the following definitions apply:</P>
+          <LIST TYPE="ARAB">
+            <ITEM><NP><NO.P>(a)</NO.P><TXT>${quoted("annex term")} means something specific to the annex.</TXT></NP></ITEM>
+            <ITEM><NP><NO.P>(b)</NO.P><TXT>${quoted("another annex term")} means something else specific to the annex.</TXT></NP></ITEM>
+          </LIST>
+        </ALINEA>
+      </ARTICLE>
+    </CONTENTS>
+  </ANNEX>
+</ACT>`;
+
+    const result = parseFmxToCombined(xml);
+    expect(result.definitions).toEqual([]);
+  });
+
+  it("does not corroborate an untitled article from SV's quote-less colon fallback", () => {
+    // 32013R0575 SWE gained ~31 junk definitions this way in production: the
+    // SV fallback pattern (buildFallbackDefRegex) needs no quote characters
+    // at all, so almost any "X : Y" operative sentence clears the
+    // two-or-more corroboration bar for an untitled article.
+    const result = parseFmxToCombined(actWithArticlesLang("SV", `
+      <ARTICLE IDENTIFIER="010">
+        <TI.ART>Artikel 10</TI.ART>
+        <ALINEA>
+          <P>0,09 % : kapitalbaskravet enligt artikel 92.</P>
+          <P>70 % : det belopp som avses i artikel 92 utan avdrag.</P>
+        </ALINEA>
+      </ARTICLE>`));
+
+    expect(result.definitions).toEqual([]);
+  });
+
+  it("does not corroborate an untitled article from LT's quote-less dash fallback", () => {
+    // 32013R0575 LIT gained ~265 junk definitions the same way, via LT's
+    // en-dash fallback shape.
+    const result = parseFmxToCombined(actWithArticlesLang("LT", `
+      <ARTICLE IDENTIFIER="010">
+        <TI.ART>10 straipsnis</TI.ART>
+        <ALINEA>
+          <P>0,09 % – nuosavų lėšų reikalavimas pagal 92 straipsnį.</P>
+          <P>70 % – 92 straipsnyje nurodyta suma be jokio atskaitymo.</P>
+        </ALINEA>
+      </ARTICLE>`));
+
+    expect(result.definitions).toEqual([]);
+  });
+
+  it("still reads a titled SV definitions article via the quote-less colon fallback", () => {
+    // Titled definitions articles keep the pre-fix behaviour: the quote-less
+    // fallback is how LT/SV acts get their real definitions today.
+    const result = parseFmxToCombined(actWithArticlesLang("SV", `
+      <ARTICLE IDENTIFIER="004">
+        <TI.ART>Artikel 4</TI.ART>
+        <STI.ART>Definitioner</STI.ART>
+        <ALINEA>
+          <P>I denna förordning gäller följande definitioner:</P>
+          <LIST TYPE="ARAB">
+            <ITEM><NP><NO.P>1.</NO.P><TXT>kreditinstitut : ett företag vars verksamhet består i att ta emot insättningar.</TXT></NP></ITEM>
+          </LIST>
+        </ALINEA>
+      </ARTICLE>`));
+
+    expect(result.definitions.map((d) => d.term)).toEqual(["kreditinstitut"]);
   });
 });

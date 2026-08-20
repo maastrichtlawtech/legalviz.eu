@@ -8,14 +8,27 @@ const { createFmxService } = require('./fmx-service');
 
 const CELLAR_BASE = 'http://publications.europa.eu/resource';
 
+// Every makeService() call mints its own scratch directory; track them so
+// they can be removed once, rather than leaking one mkdtempSync() dir per
+// test into the OS temp directory on every run.
+const createdDirs = [];
+
 function makeService() {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fmx-service-'));
+  createdDirs.push(dir);
   return createFmxService({
     CELLAR_BASE,
-    FMX_DIR: fs.mkdtempSync(path.join(os.tmpdir(), 'fmx-service-')),
+    FMX_DIR: dir,
     STORAGE_LIMIT_MB: 100,
     TIMEOUT_MS: 5000,
   });
 }
+
+test.after(() => {
+  for (const dir of createdDirs) {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
 
 /**
  * Serve one canned RDF document for the CELEX lookup, listing `uris` as

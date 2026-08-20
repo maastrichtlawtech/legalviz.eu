@@ -57,7 +57,7 @@ ARG DATA_RELEASE_REPO=maastrichtlawtech/legalviz.eu
 ARG DATA_RELEASE_TAG=data-v11
 # The full-text index ships on its own release tag, decoupled from data-vN —
 # see FULLTEXT_RELEASE_TAG in the root CLAUDE.md cache-invalidation table.
-ARG FULLTEXT_RELEASE_TAG=fulltext-v2
+ARG FULLTEXT_RELEASE_TAG=fulltext-v3
 # Every asset comes from this one tag, so a new release must carry the full set —
 # re-upload the unchanged ones alongside the changed one or this fetch 404s.
 # citation-graph.json.gz is a *build input* like the others: it is folded into

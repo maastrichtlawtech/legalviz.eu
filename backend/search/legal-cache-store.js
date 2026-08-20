@@ -547,6 +547,10 @@ class JsonLegalCacheStore {
     this.definitionsAvailable = false;
     this.citationCounts = new Map(options.citationCounts || []);
     this.source = null;
+    // Build timestamp of the loaded search cache ("when was our dataset last
+    // updated"), read from the SQLite `metadata` row / JSON `generatedAt`
+    // field written by the builders — never regenerated here.
+    this.datasetGeneratedAt = null;
     this.fulltextDatabase = null;
     this.fulltextSearchStatement = null;
     this.fulltextUnitSearchStatement = null;
@@ -554,7 +558,7 @@ class JsonLegalCacheStore {
     this.fulltextUnitSnippetStatement = null;
     this.fulltextAvailable = false;
     this.fulltextReason = null;
-    this.fulltextStats = { unitCount: 0, actCount: 0, version: null };
+    this.fulltextStats = { unitCount: 0, actCount: 0, version: null, generatedAt: null };
   }
 
   load() {
@@ -582,7 +586,7 @@ class JsonLegalCacheStore {
     this.fulltextUnitSnippetStatement = null;
     this.fulltextAvailable = false;
     this.fulltextReason = null;
-    this.fulltextStats = { unitCount: 0, actCount: 0, version: null };
+    this.fulltextStats = { unitCount: 0, actCount: 0, version: null, generatedAt: null };
     if (!this.fulltextPath || !fs.existsSync(this.fulltextPath)) {
       this.fulltextReason = `Full-text index not found at ${this.fulltextPath}`;
       return;
@@ -657,6 +661,7 @@ class JsonLegalCacheStore {
         unitCount: Number.parseInt(metadata.get("unit_count"), 10) || 0,
         actCount: Number.parseInt(metadata.get("act_count"), 10) || 0,
         version: fulltextVersion,
+        generatedAt: metadata.get("generated_at") || null,
       };
       this.fulltextDatabase = database;
       this.fulltextAvailable = true;
@@ -698,6 +703,7 @@ class JsonLegalCacheStore {
       version: this.fulltextStats.version,
       unitCount: this.fulltextStats.unitCount,
       actCount: this.fulltextStats.actCount,
+      generatedAt: this.fulltextAvailable ? this.fulltextStats.generatedAt : null,
       reason: this.fulltextAvailable ? null : this.fulltextReason,
     };
   }
@@ -773,6 +779,7 @@ class JsonLegalCacheStore {
     this.eurovocSearch = null;
     this.excerptMiniSearch = null;
     this.source = null;
+    this.datasetGeneratedAt = null;
   }
 
   failLoad(message) {
@@ -918,6 +925,9 @@ class JsonLegalCacheStore {
       this.definitionsAvailable = database.prepare(
         "SELECT value FROM metadata WHERE key = 'definitions_available'"
       ).get()?.value === "1";
+      this.datasetGeneratedAt = database.prepare(
+        "SELECT value FROM metadata WHERE key = 'generated_at'"
+      ).get()?.value || null;
       this.source = "sqlite";
       return true;
     } catch (error) {
@@ -952,6 +962,7 @@ class JsonLegalCacheStore {
         : [];
 
       this.payload = parsed;
+      this.datasetGeneratedAt = parsed.generatedAt || null;
       this.indexRecords(records, { includeExcerpt: true });
       try {
         const definitions = readOptionalJson(this.definitionsPath);
@@ -990,6 +1001,7 @@ class JsonLegalCacheStore {
       ready: this.isReady(),
       cachePath: this.cachePath,
       loadedAt: this.loadedAt,
+      generatedAt: this.datasetGeneratedAt,
       count: this.records.length,
       error: this.loadError,
       fulltext: this.getFulltextStatus(),

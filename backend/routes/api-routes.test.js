@@ -97,6 +97,7 @@ function registerTestRoutes(overrides = {}) {
       isReady: () => true,
       getArticleCitations: (celex, article, pagination) => ({ celex, article, pagination, citingProvisions: [], citingJudgments: [], counts: { total: 0 } }),
       getActCitations: (celex) => ({ celex, byArticle: [], counts: { total: 0 } }),
+      getStatus: () => ({ ready: true, generatedAt: "2026-03-27T00:00:00.000Z" }),
     },
     findDownloadUrls: async () => ({ type: "xml", urls: [] }),
     findFmx4Uri: async () => "unused",
@@ -204,6 +205,48 @@ test("GET /api/resolve-reference returns cache-backed resolution payload", async
   assert.equal(res.statusCode, 200);
   assert.equal(res.payload.resolved.celex, "32015L2366");
   assert.equal(res.payload.resolved.source, "search-cache");
+});
+
+test("GET /api/meta surfaces the dataset build timestamps stamped by the offline builders", async () => {
+  const { app } = registerTestRoutes();
+  const handler = app.routes.get("/api/meta");
+  const res = createResponseRecorder();
+
+  await handler({}, res);
+
+  assert.equal(res.statusCode, 200);
+  assert.deepEqual(res.payload, {
+    data: { generatedAt: "2026-03-26T00:00:00.000Z" },
+    citationGraph: { generatedAt: "2026-03-27T00:00:00.000Z" },
+    fulltext: { generatedAt: null, available: false },
+  });
+});
+
+test("GET /api/meta reports nulls without throwing when no data source is loaded", async () => {
+  const { app } = registerTestRoutes({
+    legalCacheStore: {
+      getStatus: () => ({
+        ready: false,
+        generatedAt: null,
+        fulltext: { available: false, generatedAt: null, reason: "not loaded" },
+      }),
+    },
+    citationGraphStore: {
+      isReady: () => false,
+      getStatus: () => ({ ready: false, generatedAt: null }),
+    },
+  });
+  const handler = app.routes.get("/api/meta");
+  const res = createResponseRecorder();
+
+  await handler({}, res);
+
+  assert.equal(res.statusCode, 200);
+  assert.deepEqual(res.payload, {
+    data: { generatedAt: null },
+    citationGraph: { generatedAt: null },
+    fulltext: { generatedAt: null, available: false },
+  });
 });
 
 test('GET article cited-by passes validated pagination to the citation graph', async () => {

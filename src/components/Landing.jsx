@@ -1,5 +1,5 @@
 import { useNavigate } from "react-router-dom";
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { motion as Motion } from "framer-motion";
 import { Github } from "lucide-react";
 import { TopBar, SearchBox } from "./TopBar.jsx";
@@ -13,6 +13,8 @@ import { useLandingLibrary } from "../hooks/useLandingLibrary.js";
 import { useLandingSearchIndex } from "../hooks/useLandingSearchIndex.js";
 import { buildImportedLawCandidate, getCanonicalLawRoute } from "../utils/lawRouting.js";
 import { saveLawMeta } from "../utils/library.js";
+import { fetchDatasetMeta } from "../utils/formexApi.js";
+import { formatMetaDate } from "../utils/formatMetaDate.js";
 
 function inferOfficialReferenceFromCelex(celex) {
   const match = String(celex || "").match(/^3(\d{4})([RLD])0*(\d{1,4})(?:\(\d+\))?$/);
@@ -62,6 +64,22 @@ export function Landing({ forcedLocale = null }) {
     libraryVersion,
   });
   const activeLocale = forcedLocale || locale;
+
+  // Best-effort footer note: fetched lazily after mount, never blocks
+  // rendering, and stays hidden on failure or when no build date is
+  // available — no error UI for what's just a nice-to-have footnote.
+  const [datasetGeneratedAt, setDatasetGeneratedAt] = useState(null);
+  useEffect(() => {
+    let cancelled = false;
+    fetchDatasetMeta()
+      .then((meta) => {
+        if (!cancelled) setDatasetGeneratedAt(meta?.data?.generatedAt || null);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const handleOpenLaw = useCallback(async (law) => {
     // Best-effort bookkeeping: never let a stuck IndexedDB block navigation.
@@ -225,6 +243,11 @@ export function Landing({ forcedLocale = null }) {
             <Github className="h-4 w-4" />
             <span>{t("landing.sourceCode")}</span>
           </a>
+          {datasetGeneratedAt && (
+            <p className="text-gray-400 dark:text-gray-600">
+              {t("landing.datasetUpdated", { date: formatMetaDate(datasetGeneratedAt, activeLocale) })}
+            </p>
+          )}
         </Motion.div>
       </div>
     </div>

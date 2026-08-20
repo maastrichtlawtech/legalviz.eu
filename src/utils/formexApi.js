@@ -912,6 +912,21 @@ export async function resolveEurlexUrl(sourceUrl, lang = "EN") {
   return res.json();
 }
 
+/**
+ * Fetches the build timestamps the offline pipeline stamps onto each dataset
+ * ("when was our dataset last updated"). Not cached — it's a single cheap
+ * lookup, and staleness would defeat the point. Callers should fetch lazily
+ * and tolerate failure silently (see Landing.jsx): this is a nice-to-have
+ * footnote, never something that should block or error the UI.
+ */
+export async function fetchDatasetMeta() {
+  const res = await apiFetch(`${API_BASE}/api/meta`);
+  if (!res.ok) {
+    await readApiError(res, `Dataset metadata fetch failed (${res.status})`);
+  }
+  return res.json();
+}
+
 export async function fetchAmendments(celex) {
   return getInFlightRequest(`amendments:${celex}`, () => fetchJsonWithCache({
     cacheKey: `${celex}_amendments`,

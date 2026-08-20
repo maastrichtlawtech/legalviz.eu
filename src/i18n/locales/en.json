@@ -192,6 +192,7 @@
     "never": "Never",
     "sourceCode": "Source code and support on GitHub",
     "builtBy": "Built by Konrad Kollnig at the Law & Tech Lab, Maastricht University.",
+    "datasetUpdated": "Dataset last updated: {date}",
     "addLawDialogEyebrow": "Add a law",
     "addLawCta": "Add another law to your library",
     "addLawShort": "Add another law",

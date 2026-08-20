@@ -135,6 +135,23 @@ function registerApiRoutes(app, deps) {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
   });
 
+  // Surfaces the build timestamps the offline pipeline already stamps onto
+  // each dataset ("when was our dataset last updated") — read-only, no
+  // pipeline changes. Missing/unavailable sources report null rather than
+  // erroring, mirroring the other optional-artifact status endpoints.
+  app.get('/api/meta', rateLimitMiddleware, (req, res) => {
+    const searchStatus = legalCacheStore.getStatus();
+    const citationGraphStatus = citationGraphStore.getStatus();
+    res.json({
+      data: { generatedAt: searchStatus.generatedAt || null },
+      citationGraph: { generatedAt: citationGraphStatus.generatedAt || null },
+      fulltext: {
+        generatedAt: searchStatus.fulltext.generatedAt || null,
+        available: searchStatus.fulltext.available,
+      },
+    });
+  });
+
   app.get('/api/_stats', rateLimitMiddleware, (req, res) => {
     const token = process.env.ANALYTICS_TOKEN;
     if (!token) return res.status(404).json({ error: 'Not found' });

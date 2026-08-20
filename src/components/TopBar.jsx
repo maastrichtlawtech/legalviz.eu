@@ -108,6 +108,7 @@ export function SearchBox({
   const modalInputRef = useRef(null);
   const resultsRef = useRef(null);
   const lawSearchAbortRef = useRef(null);
+  const lawSearchRequestIdRef = useRef(0);
   const lawSearchDebounceRef = useRef(null);
   const definitionSearchAbortRef = useRef(null);
   const definitionSearchDebounceRef = useRef(null);
@@ -186,6 +187,8 @@ export function SearchBox({
 
   const runLawSearch = useCallback((nextQuery) => {
     const trimmedQuery = String(nextQuery || "").trim();
+    const requestId = lawSearchRequestIdRef.current + 1;
+    lawSearchRequestIdRef.current = requestId;
 
     if (lawSearchAbortRef.current) {
       lawSearchAbortRef.current.abort();
@@ -232,6 +235,7 @@ export function SearchBox({
 
     searchLawsApi(backendQuery, { limit: 12, signal: controller.signal })
       .then((payload) => {
+        if (lawSearchRequestIdRef.current !== requestId) return;
         const nextResults = Array.isArray(payload?.results)
           ? payload.results.map((item) => ({
             ...item,
@@ -245,7 +249,7 @@ export function SearchBox({
         setSelectedIndex(-1);
       })
       .catch((error) => {
-        if (error?.name === "AbortError") return;
+        if (error?.name === "AbortError" || lawSearchRequestIdRef.current !== requestId) return;
         console.error("Failed to search laws", error);
         // Even if the index lookup fails, a valid CELEX can still be opened.
         if (celexQuery) {
@@ -257,7 +261,7 @@ export function SearchBox({
         setLawSearchError(error?.message || t("search.apiUnavailable"));
       })
       .finally(() => {
-        if (lawSearchAbortRef.current === controller) {
+        if (lawSearchAbortRef.current === controller && lawSearchRequestIdRef.current === requestId) {
           lawSearchAbortRef.current = null;
           setIsLawSearchLoading(false);
         }
@@ -483,6 +487,7 @@ export function SearchBox({
   // the results for the newly selected mode.
   useEffect(() => {
     if (!isLawMode) {
+      lawSearchRequestIdRef.current += 1;
       lawSearchAbortRef.current?.abort();
       lawSearchAbortRef.current = null;
       if (lawSearchDebounceRef.current) {

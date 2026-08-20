@@ -57,6 +57,52 @@ export class FormexApiError extends Error {
   }
 }
 
+// Railway may return a transient gateway/service error while waking the API
+// process after an idle period. Keep the retry window bounded so ordinary API
+// failures still reach the caller promptly, while giving a cold start time to
+// become ready without requiring a page reload.
+const SEARCH_RETRY_DELAYS_MS = [1000, 2000, 4000];
+
+function isTransientSearchError(error) {
+  const status = Number(error?.status);
+  return (status >= 500 && status <= 599)
+    || error?.name === "TypeError"
+    || error?.name === "NetworkError";
+}
+
+function createAbortError() {
+  const error = new Error("The operation was aborted");
+  error.name = "AbortError";
+  return error;
+}
+
+function waitForSearchRetry(delayMs, signal) {
+  return new Promise((resolve, reject) => {
+    let timeoutId = null;
+
+    const cleanup = () => {
+      if (timeoutId !== null) clearTimeout(timeoutId);
+      signal?.removeEventListener("abort", handleAbort);
+    };
+
+    const handleAbort = () => {
+      cleanup();
+      reject(createAbortError());
+    };
+
+    if (signal?.aborted) {
+      handleAbort();
+      return;
+    }
+
+    timeoutId = setTimeout(() => {
+      cleanup();
+      resolve();
+    }, delayMs);
+    signal?.addEventListener("abort", handleAbort, { once: true });
+  });
+}
+
 // ---------------------------------------------------------------------------
 // IndexedDB helpers
 // ---------------------------------------------------------------------------
@@ -965,13 +1011,30 @@ export async function searchLaws(query, { limit = 10, noRewrite = false, signal 
   }
 
   const url = `${API_BASE}/api/search?${params.toString()}`;
-  const res = await apiFetch(url, { signal });
+  let retryIndex = 0;
 
-  if (!res.ok) {
-    await readApiError(res, `Law search failed (${res.status})`);
+  while (true) {
+    try {
+      const res = await apiFetch(url, { signal });
+
+      if (!res.ok) {
+        await readApiError(res, `Law search failed (${res.status})`);
+      }
+
+      return await res.json();
+    } catch (error) {
+      if (
+        error?.name === "AbortError"
+        || !isTransientSearchError(error)
+        || retryIndex >= SEARCH_RETRY_DELAYS_MS.length
+      ) {
+        throw error;
+      }
+
+      await waitForSearchRetry(SEARCH_RETRY_DELAYS_MS[retryIndex], signal);
+      retryIndex += 1;
+    }
   }
-
-  return res.json();
 }
 
 export async function searchDefinitions(query, { limit = 10, filter = "", signal } = {}) {

@@ -135,6 +135,55 @@ describe("SearchBox — CELEX / EUR-Lex direct open", () => {
     expect(document.body.textContent).toContain("Open directly");
   });
 
+  it("recovers on a new query after a failed backend request", async () => {
+    searchLaws
+      .mockRejectedValueOnce(new Error("search_cache_unavailable"))
+      .mockResolvedValueOnce({
+        results: [{ celex: "32016R0679", title: "General Data Protection Regulation" }],
+      });
+    renderSearchBox(vi.fn());
+
+    typeQuery("first query");
+    await flush();
+    expect(document.body.textContent).toContain("search_cache_unavailable");
+
+    typeQuery("gdpr");
+    await flush();
+
+    expect(document.body.textContent).toContain("General Data Protection Regulation");
+    expect(searchLaws).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not let a late failed request replace newer results", async () => {
+    let rejectFirstRequest;
+    const firstRequest = new Promise((resolve, reject) => {
+      rejectFirstRequest = reject;
+    });
+    searchLaws
+      .mockReturnValueOnce(firstRequest)
+      .mockResolvedValueOnce({
+        results: [{ celex: "32016R0679", title: "General Data Protection Regulation" }],
+      });
+    renderSearchBox(vi.fn());
+
+    typeQuery("first query");
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(400);
+    });
+
+    typeQuery("gdpr");
+    await flush();
+    expect(document.body.textContent).toContain("General Data Protection Regulation");
+
+    await act(async () => {
+      rejectFirstRequest(new Error("late cold-start failure"));
+      await Promise.resolve();
+    });
+
+    expect(document.body.textContent).toContain("General Data Protection Regulation");
+    expect(document.body.textContent).not.toContain("late cold-start failure");
+  });
+
   it("queries the backend by canonical CELEX for a pasted EUR-Lex URL", async () => {
     // The backend anchors its CELEX regex at the start of the query, so a raw
     // URL never resolves to an exact match. Sending the derived CELEX makes the

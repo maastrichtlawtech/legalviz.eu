@@ -7,6 +7,7 @@ const { CitationGraphStore, DEFAULT_CITATION_GRAPH_PATH } = require('./search/ci
 const { registerApiRoutes } = require('./routes/api-routes');
 const { registerMcpEndpoint } = require('./mcp/mcp-http');
 const { createParsedLawResolver, hasParsedLawContent } = require('./shared/parsed-law-service');
+const { fetchConsolidatedVersions } = require('./shared/law-queries');
 const { createFmxService } = require('./shared/fmx-service');
 const { fetchEurlexHtmlLaw, parseEurlexHtmlToCombined, closeSharedPlaywrightBrowser } = require('./shared/eurlex-html-parser');
 const { createHtmlCacheService } = require('./shared/html-cache-service');
@@ -268,6 +269,8 @@ const resolveParsedLaw = createParsedLawResolver({
   prepareLawPayload,
   fetchAndParseHtmlLaw: fetchAndParseHtmlLawCached,
   CELEX_NAMES,
+  fetchConsolidatedVersions,
+  runSparqlQuery,
 });
 
 registerApiRoutes(app, {

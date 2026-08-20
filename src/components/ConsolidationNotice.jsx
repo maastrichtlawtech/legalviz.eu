@@ -17,11 +17,22 @@ import { buildEurlexCelexUrl } from "../utils/url.js";
  *
  * Renders nothing at all when the act has never been amended, which is the
  * common case, and while the amendment history is still loading.
+ *
+ * Also renders nothing when `source` is `"fmx-consolidated"` — that means the
+ * reader is already looking at the consolidated text (the as-adopted act had
+ * no renderable content, so `resolveParsedLaw` fell back to a consolidated
+ * version; see `ConsolidatedFallbackNotice`). This notice's copy ("you are
+ * reading this law as adopted") would be false in that case.
  */
-export function ConsolidationNotice({ celex, currentLang = "EN", locale = "en", variant = "banner" }) {
+export function ConsolidationNotice({ celex, currentLang = "EN", locale = "en", variant = "banner", source = null }) {
   const { t } = useI18n();
-  const status = useConsolidationStatus(celex);
+  const isConsolidatedFallback = source === "fmx-consolidated";
+  // Pass no celex when already reading the consolidated fallback, so the
+  // hook's amendment/consolidated-version fetches don't fire for a notice
+  // that is about to render nothing anyway.
+  const status = useConsolidationStatus(isConsolidatedFallback ? null : celex);
 
+  if (isConsolidatedFallback) return null;
   if (!status.isOutdated) return null;
 
   const amendedOn = formatMetaDate(status.latestAmendmentDate, locale);

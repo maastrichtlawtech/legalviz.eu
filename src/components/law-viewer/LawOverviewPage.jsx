@@ -182,7 +182,22 @@ export function LawOverviewPage({
         celex={effectiveCelex}
         currentLang={formexLang}
         locale={locale}
+        source={data?.source}
       />
+
+      {data?.source === "fmx-consolidated" ? (
+        <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/20 dark:text-amber-100">
+          <div className="font-medium">{t("lawViewer.consolidatedFallbackTitle")}</div>
+          <p className="mt-1 leading-6">
+            {data.consolidatedVersion?.date
+              ? t("lawViewer.consolidatedFallbackMessageWithDate", { date: data.consolidatedVersion.date })
+              : t("lawViewer.consolidatedFallbackMessage")}
+          </p>
+          <p className="mt-1 leading-6">
+            {t("lawViewer.consolidatedFallbackNoRecitals")}
+          </p>
+        </div>
+      ) : null}
 
       {/* Actions */}
       <div className="mb-8 flex flex-wrap gap-3">

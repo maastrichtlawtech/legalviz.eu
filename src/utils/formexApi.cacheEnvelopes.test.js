@@ -264,6 +264,34 @@ describe("parsed-law fetch persistence", () => {
     expect(await readCache(CACHE_KEY)).toBeNull();
     expect(await getLawMeta(CELEX)).toBeNull();
   });
+
+  it("keeps source and consolidatedVersion through the cache round trip (#148 consolidated fallback)", async () => {
+    // resolveParsedLaw's consolidated fallback (backend/shared/parsed-law-service.js)
+    // stamps a REACH-shaped empty parse with `source: "fmx-consolidated"` and
+    // `consolidatedVersion: { celex, date }`. Neither field is in the combined
+    // law shape isCombinedLawShape/parseLawPayloadToCombined check for, so this
+    // pins that they survive the IndexedDB envelope and getCachedLawPayload
+    // rather than being silently dropped as "unknown".
+    const consolidatedPayload = {
+      title: "REACH",
+      articles: [{ number: "1" }],
+      recitals: [],
+      annexes: [],
+      definitions: [],
+      source: "fmx-consolidated",
+      consolidatedVersion: { celex: "02006R1907-20260511", date: "2026-05-11" },
+    };
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(consolidatedPayload)));
+
+    const { fetchParsedLaw, getCachedLawPayload } = await importFormexApi();
+    const fetched = await fetchParsedLaw(CELEX, "EN");
+    expect(fetched.source).toBe("fmx-consolidated");
+    expect(fetched.consolidatedVersion).toEqual({ celex: "02006R1907-20260511", date: "2026-05-11" });
+
+    const cached = await getCachedLawPayload(CELEX, "EN");
+    expect(cached.payload.source).toBe("fmx-consolidated");
+    expect(cached.payload.consolidatedVersion).toEqual({ celex: "02006R1907-20260511", date: "2026-05-11" });
+  });
 });
 
 describe("law-text fetch body validation", () => {

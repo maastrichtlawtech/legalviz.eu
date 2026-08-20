@@ -17,6 +17,7 @@ export function useLawViewerDerivedState({
   const activeLoading = source.loading || primaryDocument.loading;
   const documentLang = primaryDocument.data.langCode || preferences.formexLang;
   const isLegacyHtmlFallback = primaryDocument.data.source === "eurlex-html";
+  const isConsolidatedFallback = primaryDocument.data.source === "fmx-consolidated";
   const hasLoadedContent = primaryDocument.data.articles.length > 0
     || primaryDocument.data.recitals.length > 0
     || primaryDocument.data.annexes.length > 0;
@@ -69,6 +70,8 @@ export function useLawViewerDerivedState({
     activeLoading,
     documentLang,
     isLegacyHtmlFallback,
+    isConsolidatedFallback,
+    consolidatedVersion: primaryDocument.data.consolidatedVersion || null,
     hasLoadedContent,
     hasCelex,
     isSideBySide,

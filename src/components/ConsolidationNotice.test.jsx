@@ -139,6 +139,23 @@ describe("ConsolidationNotice", () => {
     expect(container.querySelector("a")).toBe(null);
   });
 
+  it("renders nothing when source is fmx-consolidated, even for a heavily amended act", async () => {
+    fetchAmendments.mockResolvedValue({
+      amendments: [
+        { celex: "32019R0876", date: "2019-05-20", type: "amendment" },
+        { celex: "32024R1623", date: "2024-05-31", type: "amendment" },
+      ],
+    });
+    fetchConsolidatedVersions.mockResolvedValue({
+      versions: [{ celex: "02013R0575-20260626", date: "2026-06-26" }],
+    });
+
+    await render({ source: "fmx-consolidated" });
+
+    expect(container.textContent).toBe("");
+    expect(fetchAmendments).not.toHaveBeenCalled();
+  });
+
   it("says 'at least N times' when the amendment count was truncated", async () => {
     fetchAmendments.mockResolvedValue({
       amendments: [

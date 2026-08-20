@@ -716,6 +716,27 @@ function quoteCharClass(lang) {
 }
 
 /**
+ * Body pattern for a quote-delimited term: any character that is not a quote
+ * character, OR a straight/typographic apostrophe standing directly between
+ * two letters.
+ *
+ * French, Italian and other Romance languages elide a short word before a
+ * vowel with an apostrophe -- "d'origine", "l'Etat", "all'ingrosso" -- using
+ * the very same glyph (U+0027 / U+2019) their quoteChars list as a
+ * quotation mark. A plain negated class ([^q]+) reads that elision
+ * apostrophe as the term's closing quote and truncates the term mid-word
+ * ("Etat membre d'origine" -> "Etat membre d"). A genuine closing quote is
+ * never immediately followed by a letter -- the meansVerb or a separator
+ * always intervenes -- so treating a letter-apostrophe-letter run as term
+ * text is safe everywhere the negated class is already used: the lookaround
+ * only fires when both neighbours are letters, so it can never swallow a
+ * true closing quote. Requires the "u" regex flag (uses \p{L}).
+ */
+function termBody(q) {
+  return `(?:[^${q}]|(?<=\\p{L})['\u2019](?=\\p{L}))`;
+}
+
+/**
  * Build the "means" regex for definition extraction from the language config.
  *
  * Two formats:
@@ -734,7 +755,7 @@ export function buildMeansRegex(lang) {
   const verb = `(?:${lang.meansVerb})`;
   if (lang.definitionFormat === "verb_first") {
     // "meansVerb [q]term[q]" — term comes AFTER the verb
-    return new RegExp(`^${verb}\\s+[${q}]([^${q}]+)[${q}]`, "i");
+    return new RegExp(`^${verb}\\s+[${q}](${termBody(q)}+)[${q}]`, "iu");
   }
   // Default: "'term' meansVerb definition"
   //
@@ -781,9 +802,9 @@ export function buildInlineDefRegex(lang) {
   const q = quoteCharClass(lang);
   const verb = `(?:${lang.meansVerb})`;
   if (lang.definitionFormat === "verb_first") {
-    return new RegExp(`${verb}\\s+[${q}]([^${q}]+)[${q}]\\s*`, "gi");
+    return new RegExp(`${verb}\\s+[${q}](${termBody(q)}+)[${q}]\\s*`, "giu");
   }
-  return new RegExp(`[${q}]([^${q}]+)[${q}]\\s+${verb}\\s+`, "gi");
+  return new RegExp(`[${q}](${termBody(q)}+)[${q}]\\s+${verb}\\s+`, "giu");
 }
 
 /**
@@ -826,8 +847,8 @@ export function buildFallbackDefRegex(lang) {
   // All other languages: term is surrounded by quote characters from quoteChars.
   // After the closing quote there may be: colon, en-dash (–), comma, or nothing.
   return new RegExp(
-    `^[${q}]([^${q}]+)[${q}]\\s*[:\\u2013\\u2014,]?\\s*`,
-    "i"
+    `^[${q}](${termBody(q)}+)[${q}]\\s*[:\\u2013\\u2014,]?\\s*`,
+    "iu"
   );
 }
 

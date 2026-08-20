@@ -33,7 +33,7 @@ import {
  * Bump this whenever the parser output changes (new fields, bug fixes, etc.)
  * so that cached parsed results are automatically re-parsed from raw XML.
  */
-export const PARSER_VERSION = 21;
+export const PARSER_VERSION = 22;
 
 // ---------------------------------------------------------------------------
 // FMX → HTML conversion helpers
@@ -1900,17 +1900,26 @@ export function parseFmxToCombined(xmlText) {
         if (fbMatch?.[1]) {
           const term = fbMatch[1].trim();
           const definition = text.slice(fbMatch[0].length).trim();
-          if (term && definition) {
-            // For every language except LT and SV, fallbackDefRegex also
-            // requires quote characters around the term. LT and SV are the
-            // two languages whose Formex text never carries QUOT.START/
-            // QUOT.END around the defined term at all (see
-            // buildFallbackDefRegex), so their fallback matches on a bare
-            // dash/colon — a shape common enough in ordinary operative prose
-            // ("0,09 % – ...", "70 % : ...") that it clears the corroboration
-            // bar below on nearly any article. Flag those matches so an
-            // untitled article can discount them (Finding 1).
-            const quoted = lang.code !== "LT" && lang.code !== "SV";
+          // For every language except LT and SV, fallbackDefRegex also
+          // requires quote characters around the term. LT and SV are the
+          // two languages whose Formex text never carries QUOT.START/
+          // QUOT.END around the defined term at all (see
+          // buildFallbackDefRegex), so their fallback matches on a bare
+          // dash/colon — a shape common enough in ordinary operative prose
+          // ("0,09 % – ...", "70 % : ...") that it clears the corroboration
+          // bar below on nearly any article. Flag those matches so an
+          // untitled article can discount them (Finding 1).
+          const quoted = lang.code !== "LT" && lang.code !== "SV";
+          // A quote-delimited term may be followed by nothing but a comma
+          // or colon before the definition continues in a nested list under
+          // a sibling <P> ("«État membre d’origine»," (a) … (b) …) — the
+          // same empty-group-2 shape buildMeansRegex documents as expected
+          // ("'night worker' means:" followed by lettered sub-points), so an
+          // empty definition is accepted there too. LT/SV's bare colon/dash
+          // fallback has no such precedent and is already the most
+          // over-match-prone pattern here (Finding 1), so it still requires
+          // actual trailing definition text.
+          if (term && (definition || quoted)) {
             matched = makeDefinition(term, definition, quoted);
           }
         }

@@ -1649,3 +1649,93 @@ describe("definition extraction beyond the titled definitions article", () => {
     expect(result.definitions.map((d) => d.term)).toEqual(["kreditinstitut"]);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Elision apostrophes in quote-delimited terms (FR/IT/PT and other
+// verb_first languages)
+// ---------------------------------------------------------------------------
+
+describe("definition extraction: elision apostrophes in quote-delimited terms", () => {
+  function actWithArticlesLang(langCode, articlesXml) {
+    return `<?xml version="1.0" encoding="UTF-8"?>
+<COMBINED.FMX>
+  <ACT>
+    <BIB.INSTANCE><LG.DOC>${langCode}</LG.DOC></BIB.INSTANCE>
+    <TITLE><TI><P>Regulation (EU) No 575/2013</P></TI></TITLE>
+    <ENACTING.TERMS>${articlesXml}</ENACTING.TERMS>
+  </ACT>
+</COMBINED.FMX>`;
+  }
+
+  const quoted = (term) => `<QUOT.START CODE="2018"/>${term}<QUOT.END CODE="2019"/>`;
+
+  it("extracts a French term through a grammatical elision apostrophe", () => {
+    // MiFID II FRA (32014L0065) Article 4(55): "«État membre d’origine»,"
+    // used to parse to term "État membre d" with "origine»," folded into the
+    // definition, because the elision apostrophe is the same glyph FR's
+    // quoteChars uses as a closing quote. The definition itself continues in
+    // a nested list, so this item legitimately has no trailing definition
+    // text in its own <TXT> — see the next test for a genuine closing quote.
+    const result = parseFmxToCombined(actWithArticlesLang("FR", `
+      <ARTICLE IDENTIFIER="004">
+        <TI.ART>Article 4</TI.ART>
+        <STI.ART>Définitions</STI.ART>
+        <ALINEA>
+          <P>Aux fins de la présente directive, on entend par:</P>
+          <LIST TYPE="ARAB">
+            <ITEM><NP><NO.P>55)</NO.P><TXT>${quoted("État membre d’origine")},</TXT></NP></ITEM>
+          </LIST>
+        </ALINEA>
+      </ARTICLE>`));
+
+    expect(result.definitions).toHaveLength(1);
+    expect(result.definitions[0]).toMatchObject({
+      term: "État membre d’origine",
+      definition: "",
+    });
+  });
+
+  it("still terminates a French term at its true closing quote", () => {
+    // A term with no elision, immediately followed by the ordinary
+    // comma/verb separator, must keep working exactly as before — the
+    // elision lookaround only ever widens the match when both neighbours of
+    // the quote character are letters.
+    const result = parseFmxToCombined(actWithArticlesLang("FR", `
+      <ARTICLE IDENTIFIER="004">
+        <TI.ART>Article 4</TI.ART>
+        <STI.ART>Définitions</STI.ART>
+        <ALINEA>
+          <P>Aux fins de la présente directive, on entend par:</P>
+          <LIST TYPE="ARAB">
+            <ITEM><NP><NO.P>1)</NO.P><TXT>${quoted("client professionnel")}, tout client qui possède l’expérience nécessaire.</TXT></NP></ITEM>
+          </LIST>
+        </ALINEA>
+      </ARTICLE>`));
+
+    expect(result.definitions).toHaveLength(1);
+    expect(result.definitions[0]).toMatchObject({
+      term: "client professionnel",
+      definition: "tout client qui possède l’expérience nécessaire.",
+    });
+  });
+
+  it("still rejects SV's quote-less colon fallback when it has no definition text", () => {
+    // The empty-definition allowance the elision fix needed above is scoped
+    // to quote-delimited languages, whose meansRegex path already accepted
+    // an empty group 2 for "'term' means:" followed by lettered sub-points.
+    // LT/SV's bare colon/dash fallback has no such structural signal and is
+    // already the most over-match-prone pattern in this parser (Finding 1),
+    // so it must keep requiring actual definition text even inside a titled
+    // definitions article.
+    const result = parseFmxToCombined(actWithArticlesLang("SV", `
+      <ARTICLE IDENTIFIER="004">
+        <TI.ART>Artikel 4</TI.ART>
+        <STI.ART>Definitioner</STI.ART>
+        <ALINEA>
+          <P>kreditinstitut:</P>
+        </ALINEA>
+      </ARTICLE>`));
+
+    expect(result.definitions).toEqual([]);
+  });
+});

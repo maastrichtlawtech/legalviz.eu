@@ -95,6 +95,13 @@ async function probe({ celex, label }) {
 
   // The finding this probe exists for: Cellar has Formex, the reader didn't use it.
   row.missed = Boolean(row.manifestation) && row.source === 'eurlex-html';
+
+  // #142/#148: REACH-shaped failure — the act parses to nothing renderable at
+  // all (zero articles, zero recitals, zero annexes), regardless of which
+  // parser served it. Distinct from `missed`: a `fmx-consolidated` source
+  // means the empty-parse fallback already recovered content, so it does not
+  // count as empty here even though the as-adopted act itself parsed empty.
+  row.emptyParse = row.articles === 0 && row.recitals === 0 && row.annexes === 0;
   return row;
 }
 
@@ -131,12 +138,14 @@ if (asJson) {
       + padStart(row.definitions, 6)
       + '  ' + pad(row.manifestation, 46)
       + (row.missed ? '  ← Formex exists, unused' : '')
+      + (row.emptyParse ? '  ⚠ EMPTY PARSE (0 articles/recitals/annexes)' : '')
     );
   }
 
   const missed = rows.filter((row) => row.missed);
   const noFmx = rows.filter((row) => !row.manifestation);
+  const empty = rows.filter((row) => row.emptyParse);
   console.log('─'.repeat(118));
-  console.log(`${rows.length} acts · ${missed.length} with unused Formex · ${noFmx.length} with none published\n`);
-  if (missed.length) process.exitCode = 1;
+  console.log(`${rows.length} acts · ${missed.length} with unused Formex · ${noFmx.length} with none published · ${empty.length} with an empty parse\n`);
+  if (missed.length || empty.length) process.exitCode = 1;
 }

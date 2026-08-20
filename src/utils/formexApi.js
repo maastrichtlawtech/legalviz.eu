@@ -60,10 +60,18 @@ export class FormexApiError extends Error {
 // Railway may return a transient gateway/service error while waking the API
 // process after an idle period. Keep the retry window bounded so ordinary API
 // failures still reach the caller promptly, while giving a cold start time to
-// become ready without requiring a page reload.
-const SEARCH_RETRY_DELAYS_MS = [1000, 2000, 4000];
+// become ready without requiring a page reload (15s total: 1s + 2s + 4s + 8s).
+const SEARCH_RETRY_DELAYS_MS = [1000, 2000, 4000, 8000];
 
 function isTransientSearchError(error) {
+  // backend/server.js calls legalCacheStore.load() synchronously before
+  // app.listen(), so by the time a request is accepted the store is either
+  // ready or permanently failed. legal-cache-store.js's searchLaws() throws
+  // this code (via readApiError reading body.code) when isReady() is false —
+  // that's a terminal 503, not a cold-start signal, so retrying it only
+  // delays the final error by the whole backoff window.
+  if (error?.code === "search_cache_unavailable") return false;
+
   const status = Number(error?.status);
   return (status >= 500 && status <= 599)
     || error?.name === "TypeError"

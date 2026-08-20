@@ -261,7 +261,7 @@ export function SearchBox({
         setLawSearchError(error?.message || t("search.apiUnavailable"));
       })
       .finally(() => {
-        if (lawSearchAbortRef.current === controller && lawSearchRequestIdRef.current === requestId) {
+        if (lawSearchAbortRef.current === controller) {
           lawSearchAbortRef.current = null;
           setIsLawSearchLoading(false);
         }

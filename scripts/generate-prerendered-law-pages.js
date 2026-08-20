@@ -118,14 +118,47 @@ function getApiBase() {
     || "https://api.legalviz.eu";
 }
 
+const FETCH_MAX_ATTEMPTS = 4;
+const FETCH_RETRY_BASE_MS = 1000;
+const FETCH_RETRY_CAP_MS = 8000;
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function fetchRetryDelay(attempt) {
+  return Math.min(FETCH_RETRY_CAP_MS, FETCH_RETRY_BASE_MS * 2 ** (attempt - 1)) + Math.floor(Math.random() * 300);
+}
+
+// Production fetches during prerender see occasional transient 502/503s from
+// the API's upstream; retry those (and network errors) before giving up,
+// since a single flaky fetch would otherwise fail the whole build.
+async function fetchWithRetry(url, describe, attempt = 1) {
+  let response;
+  try {
+    response = await fetch(url);
+  } catch (error) {
+    if (attempt >= FETCH_MAX_ATTEMPTS) throw new Error(`${describe}: ${error.message}`);
+    await sleep(fetchRetryDelay(attempt));
+    return fetchWithRetry(url, describe, attempt + 1);
+  }
+
+  if (!response.ok) {
+    if ((response.status === 429 || response.status >= 500) && attempt < FETCH_MAX_ATTEMPTS) {
+      await sleep(fetchRetryDelay(attempt));
+      return fetchWithRetry(url, describe, attempt + 1);
+    }
+    throw new Error(`${describe}: ${response.status} ${response.statusText}`);
+  }
+
+  return response;
+}
+
 async function fetchLawData(law, lang = "EN") {
   if (!law.celex) return null;
 
   const url = `${getApiBase()}/api/laws/${encodeURIComponent(law.celex)}?lang=${toApiLang(lang)}`;
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(`Fetch failed for ${law.slug}: ${response.status} ${response.statusText}`);
-  }
+  const response = await fetchWithRetry(url, `Fetch failed for ${law.slug}`);
 
   const contentType = response.headers.get("content-type") || "";
   let xmlText;
@@ -147,10 +180,7 @@ async function fetchLawSummary(law, lang = "EN") {
   if (!law.celex) return null;
 
   const url = `${getApiBase()}/api/laws/${encodeURIComponent(law.celex)}/summary?lang=${toApiLang(lang)}`;
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(`Summary fetch failed for ${law.slug}: ${response.status} ${response.statusText}`);
-  }
+  const response = await fetchWithRetry(url, `Summary fetch failed for ${law.slug}`);
 
   return response.json();
 }

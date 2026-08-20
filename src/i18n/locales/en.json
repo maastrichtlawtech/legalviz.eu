@@ -458,7 +458,10 @@
     "amendedOnceWithDate": "It has been amended once since, on {date}.",
     "amended": "It has been amended {count} times since.",
     "amendedOnce": "It has been amended once since.",
+    "amendedAtLeastWithDate": "It has been amended at least {count} times since, most recently on {date}.",
+    "amendedAtLeast": "It has been amended at least {count} times since.",
     "readConsolidated": "Read the consolidated text as of {date} on EUR-Lex",
-    "noConsolidatedVersion": "EUR-Lex has not published a consolidated version."
+    "noConsolidatedVersion": "EUR-Lex has not published a consolidated version.",
+    "consolidatedVersionPending": "A consolidated version has been prepared but is not yet in force."
   }
 }

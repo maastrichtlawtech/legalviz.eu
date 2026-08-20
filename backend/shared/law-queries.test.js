@@ -203,7 +203,9 @@ test('fetchConsolidatedVersions maps point-in-time CELEX ids to dated versions',
 
 test('fetchConsolidatedVersions skips SPARQL for CELEX ids that cannot be consolidated', async () => {
   let called = false;
-  const payload = await fetchConsolidatedVersions('62025TJ0123', async () => {
+  // Already a point-in-time consolidated id itself (sector 0 + trailing
+  // date) — not shaped like an original act, so it must not be re-consolidated.
+  const payload = await fetchConsolidatedVersions('02013R0575-20260626', async () => {
     called = true;
     return { results: { bindings: [] } };
   });
@@ -211,4 +213,39 @@ test('fetchConsolidatedVersions skips SPARQL for CELEX ids that cannot be consol
   assert.equal(called, false);
   assert.equal(payload.base, null);
   assert.deepEqual(payload.versions, []);
+});
+
+test('fetchConsolidatedVersions matches a suffixed original act, not just sector 3', async () => {
+  let query = '';
+  const payload = await fetchConsolidatedVersions('31999F0130(06)', async (value) => {
+    query = value;
+    return {
+      results: {
+        bindings: [
+          { id: { value: '01999F0130(06)-20021220' } },
+        ],
+      },
+    };
+  });
+
+  assert.match(query, /STRSTARTS\(STR\(\?id\), "01999F0130\(06\)-"\)/);
+  assert.equal(payload.base, '01999F0130(06)');
+  assert.deepEqual(payload.versions, [
+    { celex: '01999F0130(06)-20021220', date: '2002-12-20' },
+  ]);
+});
+
+test('fetchConsolidatedVersions matches a sector-2 international agreement', async () => {
+  const payload = await fetchConsolidatedVersions('21994A0103(01)', async () => ({
+    results: {
+      bindings: [
+        { id: { value: '01994A0103(01)-20160519' } },
+      ],
+    },
+  }));
+
+  assert.equal(payload.base, '01994A0103(01)');
+  assert.deepEqual(payload.versions, [
+    { celex: '01994A0103(01)-20160519', date: '2016-05-19' },
+  ]);
 });

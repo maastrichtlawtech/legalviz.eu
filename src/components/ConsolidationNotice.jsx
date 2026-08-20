@@ -31,10 +31,17 @@ export function ConsolidationNotice({ celex, currentLang = "EN", locale = "en", 
     : null;
 
   // The catalog carries no plural machinery, so the singular is its own key.
-  const once = status.amendmentCount === 1;
+  // A truncated amendment count is a lower bound, never an exact number (see
+  // `truncated` in fetchAmendments), so it gets its own "at least N" copy
+  // rather than risk stating a precise-looking figure that is provably wrong.
+  const once = status.amendmentCount === 1 && status.amendmentCountExact;
   const summaryKey = amendedOn
-    ? (once ? "consolidation.amendedOnceWithDate" : "consolidation.amendedWithDate")
-    : (once ? "consolidation.amendedOnce" : "consolidation.amended");
+    ? (status.amendmentCountExact
+      ? (once ? "consolidation.amendedOnceWithDate" : "consolidation.amendedWithDate")
+      : "consolidation.amendedAtLeastWithDate")
+    : (status.amendmentCountExact
+      ? (once ? "consolidation.amendedOnce" : "consolidation.amended")
+      : "consolidation.amendedAtLeast");
   const summary = t(summaryKey, { count: status.amendmentCount, date: amendedOn });
 
   const link = consolidatedUrl ? (
@@ -48,6 +55,20 @@ export function ConsolidationNotice({ celex, currentLang = "EN", locale = "en", 
       <ExternalLink size={13} aria-hidden="true" />
     </a>
   ) : null;
+
+  // No link means either: no consolidated version has ever been published
+  // (say so), only future-dated ones exist (say that instead, honestly), or
+  // the /consolidated fetch itself failed (say nothing — we don't know).
+  let noVersionMessage = null;
+  if (!link) {
+    if (status.consolidatedStatusUnknown) {
+      noVersionMessage = null;
+    } else if (status.hasUpcomingConsolidation) {
+      noVersionMessage = t("consolidation.consolidatedVersionPending");
+    } else {
+      noVersionMessage = t("consolidation.noConsolidatedVersion");
+    }
+  }
 
   if (variant === "inline") {
     return (
@@ -68,7 +89,7 @@ export function ConsolidationNotice({ celex, currentLang = "EN", locale = "en", 
       </div>
       <p className="mt-1 leading-6">
         {summary}
-        {link ? <> {link}</> : <> {t("consolidation.noConsolidatedVersion")}</>}
+        {link ? <> {link}</> : (noVersionMessage ? <> {noVersionMessage}</> : null)}
       </p>
     </div>
   );

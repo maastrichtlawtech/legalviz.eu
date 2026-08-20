@@ -110,7 +110,7 @@ describe("ConsolidationNotice", () => {
     expect(container.textContent).toBe("");
   });
 
-  it("ignores a consolidated version that has not applied yet", async () => {
+  it("says a consolidated version is pending when only future-dated ones exist", async () => {
     vi.setSystemTime(new Date("2026-08-12T00:00:00Z"));
     fetchAmendments.mockResolvedValue({
       amendments: [{ celex: "32026R0001", date: "2026-01-01", type: "amendment" }],
@@ -121,7 +121,38 @@ describe("ConsolidationNotice", () => {
 
     await render();
 
-    expect(container.textContent).toContain("has not published a consolidated version");
+    expect(container.textContent).toContain("has been prepared but is not yet in force");
+    expect(container.textContent).not.toContain("has not published a consolidated version");
     vi.useRealTimers();
+  });
+
+  it("does not claim no consolidated version exists when the /consolidated fetch fails", async () => {
+    fetchAmendments.mockResolvedValue({
+      amendments: [{ celex: "32020R0001", date: "2020-01-01", type: "amendment" }],
+    });
+    fetchConsolidatedVersions.mockRejectedValue(new Error("cellar timeout"));
+
+    await render();
+
+    expect(container.textContent).toContain("amended once");
+    expect(container.textContent).not.toContain("has not published a consolidated version");
+    expect(container.querySelector("a")).toBe(null);
+  });
+
+  it("says 'at least N times' when the amendment count was truncated", async () => {
+    fetchAmendments.mockResolvedValue({
+      amendments: [
+        { celex: "32019R0876", date: "2019-05-20", type: "amendment" },
+        { celex: "32024R1623", date: "2024-05-31", type: "amendment" },
+      ],
+      truncated: true,
+    });
+    fetchConsolidatedVersions.mockResolvedValue({
+      versions: [{ celex: "02013R0575-20260626", date: "2026-06-26" }],
+    });
+
+    await render();
+
+    expect(container.textContent).toContain("amended at least 2 times");
   });
 });

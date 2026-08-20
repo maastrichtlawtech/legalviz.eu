@@ -722,14 +722,33 @@ export async function fetchFormex(celex, lang = "EN") {
       );
     }
 
-    // 4. Cache it
-    await cacheSet(cacheKey, xmlText);
-    await upsertLawMeta(celex, { cachedAt: Date.now() });
-    await pruneCacheIfNeeded(celex, PROTECTED_BUNDLED_CELEXES);
-    if (typeof window !== "undefined") {
-      window.dispatchEvent(new CustomEvent("legalviz-formex-cache-updated", {
-        detail: { celex, lang: lang.toUpperCase() },
-      }));
+    // 4. Cache it — but only when it actually parses to a law with content.
+    // A response can be a well-formed Formex document with zero articles/
+    // recitals/annexes (see #148/#153: REACH has no as-adopted manifestation
+    // at all). Caching that raw XML would let it be served forever as a
+    // "cache hit" — this function's own cache-read check above only
+    // validates isFmxDocument, not content — and would add the law to the
+    // library via upsertLawMeta even though it can never be read. Skip
+    // persistence in that case; still return the XML so the caller renders
+    // the empty-content notice instead of a load error. On an unexpected
+    // parse failure here, cache as before rather than block on a check this
+    // function doesn't otherwise need to make.
+    let hasContent = true;
+    try {
+      hasContent = payloadHasContent(parseFmxToCombined(xmlText));
+    } catch {
+      // ignore — isFmxDocument already validated the shape above
+    }
+
+    if (hasContent) {
+      await cacheSet(cacheKey, xmlText);
+      await upsertLawMeta(celex, { cachedAt: Date.now() });
+      await pruneCacheIfNeeded(celex, PROTECTED_BUNDLED_CELEXES);
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("legalviz-formex-cache-updated", {
+          detail: { celex, lang: lang.toUpperCase() },
+        }));
+      }
     }
 
     return xmlText;

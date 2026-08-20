@@ -283,6 +283,15 @@ describe("law-text fetch body validation", () => {
     expect(await fetchFormex(CELEX, "EN")).toBe(FMX_XML);
     expect(await readCache(CACHE_KEY)).toBe(FMX_XML);
   });
+
+  it("returns but does not cache or add to the library a well-formed Formex body with zero content", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(textResponse(EMPTY_FMX_XML)));
+
+    const { fetchFormex, getLawMeta } = await importFormexApi();
+    expect(await fetchFormex(CELEX, "EN")).toBe(EMPTY_FMX_XML);
+    expect(await readCache(CACHE_KEY)).toBeNull();
+    expect(await getLawMeta(CELEX)).toBeNull();
+  });
 });
 
 describe("API JSON envelope (API_JSON_CACHE_VERSION)", () => {

@@ -3,9 +3,11 @@ import { IDBFactory } from "fake-indexeddb";
 import { PARSER_VERSION } from "./fmxParser.js";
 
 // Minimal body that satisfies isFmxDocument (contains "<ACT", "formex",
-// "<ENACTING.TERMS") without needing to be fully parseable in these tests —
-// the code paths under test never run parseFmxToCombined on it.
-const VALID_FMX = '<?xml version="1.0"?><ACT xmlns="http://formex.publications.europa.eu"><ENACTING.TERMS></ENACTING.TERMS></ACT>';
+// "<ENACTING.TERMS") and parses to a non-empty law — fetchFormex parses the
+// body to check for content before caching it (see #153), so an empty
+// <ENACTING.TERMS> here would make it (correctly) refuse to cache this
+// fixture, which is not what these poisoned-cache/validation tests exercise.
+const VALID_FMX = '<?xml version="1.0"?><ACT xmlns="http://formex.publications.europa.eu"><ENACTING.TERMS><ARTICLE IDENTIFIER="001"><TI.ART>Article 1</TI.ART><ALINEA><P>Text.</P></ALINEA></ARTICLE></ENACTING.TERMS></ACT>';
 const HTML_ERROR_PAGE = "<html><head><title>502</title></head><body>Bad gateway</body></html>";
 const CACHE_KEY = "32016R0679_ENG";
 

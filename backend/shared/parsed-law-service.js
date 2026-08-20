@@ -61,6 +61,7 @@ function createParsedLawResolver({ prepareLawPayload, fetchAndParseHtmlLaw, CELE
       source,
       ...parsed,
     };
+    result.hasContent = hasParsedLawContent(parsed);
 
     cacheSet(parsedCache, cacheKey, result, PARSED_LAW_CACHE_MS, MAX_PARSED_CACHE_ENTRIES);
     return result;
@@ -69,7 +70,20 @@ function createParsedLawResolver({ prepareLawPayload, fetchAndParseHtmlLaw, CELE
   return resolveParsedLaw;
 }
 
+function hasParsedLawContent(parsed) {
+  return Boolean(
+    parsed
+    && (
+      parsed.articles?.length
+      || parsed.recitals?.length
+      || parsed.annexes?.length
+      || parsed.definitions?.length
+    )
+  );
+}
+
 module.exports = {
   createParsedLawResolver,
+  hasParsedLawContent,
   PARSED_LAW_CACHE_MS,
 };

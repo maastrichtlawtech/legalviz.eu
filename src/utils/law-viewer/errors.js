@@ -54,3 +54,13 @@ export function getLoadErrorDetails(error, t) {
     tone: "error",
   };
 }
+
+export function getEmptyContentDetails(t) {
+  return {
+    title: t("lawViewer.emptyContentTitle"),
+    message: t("lawViewer.emptyContentMessage"),
+    fallbackUrl: null,
+    status: null,
+    tone: "notice",
+  };
+}

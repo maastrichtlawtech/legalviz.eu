@@ -161,7 +161,7 @@ describe("formexApi cache hygiene", () => {
 
   describe("fetchParsedLaw parser-version stamping", () => {
     it("stamps the envelope with the backend's reported parserVersion so old-shape payloads read as stale", async () => {
-      const stalePayload = { title: "GDPR", articles: [], parserVersion: PARSER_VERSION - 1 };
+      const stalePayload = { title: "GDPR", articles: [{}], parserVersion: PARSER_VERSION - 1 };
       const fetchMock = vi.fn(async () => jsonResponse(stalePayload));
       vi.stubGlobal("fetch", fetchMock);
 
@@ -183,7 +183,7 @@ describe("formexApi cache hygiene", () => {
     });
 
     it("serves the cached payload without refetching when the backend parserVersion is current", async () => {
-      const currentPayload = { title: "GDPR", articles: [], parserVersion: PARSER_VERSION };
+      const currentPayload = { title: "GDPR", articles: [{}], parserVersion: PARSER_VERSION };
       const fetchMock = vi.fn(async () => jsonResponse(currentPayload));
       vi.stubGlobal("fetch", fetchMock);
 

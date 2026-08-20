@@ -40,6 +40,14 @@ const FMX_XML = `<?xml version="1.0" encoding="UTF-8"?>
   </ACT>
 </COMBINED.FMX>`;
 
+const EMPTY_FMX_XML = `<?xml version="1.0" encoding="UTF-8"?>
+<COMBINED.FMX>
+  <ACT>
+    <TITLE><TI><P>Empty Regulation</P></TI></TITLE>
+    <ENACTING.TERMS></ENACTING.TERMS>
+  </ACT>
+</COMBINED.FMX>`;
+
 // What a captive portal or misconfigured proxy answers 200 with.
 const HTML_ERROR_PAGE = "<!DOCTYPE html><html><body>Sign in to continue</body></html>";
 
@@ -136,11 +144,22 @@ describe("parsed-law envelope (PARSER_VERSION)", () => {
     await seedCache(CACHE_KEY, {
       format: "combined-v1",
       parserVersion: PARSER_VERSION,
-      payload: { title: "Cached title", articles: [], recitals: [] },
+      payload: { title: "Cached title", articles: [{}], recitals: [] },
     });
 
     const result = await getCachedLawPayload(CELEX, "EN");
     expect(result.payload.title).toBe("Cached title");
+  });
+
+  it("does not serve a current zero-content envelope", async () => {
+    const { getCachedLawPayload } = await importFormexApi();
+    await seedCache(CACHE_KEY, {
+      format: "combined-v1",
+      parserVersion: PARSER_VERSION,
+      payload: { title: "Empty cached title", articles: [], recitals: [], annexes: [] },
+    });
+
+    expect(await getCachedLawPayload(CELEX, "EN")).toBeNull();
   });
 
   it("re-parses a stale envelope from its raw XML and re-stamps the cache", async () => {
@@ -148,7 +167,7 @@ describe("parsed-law envelope (PARSER_VERSION)", () => {
     await seedCache(CACHE_KEY, {
       format: "combined-v1",
       parserVersion: PARSER_VERSION - 1,
-      payload: { title: "Parsed by an older version", articles: [], recitals: [] },
+      payload: { title: "Parsed by an older version", articles: [{}], recitals: [] },
       rawXml: FMX_XML,
     });
 
@@ -197,6 +216,14 @@ describe("parsed-law envelope (PARSER_VERSION)", () => {
     expect(persisted.rawXml).toBe(FMX_XML);
   });
 
+  it("does not upgrade a legacy raw-XML cache entry that parses to zero content", async () => {
+    const { getCachedLawPayload } = await importFormexApi();
+    await seedCache(CACHE_KEY, EMPTY_FMX_XML);
+
+    expect(await getCachedLawPayload(CELEX, "EN")).toBeNull();
+    expect(await readCache(CACHE_KEY)).toBe(EMPTY_FMX_XML);
+  });
+
   it("ignores a poisoned raw entry that is not a Formex document", async () => {
     const { getCachedFormex, getCachedLawPayload, hasCachedFormex } = await importFormexApi();
     await seedCache(CACHE_KEY, HTML_ERROR_PAGE);
@@ -210,13 +237,32 @@ describe("parsed-law envelope (PARSER_VERSION)", () => {
     // A /parsed response from another deploy must not be labelled "current":
     // with no rawXml it could never self-heal.
     const { cacheParsedLaw, getCachedLawPayload } = await importFormexApi();
-    cacheParsedLaw(CELEX, "EN", { title: "From another deploy", parserVersion: PARSER_VERSION + 7 }, null);
+    cacheParsedLaw(CELEX, "EN", { title: "From another deploy", articles: [{}], parserVersion: PARSER_VERSION + 7 }, null);
 
     await vi.waitFor(async () => {
       expect(await readCache(CACHE_KEY)).not.toBeNull();
     });
     expect((await readCache(CACHE_KEY)).parserVersion).toBe(PARSER_VERSION + 7);
     expect(await getCachedLawPayload(CELEX, "EN")).toBeNull();
+  });
+
+  it("does not cache a zero-content payload from the local parser", async () => {
+    const { cacheParsedLaw } = await importFormexApi();
+    cacheParsedLaw(CELEX, "EN", { title: "Empty law", articles: [], recitals: [], annexes: [] }, null);
+
+    expect(await readCache(CACHE_KEY)).toBeNull();
+  });
+});
+
+describe("parsed-law fetch persistence", () => {
+  it("returns but does not persist a zero-content response or add it to the library", async () => {
+    const emptyPayload = { title: "Empty law", articles: [], recitals: [], annexes: [] };
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(emptyPayload)));
+
+    const { fetchParsedLaw, getLawMeta } = await importFormexApi();
+    await expect(fetchParsedLaw(CELEX, "EN")).resolves.toEqual(emptyPayload);
+    expect(await readCache(CACHE_KEY)).toBeNull();
+    expect(await getLawMeta(CELEX)).toBeNull();
   });
 });
 

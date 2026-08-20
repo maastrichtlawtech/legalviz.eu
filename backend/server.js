@@ -6,7 +6,7 @@ const { JsonLegalCacheStore, DEFAULT_SEARCH_CACHE_PATH } = require('./search/sea
 const { CitationGraphStore, DEFAULT_CITATION_GRAPH_PATH } = require('./search/citation-graph-store');
 const { registerApiRoutes } = require('./routes/api-routes');
 const { registerMcpEndpoint } = require('./mcp/mcp-http');
-const { createParsedLawResolver } = require('./shared/parsed-law-service');
+const { createParsedLawResolver, hasParsedLawContent } = require('./shared/parsed-law-service');
 const { createFmxService } = require('./shared/fmx-service');
 const { fetchEurlexHtmlLaw, parseEurlexHtmlToCombined, closeSharedPlaywrightBrowser } = require('./shared/eurlex-html-parser');
 const { createHtmlCacheService } = require('./shared/html-cache-service');
@@ -120,18 +120,6 @@ const CELEX_NAMES = {
   '32022R0868': 'DGA',
   '32023R2854': 'DA'
 };
-
-function hasParsedLawContent(parsed) {
-  return Boolean(
-    parsed
-    && (
-      parsed.articles?.length
-      || parsed.recitals?.length
-      || parsed.annexes?.length
-      || parsed.definitions?.length
-    )
-  );
-}
 
 // fetchEurlexHtmlLaw always fetches the English EUR-Lex HTML page regardless of the
 // requested language (see shared/eurlex-html-parser.js). Cache lookups/writes must key

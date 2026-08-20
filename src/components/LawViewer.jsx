@@ -37,6 +37,7 @@ import { useLawViewerPrint } from "../hooks/law-viewer/useLawViewerPrint.js";
 import { useDefinitionComparison } from "../hooks/law-viewer/useDefinitionComparison.js";
 import { EU_LANGUAGES } from "../utils/formexApi.js";
 import { getCanonicalLawRoute } from "../utils/lawRouting.js";
+import { getEmptyContentDetails } from "../utils/law-viewer/errors.js";
 import { buildChapterEyebrow } from "../utils/law-viewer/tocFormat.js";
 import { LawViewerLoadingState } from "./law-viewer/LawViewerLoadingState.jsx";
 import { LawViewerErrorState } from "./law-viewer/LawViewerErrorState.jsx";
@@ -362,6 +363,12 @@ export function LawViewer() {
                   loadError={activeLoadError}
                   externalFallbackUrl={derived.externalFallbackUrl}
                   retryLoad={source.loadError ? source.retryLoad : primaryDocument.reload}
+                  t={t}
+                />
+              ) : !activeLoadError && !derived.hasLoadedContent ? (
+                <LawViewerErrorState
+                  loadError={getEmptyContentDetails(t)}
+                  externalFallbackUrl={derived.externalFallbackUrl}
                   t={t}
                 />
               ) : selection.selected.kind === "overview" ? (

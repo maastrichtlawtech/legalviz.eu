@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { FormexApiError } from "../formexApi.js";
-import { getLoadErrorDetails, isMissingStructuredLawText } from "./errors.js";
+import { getEmptyContentDetails, getLoadErrorDetails, isMissingStructuredLawText } from "./errors.js";
 
 const t = (key) => key;
 
@@ -31,5 +31,17 @@ describe("getLoadErrorDetails", () => {
     const details = getLoadErrorDetails(new Error("boom"), t);
     expect(details.tone).toBe("error");
     expect(details.message).toContain("boom");
+  });
+});
+
+describe("getEmptyContentDetails", () => {
+  it("builds a notice without a retry or error status", () => {
+    expect(getEmptyContentDetails(t)).toEqual({
+      title: "lawViewer.emptyContentTitle",
+      message: "lawViewer.emptyContentMessage",
+      fallbackUrl: null,
+      status: null,
+      tone: "notice",
+    });
   });
 });

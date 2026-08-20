@@ -18,6 +18,7 @@ test('resolveParsedLaw uses the HTML fallback path when skipFmxProbe is set and 
   assert.equal(first.source, 'eurlex-html');
   assert.equal(first.name, 'GDPR');
   assert.equal(first.format, 'combined-v1');
+  assert.equal(first.hasContent, false);
 
   const second = await resolveParsedLaw('32016R0679', 'ENG', { skipFmxProbe: true });
   assert.equal(second.title, first.title);
@@ -51,4 +52,25 @@ test('resolveParsedLaw propagates servedLang from the HTML fallback without over
   const result = await resolveParsedLaw('32016R0679', 'FRA', { skipFmxProbe: true });
   assert.equal(result.lang, 'FRA', 'top-level lang should stay the requested language for routing/URL state');
   assert.equal(result.servedLang, 'ENG', 'servedLang should surface the language actually served');
+});
+
+test('resolveParsedLaw stamps hasContent from parsed collections after spreading the parser result', async () => {
+  const resolveParsedLaw = createParsedLawResolver({
+    prepareLawPayload: async () => { throw new Error('prepareLawPayload should not be called'); },
+    fetchAndParseHtmlLaw: async (celex) => ({
+      title: `Law ${celex}`,
+      articles: celex === 'empty' ? [] : [{}],
+      recitals: [],
+      annexes: [],
+      definitions: [],
+      crossReferences: {},
+      hasContent: true,
+    }),
+  });
+
+  const empty = await resolveParsedLaw('empty', 'ENG', { skipFmxProbe: true });
+  const populated = await resolveParsedLaw('populated', 'ENG', { skipFmxProbe: true });
+
+  assert.equal(empty.hasContent, false);
+  assert.equal(populated.hasContent, true);
 });

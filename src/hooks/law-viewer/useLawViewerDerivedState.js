@@ -20,6 +20,7 @@ export function useLawViewerDerivedState({
   const hasLoadedContent = primaryDocument.data.articles.length > 0
     || primaryDocument.data.recitals.length > 0
     || primaryDocument.data.annexes.length > 0;
+  // Backend content also counts definitions; keep the reader predicate unchanged so load errors remain visible.
   const hasCelex = !!source.effectiveCelex;
   const isSideBySide = !isLegacyHtmlFallback && !!preferences.secondaryLang && !!source.effectiveCelex;
 

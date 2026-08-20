@@ -35,15 +35,17 @@ export function LawViewerErrorState({ loadError, externalFallbackUrl, retryLoad,
               {t("common.openOnEurlex")}
             </Button>
           ) : null}
-          <Button
-            type="button"
-            variant="outline"
-            className={tone === "notice" ? "border-sky-200 bg-white text-sky-900 hover:bg-sky-100 dark:border-sky-800 dark:bg-sky-950/10 dark:text-sky-100 dark:hover:bg-sky-900/30" : ""}
-            onClick={retryLoad}
-          >
-            <RefreshCw size={16} />
-            {t("common.reloadPage")}
-          </Button>
+          {retryLoad ? (
+            <Button
+              type="button"
+              variant="outline"
+              className={tone === "notice" ? "border-sky-200 bg-white text-sky-900 hover:bg-sky-100 dark:border-sky-800 dark:bg-sky-950/10 dark:text-sky-100 dark:hover:bg-sky-900/30" : ""}
+              onClick={retryLoad}
+            >
+              <RefreshCw size={16} />
+              {t("common.reloadPage")}
+            </Button>
+          ) : null}
         </div>
       </div>
     </div>

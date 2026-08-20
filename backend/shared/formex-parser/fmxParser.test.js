@@ -1739,3 +1739,116 @@ describe("definition extraction: elision apostrophes in quote-delimited terms", 
     expect(result.definitions).toEqual([]);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Structural (DLIST) definitions and an HT-italic over-match guard
+// ---------------------------------------------------------------------------
+
+describe("definition extraction: structural DLIST entries", () => {
+  function actWithArticlesLang(langCode, articlesXml) {
+    return `<?xml version="1.0" encoding="UTF-8"?>
+<COMBINED.FMX>
+  <ACT>
+    <BIB.INSTANCE><LG.DOC>${langCode}</LG.DOC></BIB.INSTANCE>
+    <TITLE><TI><P>Regulation (EU) No 575/2013</P></TI></TITLE>
+    <ENACTING.TERMS>${articlesXml}</ENACTING.TERMS>
+  </ACT>
+</COMBINED.FMX>`;
+  }
+
+  it("reads DLIST.ITEM definitions structurally, using PREFIX as the source point", () => {
+    // Swedish CRR (32013R0575 SWE) Article 4 encodes each definition as
+    // DLIST > DLIST.ITEM > PREFIX/TERM/DEFINITION instead of the
+    // LIST/ITEM/NP/TXT shape definitionEntries() otherwise scans. No regex
+    // is needed: TERM and DEFINITION already name their role.
+    const result = parseFmxToCombined(actWithArticlesLang("SV", `
+      <ARTICLE IDENTIFIER="004">
+        <TI.ART>Artikel 4</TI.ART>
+        <STI.ART>Definitioner</STI.ART>
+        <PARAG IDENTIFIER="004.001"><NO.PARAG>1.</NO.PARAG>
+          <ALINEA>
+            <P>I denna förordning gäller följande definitioner:</P>
+            <DLIST SEPARATOR=":">
+              <DLIST.ITEM><PREFIX>(1)</PREFIX><TERM>kreditinstitut</TERM><DEFINITION>ett företag som tar emot insättningar.</DEFINITION></DLIST.ITEM>
+              <DLIST.ITEM><PREFIX>(2)</PREFIX><TERM>institut</TERM><DEFINITION>ett kreditinstitut eller ett värdepappersföretag.</DEFINITION></DLIST.ITEM>
+            </DLIST>
+          </ALINEA>
+        </PARAG>
+      </ARTICLE>`));
+
+    expect(result.definitions.map((d) => d.term)).toEqual(["kreditinstitut", "institut"]);
+    expect(result.definitions[0]).toMatchObject({
+      definition: "ett företag som tar emot insättningar.",
+      sourcePoint: "(1)",
+    });
+  });
+
+  it("does not flatten a DLIST into one blob via the PARAG/ALINEA prose fallback", () => {
+    // Before DLIST.ITEM was read structurally, definitionEntries() found no
+    // <ITEM> in this ALINEA and pushed the whole body — intro sentence plus
+    // every DLIST.ITEM concatenated — as one prose entry, matched only up
+    // to the intro's own colon by SV's quote-less fallback (the "~4
+    // junk-ish entries" this task started from).
+    const result = parseFmxToCombined(actWithArticlesLang("SV", `
+      <ARTICLE IDENTIFIER="005">
+        <TI.ART>Artikel 5</TI.ART>
+        <STI.ART>Särskilda definitioner</STI.ART>
+        <ALINEA>
+          <P>Vid tillämpningen av del tre gäller följande definitioner:</P>
+          <DLIST SEPARATOR=":">
+            <DLIST.ITEM><PREFIX>(1)</PREFIX><TERM>exponering</TERM><DEFINITION>en tillgång eller post utanför balansräkningen.</DEFINITION></DLIST.ITEM>
+          </DLIST>
+        </ALINEA>
+      </ARTICLE>`));
+
+    expect(result.definitions).toEqual([
+      expect.objectContaining({ term: "exponering", sourceArticle: "5" }),
+    ]);
+  });
+
+  it("does not adopt a DLIST.ITEM quoted from the act being amended", () => {
+    const result = parseFmxToCombined(actWithArticlesLang("SV", `
+      <ARTICLE IDENTIFIER="500">
+        <TI.ART>Artikel 500</TI.ART>
+        <STI.ART>Ändring av förordning (EU) nr 648/2012</STI.ART>
+        <ALINEA>
+          <P>Förordning (EU) nr 648/2012 ska ändras på följande sätt:</P>
+          <P><QUOT.S LEVEL="1">
+            <DLIST SEPARATOR=":">
+              <DLIST.ITEM><PREFIX>(1)</PREFIX><TERM>clearingmedlem</TERM><DEFINITION>en clearingmedlem enligt artikel 2.14.</DEFINITION></DLIST.ITEM>
+            </DLIST>
+          </QUOT.S></P>
+        </ALINEA>
+      </ARTICLE>`));
+
+    expect(result.definitions).toEqual([]);
+  });
+
+  it("does not treat HT-italic prose in an untitled article as a definition", () => {
+    // Swedish VAT (32006L0112 SWE) Article 5 marks its defined terms as
+    // <HT TYPE="ITALIC">term:</HT> instead of quoting them, but the article
+    // carries no STI.ART — declaresItself is false — and HT TYPE="ITALIC" is
+    // a generic emphasis marker used throughout Formex documents for
+    // reasons unrelated to defining a term. This shape is deliberately NOT
+    // given a title-gated fast path (see the task notes): even gated by
+    // title it would not help this real, untitled article, and loosening it
+    // to fire on untitled articles would reopen exactly the over-match risk
+    // the quote-less guard above already closes. allText() flattens the HT
+    // wrapper away, so this already falls through to the same quote-less
+    // colon fallback and the same untitled-article guard as any other
+    // language.
+    const result = parseFmxToCombined(actWithArticlesLang("SV", `
+      <ARTICLE IDENTIFIER="005">
+        <TI.ART>Artikel 5</TI.ART>
+        <ALINEA>
+          <P>Vid tillämpningen av detta direktiv avses med</P>
+          <LIST TYPE="ARAB">
+            <ITEM><NP><NO.P>1.</NO.P><TXT><HT TYPE="ITALIC">gemenskapen och gemenskapens territorium:</HT> medlemsstaternas samtliga territorier.</TXT></NP></ITEM>
+            <ITEM><NP><NO.P>2.</NO.P><TXT><HT TYPE="ITALIC">tredje territorier</HT>: de territorier som anges i artikel 6.</TXT></NP></ITEM>
+          </LIST>
+        </ALINEA>
+      </ARTICLE>`));
+
+    expect(result.definitions).toEqual([]);
+  });
+});

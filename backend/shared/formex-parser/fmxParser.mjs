@@ -1833,9 +1833,33 @@ export function parseFmxToCombined(xmlText) {
       }
     }
 
+    // Some languages (Swedish CRR, Regulation (EU) No 575/2013) encode each
+    // definition structurally instead of with quote marks or a repeated
+    // verb: <DLIST><DLIST.ITEM><PREFIX>(1)</PREFIX><TERM>kreditinstitut</TERM>
+    // <DEFINITION>…</DEFINITION></DLIST.ITEM>…</DLIST>. TERM and DEFINITION
+    // name their role explicitly, so no regex is needed — and unlike a regex
+    // match this can never be ambiguous, so `directTerm` entries are treated
+    // as unquoted-but-unambiguous below (see the corroboration comment near
+    // the bottom of this file).
+    for (const dlistItem of artEl.querySelectorAll("DLIST\\.ITEM")) {
+      if (dlistItem.closest("QUOT\\.S")) continue;
+      const termEl = dlistItem.querySelector(":scope > TERM");
+      const defEl = dlistItem.querySelector(":scope > DEFINITION");
+      if (!termEl || !defEl) continue;
+      const prefixEl = dlistItem.querySelector(":scope > PREFIX");
+      entries.push({ textEl: defEl, pointEl: prefixEl, group: null, directTerm: allText(termEl) });
+    }
+
     for (const parag of artEl.querySelectorAll("PARAG")) {
       if (parag.closest("QUOT\\.S")) continue;
-      if (parag.querySelector("ITEM")) continue;
+      // A DLIST is walked structurally above; flattening its ALINEA/PARAG
+      // through pushBody() as prose (below) would fold every DLIST.ITEM's
+      // term and definition into one garbled blob keyed off the intro
+      // sentence's own colon — exactly the shape that gave Swedish CRR
+      // ~31 junk definitions before the untitled-article guard, and here
+      // would also swallow the titled Article 4 that legitimately uses this
+      // structure.
+      if (parag.querySelector("ITEM") || parag.querySelector("DLIST\\.ITEM")) continue;
       pushBody(parag.querySelector("ALINEA") || parag, parag.querySelector("NO\\.PARAG"));
     }
 
@@ -1843,7 +1867,7 @@ export function parseFmxToCombined(xmlText) {
     // straight off the ARTICLE (VAT Article 48 again).
     for (const child of artEl.children) {
       if (child.tagName !== "ALINEA") continue;
-      if (child.querySelector("ITEM")) continue;
+      if (child.querySelector("ITEM") || child.querySelector("DLIST\\.ITEM")) continue;
       pushBody(child, null);
     }
 
@@ -1864,7 +1888,7 @@ export function parseFmxToCombined(xmlText) {
     // folded into its definition text instead of being dropped.
     let openContinuation = null;
 
-    for (const { textEl, pointEl, group } of definitionEntries(artEl)) {
+    for (const { textEl, pointEl, group, directTerm } of definitionEntries(artEl)) {
       const text = allText(textEl);
       if (!text) continue;
       const txtEl = textEl;
@@ -1881,6 +1905,22 @@ export function parseFmxToCombined(xmlText) {
         ],
       });
 
+      let matched = null;
+
+      if (directTerm) {
+        // Structural DLIST.ITEM entry (see definitionEntries): TERM and
+        // DEFINITION already name the term and its text, so no pattern
+        // match is needed. Unambiguous by construction — treat it like a
+        // quoted match for the untitled-article corroboration bar below.
+        const term = directTerm.trim();
+        if (term) matched = makeDefinition(term, text, true);
+        if (matched) {
+          found.push(matched);
+          openContinuation = null;
+          continue;
+        }
+      }
+
       // Verb-first languages (GA, IT, ES, PT): meansVerb 'term' definition.
       // Term-first languages: 'term' meansVerb definition.
       // Either way, try the configured meansVerb first, then fall back to the
@@ -1889,7 +1929,6 @@ export function parseFmxToCombined(xmlText) {
       // The verb-first languages need that fallback too: FR/IT/ES/PT state
       // the verb once ("on entend par:") and then list «terme», définition.
       const termMatch = text.match(meansRegex);
-      let matched = null;
       if (termMatch?.[1]) {
         const term = termMatch[1].trim();
         const definition = text.slice(termMatch[0].length).trim();

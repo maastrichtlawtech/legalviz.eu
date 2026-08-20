@@ -4,6 +4,7 @@ import { LawSummary } from "../LawSummary.jsx";
 import { MetadataPanel } from "../MetadataPanel.jsx";
 import { CaseLawModal } from "../CaseLawModal.jsx";
 import { ConsolidationNotice } from "../ConsolidationNotice.jsx";
+import { ConsolidatedFallbackNotice } from "./ConsolidatedFallbackNotice.jsx";
 import { formatMetaDate } from "../../utils/formatMetaDate.js";
 import { Pill } from "../ui/Pill.jsx";
 import { useLawMetadata } from "../../hooks/useLawMetadata.js";
@@ -185,19 +186,10 @@ export function LawOverviewPage({
         source={data?.source}
       />
 
-      {data?.source === "fmx-consolidated" ? (
-        <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/20 dark:text-amber-100">
-          <div className="font-medium">{t("lawViewer.consolidatedFallbackTitle")}</div>
-          <p className="mt-1 leading-6">
-            {data.consolidatedVersion?.date
-              ? t("lawViewer.consolidatedFallbackMessageWithDate", { date: data.consolidatedVersion.date })
-              : t("lawViewer.consolidatedFallbackMessage")}
-          </p>
-          <p className="mt-1 leading-6">
-            {t("lawViewer.consolidatedFallbackNoRecitals")}
-          </p>
-        </div>
-      ) : null}
+      <ConsolidatedFallbackNotice
+        source={data?.source}
+        consolidatedVersion={data?.consolidatedVersion}
+      />
 
       {/* Actions */}
       <div className="mb-8 flex flex-wrap gap-3">

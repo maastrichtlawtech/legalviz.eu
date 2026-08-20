@@ -47,6 +47,7 @@ import { DefinitionTooltip } from "./law-viewer/DefinitionTooltip.jsx";
 import { LawViewerReadingFooter } from "./law-viewer/LawViewerReadingFooter.jsx";
 import { LawViewerContextRail } from "./law-viewer/LawViewerContextRail.jsx";
 import { LawOverviewPage } from "./law-viewer/LawOverviewPage.jsx";
+import { ConsolidatedFallbackNotice } from "./law-viewer/ConsolidatedFallbackNotice.jsx";
 import { DefinitionComparisonSheet } from "./law-viewer/DefinitionComparisonSheet.jsx";
 import { ConsolidationNotice } from "./ConsolidationNotice.jsx";
 
@@ -415,19 +416,10 @@ export function LawViewer() {
                     source={primaryDocument.data.source}
                   />
 
-                  {derived.isConsolidatedFallback ? (
-                    <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/20 dark:text-amber-100">
-                      <div className="font-medium">{t("lawViewer.consolidatedFallbackTitle")}</div>
-                      <p className="mt-1 leading-6">
-                        {derived.consolidatedVersion?.date
-                          ? t("lawViewer.consolidatedFallbackMessageWithDate", { date: derived.consolidatedVersion.date })
-                          : t("lawViewer.consolidatedFallbackMessage")}
-                      </p>
-                      <p className="mt-1 leading-6">
-                        {t("lawViewer.consolidatedFallbackNoRecitals")}
-                      </p>
-                    </div>
-                  ) : null}
+                  <ConsolidatedFallbackNotice
+                    source={primaryDocument.data.source}
+                    consolidatedVersion={derived.consolidatedVersion}
+                  />
 
                   {interactions.isResolvingExternalLaw ? (
                     <div className="mb-4 flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-200">

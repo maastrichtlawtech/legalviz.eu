@@ -132,8 +132,22 @@ if (options.kind === "data") {
     );
   }
   sections.push(assetSection(["search-cache.json.gz", "case-law-cache.json.gz", "citation-graph.json.gz", "definitions.json.gz", "data.sqlite"]));
-  const added = readLines("corpus-missing.txt");
-  sections.push(celexSample(added, `${num(added.length)} acts backfilled into the search cache`));
+  // What the backfill actually added, not what it was asked to try. These
+  // differ: the scan that builds corpus-missing.txt derives ids from corpus
+  // filenames, and anything Cellar has no primary ELI for is dropped rather
+  // than added. Reading the request list here once reported "80,465 acts
+  // backfilled" on a release whose record count moved by zero.
+  const backfill = readJson("backfill-result.json");
+  if (backfill) {
+    const addedIds = Array.isArray(backfill.addedIds) ? backfill.addedIds : [];
+    sections.push(celexSample(addedIds, `${num(addedIds.length)} acts added to the search cache`));
+    const requested = readLines("corpus-missing.txt").length;
+    const dropped = Array.isArray(backfill.dropped) ? backfill.dropped.length : 0;
+    if (dropped) {
+      const wereDropped = dropped === 1 ? "was dropped" : "were dropped";
+      sections.push(`The corpus scan asked for **${num(requested)}** ids; **${num(dropped)}** ${wereDropped} (no primary ELI in Cellar, or not a queryable CELEX id).`);
+    }
+  }
 }
 
 if (options.kind === "fulltext") {

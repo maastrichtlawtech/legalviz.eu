@@ -19,6 +19,8 @@
 //     --cachePath search/data/search-cache.json.gz
 //   node search/backfill-cache.js --celex @missing.txt \
 //     --cachePath in.json.gz --out out.json.gz
+//   node search/backfill-cache.js --celex @missing.txt \
+//     --result-json backfill-result.json   # {added, addedIds, replaced, dropped}
 
 const fs = require("fs");
 const path = require("path");
@@ -105,7 +107,7 @@ async function backfillCache(options = {}) {
   const targets = options.force ? queryable : queryable.filter((celex) => !byCelex.has(celex));
   log(`cache=${cachePath} records=${payload.records.length}`);
   log(`requested=${celexIds.length} already present=${celexIds.length - targets.length} to fetch=${targets.length}`);
-  if (!targets.length) return { added: 0, replaced: 0, dropped: unqueryable, count: payload.count };
+  if (!targets.length) return { added: 0, addedIds: [], replaced: 0, dropped: unqueryable, count: payload.count };
 
   // Seams for tests: the SPARQL/EUR-Lex round-trips are the one part that can't
   // be exercised offline.
@@ -117,7 +119,9 @@ async function backfillCache(options = {}) {
   if (withoutEli.length) {
     log(`no primary ELI in Cellar, dropping ${withoutEli.length}: ${withoutEli.join(",")}`);
   }
-  if (!harvested.length) return { added: 0, replaced: 0, dropped: [...unqueryable, ...withoutEli], count: payload.count };
+  if (!harvested.length) {
+    return { added: 0, addedIds: [], replaced: 0, dropped: [...unqueryable, ...withoutEli], count: payload.count };
+  }
 
   // Title + excerpt. corpusDir is the default corpus, so anything already
   // downloaded is read from disk and only genuine misses hit the network.
@@ -145,7 +149,7 @@ async function backfillCache(options = {}) {
   }
   const additions = enriched.filter((record) => record.isPrimaryAct);
 
-  let added = 0;
+  const addedIds = [];
   let replaced = 0;
   for (const record of additions) {
     if (byCelex.has(record.celex)) {
@@ -154,9 +158,10 @@ async function backfillCache(options = {}) {
     } else {
       payload.records.push(record);
       byCelex.set(record.celex, record);
-      added += 1;
+      addedIds.push(record.celex);
     }
   }
+  const added = addedIds.length;
 
   payload.count = payload.records.length;
   payload.patchedAt = new Date().toISOString();
@@ -169,6 +174,7 @@ async function backfillCache(options = {}) {
   }
   return {
     added,
+    addedIds,
     replaced,
     dropped: [...unqueryable, ...withoutEli, ...nonPrimary.map((record) => record.celex)],
     count: payload.count
@@ -178,7 +184,20 @@ async function backfillCache(options = {}) {
 async function main() {
   const options = parseArgs(process.argv.slice(2));
   const result = await backfillCache(options);
-  log(`done: ${JSON.stringify(result)}`);
+  // Counts only: `dropped` can hold tens of thousands of ids, and callers
+  // (refresh-data's baseline step) parse this line for `.added`. The full
+  // result, ids included, goes to --result-json for anything that needs it.
+  log(`done: ${JSON.stringify({
+    added: result.added,
+    replaced: result.replaced,
+    dropped: result.dropped.length,
+    count: result.count
+  })}`);
+  if (typeof options["result-json"] === "string") {
+    const resultPath = path.resolve(options["result-json"]);
+    fs.writeFileSync(resultPath, `${JSON.stringify(result, null, 2)}\n`, "utf8");
+    log(`wrote ${resultPath}`);
+  }
 }
 
 if (require.main === module) {

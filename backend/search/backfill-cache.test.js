@@ -43,6 +43,10 @@ test("backfillCache adds a missing record with the shipped record shape", async 
   });
 
   assert.equal(result.added, 1);
+  // The release notes name the acts a refresh added, so the ids have to come
+  // back with the count — rendering the *requested* list instead once claimed
+  // "80,465 acts backfilled" on a release that added none.
+  assert.deepEqual(result.addedIds, ["32014D0055"]);
   const written = JSON.parse(fs.readFileSync(cachePath, "utf8"));
   assert.equal(written.count, 2);
   const added = written.records.find((r) => r.celex === "32014D0055");
@@ -67,6 +71,7 @@ test("backfillCache skips CELEX ids already in the cache", async () => {
   });
 
   assert.equal(result.added, 0);
+  assert.deepEqual(result.addedIds, []);
   assert.equal(harvested, false, "must not hit the network for an id already present");
 });
 

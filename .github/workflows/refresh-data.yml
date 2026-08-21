@@ -172,16 +172,20 @@ jobs:
           fs.writeFileSync("corpus-missing.txt", ids.length ? `${ids.join("\n")}\n` : "", "utf8");
           console.log(`[derived-data] corpus contains ${ids.length} CELEX ids absent from the current search cache`);
           NODE
-          # Carried into the artifact so the publish job can name the acts this
-          # release adds, rather than only how many.
+          # The request list. What was actually added lands in
+          # backfill-result.json below; the two differ whenever Cellar has no
+          # primary ELI for an id, so the notes must render the result.
           cp corpus-missing.txt ../refresh-output/corpus-missing.txt
           if [ -s corpus-missing.txt ]; then
             node --max-old-space-size=8192 search/backfill-cache.js \
               --celex @corpus-missing.txt \
               --cachePath search/data/search-cache.json \
+              --result-json ../refresh-output/backfill-result.json \
               | tee ../refresh-output/backfill.log
           else
             : > ../refresh-output/backfill.log
+            echo '{"added":0,"addedIds":[],"replaced":0,"dropped":[]}' \
+              > ../refresh-output/backfill-result.json
           fi
 
       # `inForce` is time-varying, but nothing else in this pipeline re-asks for

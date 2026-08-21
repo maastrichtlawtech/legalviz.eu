@@ -76,23 +76,70 @@ function buildQuery(celexBatch) {
   // The ^^xsd:string typing on VALUES is load-bearing — see the long note in
   // eurovoc-enrich.js buildQuery(). Same endpoint, same join, same trap.
   //
-  // Both properties are OPTIONAL so an act that has one but not the other still
-  // returns a row. The aggregates collapse any residual fan-out to one row per
-  // CELEX; both fields are single-valued in practice, so which one SAMPLE picks
-  // never matters.
+  // Deliberately NOT aggregated. This query used to end in
+  //
+  //   SELECT ?celex (SAMPLE(?inForceValue) AS ?inForce) (MIN(?endValue) AS ?endOfValidity)
+  //   ... GROUP BY ?celex
+  //
+  // which collapsed fan-out server-side, and mis-assigned values across groups
+  // at batch scale. Reproduced against Cellar with a real 100-CELEX batch:
+  // 32006R0988 genuinely carries end-of-validity 2020-12-31 and 32006R1066
+  // carries the 9999-12-31 sentinel, yet the aggregated query returned
+  // 2020-12-31 for *both*. Queried alone, or with this same batch unaggregated,
+  // 32006R1066 correctly returns the sentinel. The wrong value is stable for a
+  // given batch and changes when the batch composition changes, so it does not
+  // look like a fluke and cannot be retried away — it silently writes another
+  // act's expiry date onto a record.
+  //
+  // So: project the raw rows and collapse them in reduceBindings() below, where
+  // the grouping is ours and deterministic. Both properties stay OPTIONAL so an
+  // act with one but not the other still returns a row, and residual fan-out
+  // (a handful of acts per batch) costs a few extra rows rather than a wrong
+  // answer.
   const values = celexBatch.map((c) => `"${c}"^^xsd:string`).join(" ");
   return `
 PREFIX cdm: <http://publications.europa.eu/ontology/cdm#>
 PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
-SELECT ?celex (SAMPLE(?inForceValue) AS ?inForce) (MIN(?endValue) AS ?endOfValidity)
+SELECT ?celex ?inForceValue ?endValue
 WHERE {
   VALUES ?celex { ${values} }
   ?work cdm:resource_legal_id_celex ?celex .
   OPTIONAL { ?work cdm:resource_legal_in-force ?inForceValue }
   OPTIONAL { ?work cdm:resource_legal_date_end-of-validity ?endValue }
 }
-GROUP BY ?celex
 `.trim();
+}
+
+// Collapses the unaggregated rows to one entry per CELEX — the job GROUP BY
+// used to do, done where it can be trusted and unit-tested.
+//
+// `inForce` takes the first non-null value across the act's rows (it is
+// single-valued in practice, so this is SAMPLE without the cross-group leak).
+// `endOfValidity` takes the earliest real date, with the 9999-12-31 sentinel
+// and unparseable values already filtered out by parseEndOfValidity — so an act
+// whose only date is the sentinel correctly reduces to null rather than
+// inheriting a neighbour's.
+function reduceBindings(bindings) {
+  const byCelex = new Map();
+  for (const binding of bindings || []) {
+    const celex = binding.celex?.value;
+    if (!celex) continue;
+
+    let entry = byCelex.get(celex);
+    if (!entry) {
+      entry = { inForce: null, endOfValidity: null };
+      byCelex.set(celex, entry);
+    }
+
+    if (entry.inForce === null) {
+      entry.inForce = parseInForce(binding.inForceValue?.value);
+    }
+    const end = parseEndOfValidity(binding.endValue?.value);
+    if (end !== null && (entry.endOfValidity === null || end < entry.endOfValidity)) {
+      entry.endOfValidity = end;
+    }
+  }
+  return byCelex;
 }
 
 async function runQuery(query, log, attempt = 1) {
@@ -205,14 +252,8 @@ async function enrichRecordsWithInForce(records, options = {}) {
       const data = await runQueryFn(buildQuery(batch), log);
 
       const found = new Set();
-      for (const binding of data?.results?.bindings || []) {
-        const celex = binding.celex?.value;
-        if (!celex) continue;
+      for (const [celex, entry] of reduceBindings(data?.results?.bindings)) {
         found.add(celex);
-        const entry = {
-          inForce: parseInForce(binding.inForce?.value),
-          endOfValidity: parseEndOfValidity(binding.endOfValidity?.value),
-        };
         journal[celex] = entry;
         const record = byCelex.get(celex);
         if (record) applyEntry(record, entry);
@@ -252,6 +293,7 @@ module.exports = {
   parseEndOfValidity,
   parseInForce,
   readJournal,
+  reduceBindings,
   // Exported for search/in-force-recheck.js, which rewrites the journal to drop
   // the entries that would otherwise let a re-check answer from disk.
   writeJournal,

@@ -6,6 +6,7 @@ const path = require("node:path");
 
 const {
   buildQuery,
+  reduceBindings,
   enrichRecordsWithInForce,
   parseEndOfValidity,
   parseInForce,
@@ -26,11 +27,21 @@ function bindings(rows) {
 // Cellar only joins VALUES against explicitly-typed xsd:string literals; a bare
 // "..." silently returns nothing. Guard the typing so a refactor can't quietly
 // turn every batch into an empty result.
-test("buildQuery types CELEX values as xsd:string and aggregates per CELEX", () => {
+test("buildQuery types CELEX values as xsd:string", () => {
   const query = buildQuery(["32016R0679", "31995L0046"]);
   assert.match(query, /"32016R0679"\^\^xsd:string/);
   assert.match(query, /"31995L0046"\^\^xsd:string/);
-  assert.match(query, /GROUP BY \?celex/);
+});
+
+// Cellar's aggregation mis-assigns values across groups at batch scale (a real
+// 100-CELEX batch returned 32006R0988's end-of-validity for 32006R1066 as well).
+// The rows must come back raw and be collapsed by reduceBindings instead.
+test("buildQuery does not aggregate server-side", () => {
+  const query = buildQuery(["32016R0679"]);
+  assert.doesNotMatch(query, /GROUP BY/);
+  assert.doesNotMatch(query, /SAMPLE\(/);
+  assert.doesNotMatch(query, /MIN\(/);
+  assert.match(query, /SELECT \?celex \?inForceValue \?endValue/);
 });
 
 // entry-into-force is multi-valued (the GDPR has two), so joining it fans each
@@ -100,8 +111,8 @@ test("enrich writes status from a SPARQL response and journals it", async () => 
   const stats = await enrichRecordsWithInForce(records, {
     journalPath,
     runQueryFn: async () => bindings([
-      { celex: { value: "32016R0679" }, inForce: { value: "1" }, endOfValidity: { value: "9999-12-31" } },
-      { celex: { value: "31995L0046" }, inForce: { value: "0" }, endOfValidity: { value: "2018-05-24" } },
+      { celex: { value: "32016R0679" }, inForceValue: { value: "1" }, endValue: { value: "9999-12-31" } },
+      { celex: { value: "31995L0046" }, inForceValue: { value: "0" }, endValue: { value: "2018-05-24" } },
     ]),
   });
 
@@ -162,7 +173,7 @@ test("enrich honours --limit for smoke tests", async () => {
     limit: 1,
     runQueryFn: async () => {
       queries += 1;
-      return bindings([{ celex: { value: "32016R0679" }, inForce: { value: "1" } }]);
+      return bindings([{ celex: { value: "32016R0679" }, inForceValue: { value: "1" } }]);
     },
   });
 
@@ -186,11 +197,41 @@ test("enrich flushes the journal even when a batch throws", async () => {
         calls += 1;
         if (calls > 1) throw new Error("Cellar down");
         const celex = query.match(/"(3202\dR000\d)"/)[1];
-        return bindings([{ celex: { value: celex }, inForce: { value: "1" } }]);
+        return bindings([{ celex: { value: celex }, inForceValue: { value: "1" } }]);
       },
     }),
     /Cellar down/,
   );
 
   assert.equal(Object.keys(readJournal(journalPath)).length, 100);
+});
+
+test("reduceBindings collapses fan-out to one entry per CELEX", () => {
+  const reduced = reduceBindings([
+    { celex: { value: "A" }, inForceValue: { value: "1" }, endValue: { value: "2030-01-01" } },
+    { celex: { value: "A" }, inForceValue: { value: "1" }, endValue: { value: "2027-06-30" } },
+    { celex: { value: "B" }, inForceValue: { value: "0" } },
+  ]);
+
+  assert.equal(reduced.size, 2);
+  // Earliest real end-of-validity wins, as MIN() used to do.
+  assert.deepEqual(reduced.get("A"), { inForce: true, endOfValidity: "2027-06-30" });
+  assert.deepEqual(reduced.get("B"), { inForce: false, endOfValidity: null });
+});
+
+// The exact shape that made the aggregated query leak: an act whose only date is
+// the sentinel must reduce to null, never to a value from another row.
+test("reduceBindings keeps a sentinel-only act null and never borrows another act's date", () => {
+  const reduced = reduceBindings([
+    { celex: { value: "32006R0988" }, inForceValue: { value: "1" }, endValue: { value: "2020-12-31" } },
+    { celex: { value: "32006R1066" }, inForceValue: { value: "1" }, endValue: { value: "9999-12-31" } },
+  ]);
+
+  assert.deepEqual(reduced.get("32006R0988"), { inForce: true, endOfValidity: "2020-12-31" });
+  assert.deepEqual(reduced.get("32006R1066"), { inForce: true, endOfValidity: null });
+});
+
+test("reduceBindings ignores rows without a celex", () => {
+  assert.equal(reduceBindings([{ inForceValue: { value: "1" } }]).size, 0);
+  assert.equal(reduceBindings(undefined).size, 0);
 });

@@ -137,7 +137,7 @@ test("runRecheck leaves an out-of-force record entirely untouched", async () => 
   await runRecheck([stale, terminal], {
     journalPath,
     today: "2026-08-20",
-    runQueryFn: async () => bindings([{ celex: { value: "STALE" }, inForce: { value: "0" } }]),
+    runQueryFn: async () => bindings([{ celex: { value: "STALE" }, inForceValue: { value: "0" } }]),
   });
 
   assert.equal(terminal.inForce, false);
@@ -157,9 +157,9 @@ test("runRecheck counts actual flips and changes, not the number re-queried", as
     journalPath,
     today: "2026-08-20",
     runQueryFn: async () => bindings([
-      { celex: { value: "REPEALED" }, inForce: { value: "0" } },
-      { celex: { value: "STILL_TRUE" }, inForce: { value: "1" }, endOfValidity: { value: "2020-01-01" } },
-      { celex: { value: "GAINED" }, inForce: { value: "1" } },
+      { celex: { value: "REPEALED" }, inForceValue: { value: "0" } },
+      { celex: { value: "STILL_TRUE" }, inForceValue: { value: "1" }, endValue: { value: "2020-01-01" } },
+      { celex: { value: "GAINED" }, inForceValue: { value: "1" } },
     ]),
   });
 
@@ -177,7 +177,7 @@ test("runRecheck reports no change when every status is confirmed as-is", async 
   const result = await runRecheck(records, {
     journalPath,
     today: "2026-08-20",
-    runQueryFn: async () => bindings([{ celex: { value: "A" }, inForce: { value: "1" } }]),
+    runQueryFn: async () => bindings([{ celex: { value: "A" }, inForceValue: { value: "1" } }]),
   });
 
   assert.equal(result.changed, 0);

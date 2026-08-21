@@ -17,6 +17,14 @@ const {
   parseCitationsToRefs,
 } = require('./case-law-parser');
 
+// Kept in step with parseInForce() in search/in-force-enrich.js: a shape change
+// upstream must surface as "unknown", never as a default.
+function parseInForceLiteral(value) {
+  if (value === '1' || value === 'true') return true;
+  if (value === '0' || value === 'false') return false;
+  return null;
+}
+
 async function fetchMetadata(celex, runSparqlQuery) {
   const celexUri = `http://publications.europa.eu/resource/celex/${celex}`;
   const query = `
@@ -47,7 +55,11 @@ LIMIT 10`;
     celex,
     entryIntoForce: entryDates,
     endOfValidity: first.dateEndOfValidity?.value || null,
-    inForce: first.inForce?.value === 'true',
+    // Cellar answers this as the literal "1"/"0", not "true"/"false", so the
+    // old `=== 'true'` made every act read false and the client learned to
+    // ignore the field. Same three-state contract as in-force-enrich.js:
+    // true / false / null, where null is "Cellar has no status".
+    inForce: parseInForceLiteral(first.inForce?.value),
     eli: first.eli?.value || null,
     dateSignature: first.dateSignature?.value || null,
     dateDocument: first.dateDocument?.value || null,

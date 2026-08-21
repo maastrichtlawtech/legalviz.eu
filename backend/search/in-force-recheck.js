@@ -9,30 +9,33 @@
 // act's status is ever re-asked after its first harvest — a repealed act keeps
 // reading `inForce: true` forever.
 //
-// This module defeats both skips for a bounded slice only: it clears
-// `inForce` / `endOfValidity` on the slice's records AND drops the matching
-// journal entries, then hands the slice to enrichRecordsWithInForce, which
-// then has no choice but to ask Cellar again. Everything outside the slice is
-// untouched — this is not a rebuild and not a sweep.
+// This module defeats both skips: it clears `inForce` / `endOfValidity` on the
+// records it is re-checking AND drops their journal entries, then hands them to
+// enrichRecordsWithInForce, which then has no choice but to ask Cellar again.
 //
-// Slice selection (in priority order):
-//   1. Records whose `endOfValidity` has already passed but which still read
-//      `inForce: true` — these are known-wrong regardless of when they were
-//      last checked, so they always make the slice first.
-//   2. A rotating age-based fill, oldest `statusCheckedAt` first (a record
-//      that predates the field sorts as infinitely stale), up to --batch-size.
-// That rotation is what gives the cache a known, stated turnover cycle: at
-// batch-size B against N eligible records, a full sweep takes ceil(N / B) runs.
+// Scope: everything NOT already known to be out of force. `inForce: false` is
+// effectively terminal — an act that has fallen out of force does not come back
+// — so re-asking those 50k records buys nothing. What is left is small enough to
+// sweep whole on every run:
 //
-// Not invoked by any workflow — the scheduling decision is a human's. Proposed
-// invocation (NOT wired here, see the PR description):
-//   node search/in-force-recheck.js --batch-size 2000 --cycle-days 30
+//   inForce: true    19,588   can be repealed or expire     -> swept
+//   inForce: null    10,488   Cellar had no status yet      -> swept (may gain one)
+//   inForce: false   50,393   terminal                      -> skipped (--all to include)
+//
+// ~30k records is ~301 SPARQL batches at 100 ids each, measured at 200-400ms per
+// batch against Cellar — about two minutes. There is deliberately no rotation,
+// batch budget or turnover cycle: at this cost, a partial re-check would only
+// buy staleness back. `--all` re-checks the out-of-force records too, for the
+// rare case (annulment, corrigendum) where one is restored.
+//
+// The cache is rewritten ONLY if a status actually moved. A run that confirms
+// 30k unchanged statuses must leave the file byte-identical, or refresh-data.yml
+// would cut a new data-vN release — and a Docker tag PR — every single month on
+// no substantive change.
 //
 // Usage:
-//   node search/in-force-recheck.js [--batch-size N] [--cycle-days N]
-//     [--cache-path path] [--sweep]
-//   --sweep treats the whole cache as the slice (explicit opt-in only — an
-//   ~80k-act corpus must not be re-queried by default).
+//   node --max-old-space-size=8192 search/in-force-recheck.js
+//     [--cache-path path] [--all] [--limit N] [--max-null-ratio R] [--no-gz]
 
 const fs = require("fs");
 const zlib = require("zlib");
@@ -46,8 +49,13 @@ const {
 } = require("./in-force-enrich");
 
 const LABEL = "in-force-recheck";
-const DEFAULT_BATCH_SIZE = 2000;
-const DEFAULT_CYCLE_DAYS = 30;
+
+// Cellar answering "no status" for a swept record that previously had one is
+// indistinguishable, per record, from a genuine retraction. In bulk it is not:
+// it means the endpoint is degraded but still returning 200s. Refuse to write
+// past this fraction of the slice rather than let a bad afternoon at Cellar
+// erase the status coverage the Docker guard checks for (>80%, currently 87%).
+const DEFAULT_MAX_NULL_RATIO = 0.05;
 
 function todayIso() {
   return new Date().toISOString().slice(0, 10);
@@ -59,32 +67,28 @@ function isExpiredButInForce(record, today) {
     && record.endOfValidity < today;
 }
 
-// Missing or unparseable statusCheckedAt sorts as "oldest": a record that
-// predates the field is at least as overdue as one checked at the dawn of time.
-function statusAgeKey(record) {
-  const parsed = record.statusCheckedAt ? Date.parse(record.statusCheckedAt) : NaN;
-  return Number.isNaN(parsed) ? -Infinity : parsed;
+// `false` is terminal; everything else (true, null, or a record that predates
+// the field entirely) is a status that can still move.
+function isRecheckable(record) {
+  return record.inForce !== false;
 }
 
-// Priority 1 (expired-but-in-force) always makes the slice, even if it alone
-// exceeds batchSize — these are the cheapest, most confidently wrong records
-// in the cache and should never be starved by the rotation. Priority 2 fills
-// whatever budget is left, oldest-checked first.
+// Order matters only for a run that dies halfway: the records already known to
+// be wrong — flagged in force past their own end-of-validity — are re-asked
+// first so a partial run still fixes the most confidently stale entries.
+// `limit` exists for smoke tests; a real run is unbounded by design.
 function selectRecheckSlice(records, options = {}) {
-  const { batchSize = DEFAULT_BATCH_SIZE, today = todayIso(), sweep = false } = options;
-  const eligible = records.filter((record) => record.celex);
+  const { today = todayIso(), all = false, limit = 0 } = options;
+  const eligible = records.filter((record) => record.celex && (all || isRecheckable(record)));
 
-  if (sweep) return eligible.slice();
+  const expired = [];
+  const rest = [];
+  for (const record of eligible) {
+    (isExpiredButInForce(record, today) ? expired : rest).push(record);
+  }
+  const ordered = expired.concat(rest);
 
-  const expired = eligible.filter((record) => isExpiredButInForce(record, today));
-  const expiredCelex = new Set(expired.map((record) => record.celex));
-
-  const remaining = Math.max(0, batchSize - expired.length);
-  const rotationPool = eligible
-    .filter((record) => !expiredCelex.has(record.celex))
-    .sort((a, b) => statusAgeKey(a) - statusAgeKey(b));
-
-  return expired.concat(rotationPool.slice(0, remaining));
+  return limit > 0 ? ordered.slice(0, limit) : ordered;
 }
 
 // Defeats both in-force-enrich.js skips for exactly this slice: the in-memory
@@ -92,6 +96,13 @@ function selectRecheckSlice(records, options = {}) {
 // keyed by celex. Mutates `slice` members in place and rewrites the journal
 // file with the slice's entries removed; everything else in the journal (and
 // every record outside the slice) is left alone.
+//
+// Deleting the two fields and letting enrichment re-add them re-appends them at
+// the end of each record object. That is where they already are in the
+// published cache (verified: 80,469/80,469 records carry inForce/endOfValidity
+// as their last two keys, because enrichment is what appended them), so key
+// order — and therefore the serialised bytes of an unchanged record — survives
+// the round trip.
 function primeSliceForRecheck(slice, journalPath) {
   const journal = readJournal(journalPath);
   let journalEntriesDropped = 0;
@@ -113,29 +124,41 @@ function classifyFlip(before, after) {
   return null;
 }
 
-// Orchestrates one bounded recheck run over `records` (mutated in place, same
-// contract as enrichRecordsWithInForce). Returns how many records were
-// touched, how many were actually re-queried (vs. answered from a still-valid
-// journal entry for some *other* celex — should be ~0 for the slice since we
-// just dropped its own entries), and — the number that matters for catching a
-// silent no-op regression — how many statuses actually flipped.
+// Any difference in either field, not just a true<->false flip: a status going
+// to or from `null`, or an end-of-validity date being corrected, is a real
+// change to the published data and must be written.
+function hasChanged(before, after) {
+  return before.inForce !== after.inForce || before.endOfValidity !== after.endOfValidity;
+}
+
+// A record that had a decided status and came back without one. Counted apart
+// from ordinary changes because in bulk it means Cellar, not the law, moved.
+function lostStatus(before, after) {
+  return (before.inForce === true || before.inForce === false) && after.inForce === null;
+}
+
+// Orchestrates one recheck run over `records` (mutated in place, same contract
+// as enrichRecordsWithInForce). Reports what was re-queried, what actually
+// changed, and — separately — the flips, because a re-check that silently stops
+// re-checking looks identical to a quiet month unless flips are counted apart
+// from work done.
 async function runRecheck(records, options = {}) {
   const {
     journalPath = DEFAULT_JOURNAL_PATH,
-    batchSize = DEFAULT_BATCH_SIZE,
-    sweep = false,
+    all = false,
+    limit = 0,
     today = todayIso(),
     log = () => {},
     runQueryFn,
   } = options;
 
-  const slice = selectRecheckSlice(records, { batchSize, today, sweep });
+  const slice = selectRecheckSlice(records, { today, all, limit });
   const before = new Map(
     slice.map((record) => [record.celex, { inForce: record.inForce, endOfValidity: record.endOfValidity }]),
   );
 
   const { journalEntriesDropped } = primeSliceForRecheck(slice, journalPath);
-  log(`slice=${slice.length} sweep=${sweep} journalEntriesDropped=${journalEntriesDropped}`);
+  log(`slice=${slice.length} all=${all} journalEntriesDropped=${journalEntriesDropped}`);
 
   const enrichStats = await enrichRecordsWithInForce(slice, {
     journalPath,
@@ -145,17 +168,23 @@ async function runRecheck(records, options = {}) {
 
   let flippedToRepealed = 0;
   let flippedToInForce = 0;
+  let changed = 0;
+  let lostStatusCount = 0;
   for (const record of slice) {
     const prev = before.get(record.celex);
     const flip = classifyFlip(prev, record);
     if (flip === "toRepealed") flippedToRepealed += 1;
     else if (flip === "toInForce") flippedToInForce += 1;
+    if (hasChanged(prev, record)) changed += 1;
+    if (lostStatus(prev, record)) lostStatusCount += 1;
   }
 
   return {
     sliceSize: slice.length,
     journalEntriesDropped,
     requeried: enrichStats.fetched,
+    changed,
+    lostStatus: lostStatusCount,
     flippedToRepealed,
     flippedToInForce,
     flipped: flippedToRepealed + flippedToInForce,
@@ -163,23 +192,44 @@ async function runRecheck(records, options = {}) {
   };
 }
 
+// Throws when too much of the slice lost a previously-known status at once.
+// Bounded by the slice, not the whole cache, so it stays meaningful under
+// --limit as well as on a full sweep.
+function assertStatusNotDegraded(result, maxNullRatio = DEFAULT_MAX_NULL_RATIO) {
+  if (result.sliceSize === 0) return 0;
+  const ratio = result.lostStatus / result.sliceSize;
+  if (ratio > maxNullRatio) {
+    throw new Error(
+      `refusing to write: ${result.lostStatus}/${result.sliceSize} re-checked records `
+      + `(${(ratio * 100).toFixed(1)}%) lost a previously known status, above the `
+      + `${(maxNullRatio * 100).toFixed(1)}% threshold. Cellar is answering but degraded; `
+      + "re-run rather than publish this.",
+    );
+  }
+  return ratio;
+}
+
 function parseArgs(argv) {
   const options = {
     cachePath: undefined,
-    batchSize: DEFAULT_BATCH_SIZE,
-    cycleDays: DEFAULT_CYCLE_DAYS,
-    sweep: false,
+    all: false,
+    limit: 0,
+    maxNullRatio: DEFAULT_MAX_NULL_RATIO,
+    gz: true,
   };
   for (let index = 0; index < argv.length; index += 1) {
     const token = argv[index];
-    if (token === "--batch-size" && argv[index + 1]) {
-      options.batchSize = Number.parseInt(argv[++index], 10) || DEFAULT_BATCH_SIZE;
-    } else if (token === "--cycle-days" && argv[index + 1]) {
-      options.cycleDays = Number.parseInt(argv[++index], 10) || DEFAULT_CYCLE_DAYS;
-    } else if (token === "--cache-path" && argv[index + 1]) {
+    if (token === "--cache-path" && argv[index + 1]) {
       options.cachePath = argv[++index];
-    } else if (token === "--sweep") {
-      options.sweep = true;
+    } else if (token === "--limit" && argv[index + 1]) {
+      options.limit = Number.parseInt(argv[++index], 10) || 0;
+    } else if (token === "--max-null-ratio" && argv[index + 1]) {
+      const parsed = Number.parseFloat(argv[++index]);
+      if (Number.isFinite(parsed)) options.maxNullRatio = parsed;
+    } else if (token === "--all") {
+      options.all = true;
+    } else if (token === "--no-gz") {
+      options.gz = false;
     }
   }
   return options;
@@ -188,15 +238,21 @@ function parseArgs(argv) {
 // store.payload.records are the untouched parsed records — see the identical
 // note in fetch-in-force.js. Writing the payload back keeps every other field
 // (date, eurovoc, excerpt, ...) byte-for-byte as the builder wrote it.
-function writeCache(store) {
+//
+// The .gz sidecar is skippable: refresh-data.yml gzips search-cache.json itself
+// as a later step, so writing it here would be ~50 MB of redundant compression
+// on a runner that also holds the corpus.
+function writeCache(store, { gz = true } = {}) {
   const json = `${JSON.stringify(store.payload)}\n`;
   const cachePath = store.cachePath;
-  const gzPath = `${cachePath}.gz`;
 
   const tempJson = `${cachePath}.${process.pid}.tmp`;
   fs.writeFileSync(tempJson, json, "utf8");
   fs.renameSync(tempJson, cachePath);
 
+  if (!gz) return { cachePath, gzPath: null };
+
+  const gzPath = `${cachePath}.gz`;
   const tempGz = `${gzPath}.${process.pid}.tmp`;
   fs.writeFileSync(tempGz, zlib.gzipSync(Buffer.from(json, "utf8")));
   fs.renameSync(tempGz, gzPath);
@@ -205,8 +261,8 @@ function writeCache(store) {
 }
 
 // Same regression guard as fetch-in-force.js: this tool only ever touches
-// inForce/endOfValidity/statusCheckedAt on a slice, so date/eurovoc coverage
-// must never move. A drop means this ran against the wrong cache.
+// inForce/endOfValidity, so date/eurovoc coverage must never move. A drop means
+// this ran against the wrong cache.
 function assertEnrichmentIntact(records, before) {
   const dated = records.filter((r) => r.date).length;
   const topiced = records.filter((r) => Array.isArray(r.eurovoc)).length;
@@ -232,38 +288,44 @@ async function main() {
     dated: records.filter((r) => r.date).length,
     topiced: records.filter((r) => Array.isArray(r.eurovoc)).length,
   };
+  const outOfForce = records.filter((r) => r.inForce === false).length;
   console.log(`[${LABEL}] loaded ${records.length} records from ${store.cachePath}`);
-  if (options.sweep) {
-    console.log(`[${LABEL}] --sweep: treating the ENTIRE cache as the slice, ignoring --batch-size`);
-  } else {
-    console.log(`[${LABEL}] batch-size=${options.batchSize} cycle-days=${options.cycleDays}`
-      + ` (at this batch size, a full rotation takes ceil(eligible / batch-size) runs,`
-      + ` i.e. roughly every ${options.cycleDays} x ceil(eligible / batch-size) days if run on that cadence)`);
-  }
+  console.log(
+    `[${LABEL}] ${outOfForce} records are already out of force`
+    + `${options.all ? " (re-checked anyway: --all)" : " and are not re-checked"}`,
+  );
 
   const result = await runRecheck(records, {
-    batchSize: options.batchSize,
-    sweep: options.sweep,
+    all: options.all,
+    limit: options.limit,
     log: (message) => console.log(`[${LABEL}] ${message}`),
   });
 
   console.log(
-    `[${LABEL}] rechecked ${result.sliceSize} records`
+    `[${LABEL}] re-checked ${result.sliceSize} records`
     + ` (${result.journalEntriesDropped} journal entries dropped, ${result.requeried} re-queried against Cellar)`,
   );
   console.log(
     `[${LABEL}] status flips: ${result.flipped} total`
-    + ` (${result.flippedToRepealed} in-force -> repealed, ${result.flippedToInForce} repealed -> in-force)`,
+    + ` (${result.flippedToRepealed} in-force -> repealed, ${result.flippedToInForce} repealed -> in-force);`
+    + ` ${result.changed} records changed in all, ${result.lostStatus} lost a known status`,
   );
-  if (result.flipped === 0 && result.requeried > 0) {
-    console.log(`[${LABEL}] note: 0 flips out of ${result.requeried} re-queried records is expected on most runs — status rarely changes day to day.`);
-  }
+
+  const ratio = assertStatusNotDegraded(result, options.maxNullRatio);
+  console.log(`[${LABEL}] status loss ${(ratio * 100).toFixed(2)}% is within the ${(options.maxNullRatio * 100).toFixed(1)}% threshold`);
 
   const after = assertEnrichmentIntact(records, before);
   console.log(`[${LABEL}] enrichment intact: ${after.dated} dated, ${after.topiced} with topics`);
 
-  const { cachePath, gzPath } = writeCache(store);
-  console.log(`[${LABEL}] wrote ${cachePath} and ${gzPath}`);
+  // The no-op short circuit. refresh-data.yml publishes a release iff the cache
+  // bytes changed, so confirming 30k unchanged statuses must not touch the file.
+  if (result.changed === 0) {
+    console.log(`[${LABEL}] no status changed; leaving ${store.cachePath} untouched (no release needed)`);
+    return;
+  }
+
+  const { cachePath, gzPath } = writeCache(store, { gz: options.gz });
+  console.log(`[${LABEL}] wrote ${cachePath}${gzPath ? ` and ${gzPath}` : ""}`);
   console.log(`[${LABEL}] next: publish the .gz as the data-vN release asset and bump DATA_RELEASE_TAG in backend/Dockerfile`);
 }
 
@@ -275,12 +337,13 @@ if (require.main === module) {
 }
 
 module.exports = {
-  DEFAULT_BATCH_SIZE,
-  DEFAULT_CYCLE_DAYS,
+  DEFAULT_MAX_NULL_RATIO,
+  assertStatusNotDegraded,
   classifyFlip,
+  hasChanged,
   isExpiredButInForce,
+  isRecheckable,
   primeSliceForRecheck,
   runRecheck,
   selectRecheckSlice,
-  statusAgeKey,
 };

@@ -6,8 +6,11 @@ const path = require("node:path");
 
 const { readJournal } = require("./in-force-enrich");
 const {
+  assertStatusNotDegraded,
   classifyFlip,
+  hasChanged,
   isExpiredButInForce,
+  isRecheckable,
   primeSliceForRecheck,
   runRecheck,
   selectRecheckSlice,
@@ -31,39 +34,57 @@ test("isExpiredButInForce flags an act flagged in force past its own endOfValidi
   assert.equal(isExpiredButInForce({ inForce: true, endOfValidity: null }, "2026-08-20"), false);
 });
 
-test("selectRecheckSlice puts expired-but-in-force records first, ahead of the rotation", () => {
-  const records = [
-    { celex: "A", inForce: true, endOfValidity: "2020-01-01", statusCheckedAt: "2026-01-01T00:00:00.000Z" }, // expired, known-wrong
-    { celex: "B", inForce: true, endOfValidity: "2030-01-01", statusCheckedAt: "2020-01-01T00:00:00.000Z" }, // oldest checked, not expired
-    { celex: "C", inForce: false, endOfValidity: "2018-05-24" }, // never checked (predates field)
-    { celex: "D", inForce: true, endOfValidity: "2030-01-01", statusCheckedAt: "2026-06-01T00:00:00.000Z" }, // freshly checked
-  ];
-
-  const slice = selectRecheckSlice(records, { batchSize: 3, today: "2026-08-20" });
-  const celexes = slice.map((r) => r.celex);
-
-  // A is expired-but-in-force: must be first regardless of its (recent) stamp.
-  assert.equal(celexes[0], "A");
-  // Remaining budget (2) goes to the two oldest/unstamped records, C and B,
-  // ahead of the freshly-checked D.
-  assert.deepEqual(new Set(celexes.slice(1)), new Set(["B", "C"]));
-  assert.equal(celexes.includes("D"), false);
+test("isRecheckable treats out-of-force as terminal and everything else as open", () => {
+  assert.equal(isRecheckable({ inForce: true }), true);
+  assert.equal(isRecheckable({ inForce: null }), true);
+  assert.equal(isRecheckable({}), true); // predates the field
+  assert.equal(isRecheckable({ inForce: false }), false);
 });
 
-test("selectRecheckSlice includes every expired-but-in-force record even beyond batchSize", () => {
+test("selectRecheckSlice sweeps everything not already out of force", () => {
   const records = [
-    { celex: "A", inForce: true, endOfValidity: "2020-01-01" },
-    { celex: "B", inForce: true, endOfValidity: "2020-01-01" },
-    { celex: "C", inForce: true, endOfValidity: "2030-01-01" },
+    { celex: "IN_FORCE", inForce: true, endOfValidity: null },
+    { celex: "UNKNOWN", inForce: null, endOfValidity: null },
+    { celex: "NO_FIELD" },
+    { celex: "OUT_OF_FORCE", inForce: false, endOfValidity: "2018-05-24" },
   ];
-  const slice = selectRecheckSlice(records, { batchSize: 1, today: "2026-08-20" });
-  assert.deepEqual(new Set(slice.map((r) => r.celex)), new Set(["A", "B"]));
+
+  const slice = selectRecheckSlice(records, { today: "2026-08-20" });
+
+  assert.deepEqual(
+    new Set(slice.map((r) => r.celex)),
+    new Set(["IN_FORCE", "UNKNOWN", "NO_FIELD"]),
+  );
 });
 
-test("selectRecheckSlice --sweep returns the whole eligible set, ignoring batchSize", () => {
-  const records = [{ celex: "A" }, { celex: "B" }, { celex: "C" }, { celex: "D" }];
-  const slice = selectRecheckSlice(records, { batchSize: 1, sweep: true });
-  assert.equal(slice.length, 4);
+test("selectRecheckSlice --all also re-checks out-of-force records", () => {
+  const records = [
+    { celex: "IN_FORCE", inForce: true },
+    { celex: "OUT_OF_FORCE", inForce: false },
+  ];
+  assert.equal(selectRecheckSlice(records, { all: true }).length, 2);
+});
+
+test("selectRecheckSlice orders known-wrong records first so a partial run fixes those", () => {
+  const records = [
+    { celex: "FINE", inForce: true, endOfValidity: "2030-01-01" },
+    { celex: "EXPIRED", inForce: true, endOfValidity: "2020-01-01" },
+    { celex: "UNKNOWN", inForce: null },
+  ];
+
+  const slice = selectRecheckSlice(records, { today: "2026-08-20" });
+
+  assert.equal(slice[0].celex, "EXPIRED");
+  assert.equal(slice.length, 3);
+});
+
+test("selectRecheckSlice --limit caps the sweep, keeping the known-wrong ones", () => {
+  const records = [
+    { celex: "FINE", inForce: true, endOfValidity: "2030-01-01" },
+    { celex: "EXPIRED", inForce: true, endOfValidity: "2020-01-01" },
+  ];
+  const slice = selectRecheckSlice(records, { today: "2026-08-20", limit: 1 });
+  assert.deepEqual(slice.map((r) => r.celex), ["EXPIRED"]);
 });
 
 test("primeSliceForRecheck clears the record fields and drops only the slice's journal entries", () => {
@@ -99,58 +120,91 @@ test("classifyFlip only reports true in-force <-> repealed transitions", () => {
   assert.equal(classifyFlip({ inForce: true }, { inForce: null }), null);
 });
 
-test("runRecheck leaves a non-slice record entirely untouched", async () => {
-  const journalPath = tempJournal({});
-  const stale = { celex: "STALE", inForce: true, endOfValidity: "2020-01-01" }; // expired, will be selected
-  const fresh = { celex: "FRESH", inForce: true, endOfValidity: "2030-01-01", statusCheckedAt: "2026-08-19T00:00:00.000Z" };
-  const records = [stale, fresh];
+test("hasChanged catches null transitions and end-of-validity corrections a flip misses", () => {
+  assert.equal(hasChanged({ inForce: true, endOfValidity: null }, { inForce: true, endOfValidity: null }), false);
+  assert.equal(hasChanged({ inForce: null, endOfValidity: null }, { inForce: true, endOfValidity: null }), true);
+  assert.equal(hasChanged(
+    { inForce: true, endOfValidity: null },
+    { inForce: true, endOfValidity: "2027-01-01" },
+  ), true);
+});
 
-  await runRecheck(records, {
+test("runRecheck leaves an out-of-force record entirely untouched", async () => {
+  const journalPath = tempJournal({});
+  const stale = { celex: "STALE", inForce: true, endOfValidity: "2020-01-01" };
+  const terminal = { celex: "TERMINAL", inForce: false, endOfValidity: "2018-05-24" };
+
+  await runRecheck([stale, terminal], {
     journalPath,
-    batchSize: 1, // only room for the one expired record; FRESH must not be pulled into the rotation
     today: "2026-08-20",
     runQueryFn: async () => bindings([{ celex: { value: "STALE" }, inForce: { value: "0" } }]),
   });
 
-  assert.equal(fresh.inForce, true);
-  assert.equal(fresh.endOfValidity, "2030-01-01");
-  assert.equal(fresh.statusCheckedAt, "2026-08-19T00:00:00.000Z");
+  assert.equal(terminal.inForce, false);
+  assert.equal(terminal.endOfValidity, "2018-05-24");
+  assert.equal(stale.inForce, false);
 });
 
-test("runRecheck's flip counter counts actual flips, not the number re-queried", async () => {
+test("runRecheck counts actual flips and changes, not the number re-queried", async () => {
   const journalPath = tempJournal({});
   const records = [
-    { celex: "REPEALED", inForce: true, endOfValidity: "2020-01-01" }, // will flip to false
-    { celex: "STILL_TRUE", inForce: true, endOfValidity: "2020-01-01" }, // stays true (Cellar disagrees with the date)
+    { celex: "REPEALED", inForce: true, endOfValidity: "2020-01-01" }, // flips to false
+    { celex: "STILL_TRUE", inForce: true, endOfValidity: "2020-01-01" }, // unchanged
+    { celex: "GAINED", inForce: null, endOfValidity: null }, // changes, but is not a flip
   ];
 
   const result = await runRecheck(records, {
     journalPath,
-    batchSize: 10,
     today: "2026-08-20",
     runQueryFn: async () => bindings([
       { celex: { value: "REPEALED" }, inForce: { value: "0" } },
-      { celex: { value: "STILL_TRUE" }, inForce: { value: "1" } },
+      { celex: { value: "STILL_TRUE" }, inForce: { value: "1" }, endOfValidity: { value: "2020-01-01" } },
+      { celex: { value: "GAINED" }, inForce: { value: "1" } },
     ]),
   });
 
-  assert.equal(result.requeried, 2);
+  assert.equal(result.requeried, 3);
   assert.equal(result.flipped, 1);
   assert.equal(result.flippedToRepealed, 1);
   assert.equal(result.flippedToInForce, 0);
+  assert.equal(result.changed, 2);
 });
 
-test("runRecheck stamps statusCheckedAt on every slice member it actually re-queried", async () => {
+test("runRecheck reports no change when every status is confirmed as-is", async () => {
   const journalPath = tempJournal({});
-  const records = [{ celex: "A", inForce: true, endOfValidity: "2020-01-01" }];
+  const records = [{ celex: "A", inForce: true, endOfValidity: null }];
 
-  await runRecheck(records, {
+  const result = await runRecheck(records, {
     journalPath,
-    batchSize: 10,
     today: "2026-08-20",
     runQueryFn: async () => bindings([{ celex: { value: "A" }, inForce: { value: "1" } }]),
   });
 
-  assert.equal(typeof records[0].statusCheckedAt, "string");
-  assert.ok(!Number.isNaN(Date.parse(records[0].statusCheckedAt)));
+  assert.equal(result.changed, 0);
+  assert.equal(records[0].inForce, true);
+  assert.equal(records[0].endOfValidity, null);
+});
+
+test("assertStatusNotDegraded refuses a run that erased known statuses in bulk", () => {
+  assert.throws(
+    () => assertStatusNotDegraded({ sliceSize: 100, lostStatus: 20 }, 0.05),
+    /lost a previously known status/,
+  );
+  // A handful of genuine retractions stays under the threshold.
+  assert.equal(assertStatusNotDegraded({ sliceSize: 100, lostStatus: 2 }, 0.05), 0.02);
+  assert.equal(assertStatusNotDegraded({ sliceSize: 0, lostStatus: 0 }, 0.05), 0);
+});
+
+test("runRecheck counts a status that Cellar no longer answers for as lost", async () => {
+  const journalPath = tempJournal({});
+  const records = [{ celex: "A", inForce: true, endOfValidity: null }];
+
+  const result = await runRecheck(records, {
+    journalPath,
+    today: "2026-08-20",
+    runQueryFn: async () => bindings([]),
+  });
+
+  assert.equal(result.lostStatus, 1);
+  assert.throws(() => assertStatusNotDegraded(result, 0.05), /refusing to write/);
 });

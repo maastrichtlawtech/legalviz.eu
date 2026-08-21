@@ -162,17 +162,10 @@ async function enrichRecordsWithInForce(records, options = {}) {
 
   const journal = readJournal(journalPath);
   const stats = { targeted: 0, fromJournal: 0, fetched: 0, withStatus: 0, inForce: 0, alreadyPresent: 0 };
-  // Stamped only when this call actually asked Cellar (the found/unknown
-  // branches below) — reused from the journal is replaying a prior
-  // confirmation, not a fresh one, so it is deliberately left unstamped. This
-  // is what search/in-force-recheck.js (issue #167) reads to pick its rotating
-  // slice: a record with no stamp, or the oldest stamp, is the most overdue.
-  const checkedAt = new Date().toISOString();
 
-  const applyEntry = (record, entry, { confirmed = false } = {}) => {
+  const applyEntry = (record, entry) => {
     record.inForce = entry.inForce ?? null;
     record.endOfValidity = entry.endOfValidity ?? null;
-    if (confirmed) record.statusCheckedAt = checkedAt;
     if (record.inForce !== null) {
       stats.withStatus += 1;
       if (record.inForce) stats.inForce += 1;
@@ -222,7 +215,7 @@ async function enrichRecordsWithInForce(records, options = {}) {
         };
         journal[celex] = entry;
         const record = byCelex.get(celex);
-        if (record) applyEntry(record, entry, { confirmed: true });
+        if (record) applyEntry(record, entry);
       }
 
       // An act Cellar has no status for is journaled as unknown so a rerun skips
@@ -233,7 +226,7 @@ async function enrichRecordsWithInForce(records, options = {}) {
         if (found.has(celex)) continue;
         journal[celex] = unknown;
         const record = byCelex.get(celex);
-        if (record) applyEntry(record, unknown, { confirmed: true });
+        if (record) applyEntry(record, unknown);
       }
 
       stats.fetched += batch.length;
@@ -259,5 +252,7 @@ module.exports = {
   parseEndOfValidity,
   parseInForce,
   readJournal,
+  // Exported for search/in-force-recheck.js, which rewrites the journal to drop
+  // the entries that would otherwise let a re-check answer from disk.
   writeJournal,
 };

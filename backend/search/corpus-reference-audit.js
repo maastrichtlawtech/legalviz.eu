@@ -18,6 +18,7 @@ const { execFileSync } = require("child_process");
 const { parseFmxXml } = require("../shared/fmx-parser-node.js");
 const { parseEurlexHtmlToCombined } = require("../shared/eurlex-html-parser.js");
 const { DEFAULT_PROGRESS_FILE, recordAudit } = require("./corpus-audit-progress.js");
+const { listCorpusFiles: listCorpusEntries } = require("./corpus-files");
 
 const DATA_DIR = path.join(__dirname, "data");
 const CORPORA = {
@@ -44,15 +45,7 @@ function hasExtractedText(parsed) {
 }
 
 function listCorpusFiles({ root, extension }) {
-  if (!fs.existsSync(root)) return [];
-  const files = [];
-  for (const year of fs.readdirSync(root).filter((name) => /^\d{4}$/.test(name)).sort()) {
-    const yearDir = path.join(root, year);
-    for (const file of fs.readdirSync(yearDir)) {
-      if (file.endsWith(extension)) files.push(path.join(yearDir, file));
-    }
-  }
-  return files;
+  return listCorpusEntries({ root, extension }).map((entry) => entry.file);
 }
 
 function evenSample(files, cap) {

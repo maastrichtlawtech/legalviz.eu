@@ -22,6 +22,7 @@ const zlib = require("zlib");
 const os = require("os");
 const { execFileSync } = require("child_process");
 
+const { listCorpusFiles } = require("./corpus-files");
 const {
   parseCaseDetailsFromHtml,
   loadCaseLawCache,
@@ -39,15 +40,7 @@ function celexFromFile(file) {
 
 // Walk case-law/<year>/*.html.gz -> [{ celex, file }].
 function listCorpusJudgments(corpusDir = CASE_LAW_CORPUS) {
-  const out = [];
-  if (!fs.existsSync(corpusDir)) return out;
-  for (const year of fs.readdirSync(corpusDir).filter((d) => /^\d{4}$/.test(d)).sort()) {
-    const yearDir = path.join(corpusDir, year);
-    for (const f of fs.readdirSync(yearDir)) {
-      if (f.endsWith(".html.gz")) out.push({ celex: celexFromFile(f), file: path.join(yearDir, f) });
-    }
-  }
-  return out;
+  return listCorpusFiles({ root: corpusDir, extension: ".html.gz" });
 }
 
 function needsParse(entry, force) {

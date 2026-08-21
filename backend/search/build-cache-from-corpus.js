@@ -32,6 +32,7 @@ const zlib = require("zlib");
 const { spawn } = require("child_process");
 
 const { readCorpusDates, normalizeCelexKey } = require("./law-corpus-dates.js");
+const { listCorpusFiles: listCorpusEntries } = require("./corpus-files.js");
 const { enrichRecordsWithEurovoc } = require("./eurovoc-enrich.js");
 const { enrichRecordsWithInForce } = require("./in-force-enrich.js");
 
@@ -188,16 +189,7 @@ function normCelex(celex) {
 }
 
 function listCorpusFiles(root, ext, maxYearExclusive) {
-  if (!fs.existsSync(root)) return [];
-  const out = [];
-  for (const year of fs.readdirSync(root).filter((d) => /^\d{4}$/.test(d)).sort()) {
-    if (Number(year) >= maxYearExclusive) continue;
-    for (const f of fs.readdirSync(path.join(root, year))) {
-      if (!f.endsWith(ext)) continue;
-      out.push({ celex: f.slice(0, -ext.length), file: path.join(root, year, f) });
-    }
-  }
-  return out;
+  return listCorpusEntries({ root, extension: ext, maxYearExclusive });
 }
 
 function chunk(items, size) {

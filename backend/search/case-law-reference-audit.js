@@ -16,14 +16,12 @@ const { execFileSync } = require("child_process");
 
 const { parseCaseDetailsFromHtml } = require("../shared/law-queries");
 const { DEFAULT_PROGRESS_FILE, recordAudit } = require("./corpus-audit-progress.js");
+const { listCorpusFiles } = require("./corpus-files");
 
 const CORPUS_DIR = path.join(__dirname, "data", "case-law");
 
 function listCorpusJudgments(corpusDir = CORPUS_DIR) {
-  if (!fs.existsSync(corpusDir)) return [];
-  return fs.readdirSync(corpusDir).filter((year) => /^\d{4}$/.test(year)).sort()
-    .flatMap((year) => fs.readdirSync(path.join(corpusDir, year)).filter((file) => file.endsWith(".html.gz"))
-      .sort().map((file) => path.join(corpusDir, year, file)));
+  return listCorpusFiles({ root: corpusDir, extension: ".html.gz" }).map((entry) => entry.file);
 }
 
 function filterByYears(files, value) {

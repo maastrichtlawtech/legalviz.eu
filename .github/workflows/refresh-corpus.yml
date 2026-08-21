@@ -166,6 +166,20 @@ jobs:
           for corpus in laws laws-html case-law; do
             test -d "backend/search/data/$corpus" || { echo "Corpus archive did not restore $corpus/" >&2; exit 1; }
           done
+          # The corpus was seeded from a macOS checkout and has carried its
+          # AppleDouble sidecars (`._<CELEX>.xml.gz`, Finder metadata rather
+          # than a gzip stream) into every release since, one per real file.
+          # Everything that walks the corpus by extension counted them as acts.
+          # Purge them on restore so the tars packaged below are clean and the
+          # baseline counts taken next are of real files only.
+          sidecars=$(find backend/search/data/laws backend/search/data/laws-html \
+            backend/search/data/case-law -type f -name '._*' | wc -l | tr -d ' ')
+          if [ "$sidecars" -gt 0 ]; then
+            find backend/search/data/laws backend/search/data/laws-html \
+              backend/search/data/case-law -type f -name '._*' -delete
+            echo "Purged $sidecars AppleDouble sidecars from the restored corpus." \
+              >> "$GITHUB_STEP_SUMMARY"
+          fi
           cp refresh-inputs/case-law-harvest-state.json backend/search/data/
           cp refresh-inputs/case-law-misses.json backend/search/data/
           cp refresh-inputs/case-law-targets.txt backend/search/data/
@@ -188,9 +202,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          laws=$(find backend/search/data/laws -type f -name '*.xml.gz' | wc -l | tr -d ' ')
-          laws_html=$(find backend/search/data/laws-html -type f -name '*.html.gz' | wc -l | tr -d ' ')
-          case_law=$(find backend/search/data/case-law -type f -name '*.html.gz' | wc -l | tr -d ' ')
+          laws=$(find backend/search/data/laws -type f -name '*.xml.gz' ! -name '._*' | wc -l | tr -d ' ')
+          laws_html=$(find backend/search/data/laws-html -type f -name '*.html.gz' ! -name '._*' | wc -l | tr -d ' ')
+          case_law=$(find backend/search/data/case-law -type f -name '*.html.gz' ! -name '._*' | wc -l | tr -d ' ')
           for count in "$laws" "$laws_html" "$case_law"; do [[ "$count" =~ ^[0-9]+$ ]]; done
           {
             echo "laws=$laws"
@@ -306,9 +320,9 @@ jobs:
             case-law-harvest-state.json case-law-misses.json case-law-targets.txt; do
             test -s "refresh-output/$asset" || { echo "Candidate asset is missing or empty: $asset" >&2; exit 1; }
           done
-          law_count=$(find backend/search/data/laws -type f -name '*.xml.gz' | wc -l | tr -d ' ')
-          html_count=$(find backend/search/data/laws-html -type f -name '*.html.gz' | wc -l | tr -d ' ')
-          case_count=$(find backend/search/data/case-law -type f -name '*.html.gz' | wc -l | tr -d ' ')
+          law_count=$(find backend/search/data/laws -type f -name '*.xml.gz' ! -name '._*' | wc -l | tr -d ' ')
+          html_count=$(find backend/search/data/laws-html -type f -name '*.html.gz' ! -name '._*' | wc -l | tr -d ' ')
+          case_count=$(find backend/search/data/case-law -type f -name '*.html.gz' ! -name '._*' | wc -l | tr -d ' ')
           test "$law_count" -gt 0
           test "$html_count" -gt 0
           test "$case_count" -gt 0

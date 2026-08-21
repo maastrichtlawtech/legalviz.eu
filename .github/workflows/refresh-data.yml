@@ -154,6 +154,11 @@ jobs:
               if (!/^\d{4}$/.test(year)) continue;
               const yearDir = path.join(root, year);
               for (const file of fs.readdirSync(yearDir)) {
+                // Dotfiles are never acts. The corpus carries AppleDouble
+                // sidecars (`._<CELEX>.xml.gz`); without this the scan derived
+                // ids like `._31953D0004` and handed 80,465 of them to the
+                // backfill, which dropped every one. See search/corpus-files.js.
+                if (file.startsWith(".")) continue;
                 const celex = file
                   .replace(/\.xml\.gz$/i, "")
                   .replace(/\.html\.gz$/i, "")

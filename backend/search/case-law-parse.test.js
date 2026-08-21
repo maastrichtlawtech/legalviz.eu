@@ -81,6 +81,37 @@ test("needsParse skips entries already at the current parser version", () => {
   assert.equal(needsParse({ citationParserVersion: CITATION_PARSER_VERSION }, true), true); // --force
 });
 
+// Regression: the corpus ships an AppleDouble sidecar beside every judgment.
+// They are not gzip streams, so each one used to reach gunzip and come back
+// "incorrect header check" — 8,752 errors per pipeline run, every run, since a
+// failed parse writes no versioned stub to skip next time.
+test("parseCaseLawCorpus ignores AppleDouble sidecars in the corpus", async () => {
+  await withTempDir(async (dir) => {
+    const corpusDir = path.join(dir, "case-law");
+    const cacheDir = path.join(dir, "cache");
+    fs.mkdirSync(path.join(corpusDir, "2019"), { recursive: true });
+    fs.mkdirSync(cacheDir, { recursive: true });
+    fs.writeFileSync(path.join(cacheDir, "case-law-cache-v5.json"), "{}");
+    fs.writeFileSync(
+      path.join(corpusDir, "2019", "62019CJ0311.html.gz"),
+      zlib.gzipSync(Buffer.from(MODERN_JUDGMENT, "utf8")),
+    );
+    // Finder metadata, not gzip — exactly what the corpus tars carry.
+    fs.writeFileSync(
+      path.join(corpusDir, "2019", "._62019CJ0311.html.gz"),
+      Buffer.from("\x00\x05\x16\x07\x00\x02\x00\x00Mac OS X        ", "binary"),
+    );
+
+    const result = await parseCaseLawCorpus({ corpusDir, cacheDir, batchSize: 10 });
+    assert.equal(result.total, 1, "the sidecar is not a judgment");
+    assert.equal(result.parsed, 1);
+    assert.equal(result.errors, 0, "no gunzip failures");
+
+    const cache = JSON.parse(fs.readFileSync(path.join(cacheDir, "case-law-cache-v5.json"), "utf8"));
+    assert.deepEqual(Object.keys(cache), ["62019CJ0311"]);
+  });
+});
+
 test("parseCaseLawCorpus parses a corpus into the cache, is resumable, and merges", async () => {
   await withTempDir(async (dir) => {
     const corpusDir = path.join(dir, "case-law");

@@ -192,6 +192,22 @@ function requestsHistoricalLaw(parsed) {
     .test(String(parsed.originalQuery || ""));
 }
 
+function todayIso() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+// `inForce: false` covers two opposite situations, and only an entry-into-force
+// date separates them: an act that has fallen out of force, and one that is
+// published but has not entered into force yet. Acts are harvested when
+// published, normally before entry into force, so every new act spends its
+// first weeks reading `false` — and without this it was ranked, and labelled,
+// as though it had expired.
+function isNotYetInForce(record, today = todayIso()) {
+  return record?.inForce === false
+    && typeof record?.entryIntoForce === "string"
+    && record.entryIntoForce > today;
+}
+
 function buildMiniSearch(records, { includeExcerpt = true, includeEurovoc = true } = {}) {
   const fields = ["title", "aliases"];
   if (includeEurovoc) fields.push("eurovoc");
@@ -202,7 +218,7 @@ function buildMiniSearch(records, { includeExcerpt = true, includeEurovoc = true
   const miniSearch = new MiniSearch({
     idField: "celex",
     fields,
-    storeFields: ["type", "inForce"],
+    storeFields: ["type", "inForce", "notYetInForce"],
     searchOptions: {
       boost,
       fuzzy: 0.2,
@@ -211,6 +227,7 @@ function buildMiniSearch(records, { includeExcerpt = true, includeEurovoc = true
     },
   });
 
+  const today = todayIso();
   miniSearch.addAll(dedupeByCelex(records).map((record) => ({
     celex: record.celex,
     title: record.title || "",
@@ -223,6 +240,9 @@ function buildMiniSearch(records, { includeExcerpt = true, includeEurovoc = true
     excerpt: record.excerpt || "",
     type: record.type,
     inForce: record.inForce,
+    // Resolved once here rather than per query hit: "in the future" is relative
+    // to index-build time, which moves when the store is rebuilt.
+    notYetInForce: isNotYetInForce(record, today),
   })));
 
   return miniSearch;
@@ -301,6 +321,7 @@ function compactSqliteRecord(record) {
     // boundary (searchLaws), not here.
     inForce: enriched.inForce,
     endOfValidity: enriched.endOfValidity,
+    entryIntoForce: enriched.entryIntoForce,
     celexYear: enriched.celexYear,
     celexNumber: enriched.celexNumber,
     aliases: enriched.aliases,
@@ -466,7 +487,15 @@ function buildDocumentBoost(parsed, citationCounts = new Map(), {
     if (useGlobalPriors) {
       let statusBoost = 1;
       if (useStatusPrior) {
-        if (historicalIntent && stored?.inForce === false) statusBoost = inForceBoost;
+        // An act that has not entered into force yet is neither current nor
+        // historical, so it takes neither prior. It reads `inForce: false`, and
+        // without this branch a regulation taking effect next week was demoted
+        // as though it had expired — during exactly the weeks people search for
+        // it. Left neutral rather than boosted: fixing the penalty is this
+        // change; promoting upcoming law over current law would be a different
+        // one, and needs its own evidence.
+        if (stored?.notYetInForce) statusBoost = 1;
+        else if (historicalIntent && stored?.inForce === false) statusBoost = inForceBoost;
         else if (historicalIntent && stored?.inForce === true) statusBoost = noLongerInForceBoost;
         else if (stored?.inForce === true) statusBoost = inForceBoost;
         else if (stored?.inForce === false) statusBoost = noLongerInForceBoost;
@@ -483,9 +512,16 @@ function buildDocumentBoost(parsed, citationCounts = new Map(), {
   };
 }
 
+// The fulltext fusion path builds its own `stored` rather than reading
+// MiniSearch's, so notYetInForce has to be recomputed here or upcoming acts
+// keep the out-of-force penalty in fulltext results only.
 function documentPrior(parsed, law, citationCounts, options) {
   const boost = buildDocumentBoost(parsed, citationCounts, options);
-  return boost(law.celex, "", { type: law.type, inForce: law.inForce });
+  return boost(law.celex, "", {
+    type: law.type,
+    inForce: law.inForce,
+    notYetInForce: isNotYetInForce(law),
+  });
 }
 
 class JsonLegalCacheStore {
@@ -1490,6 +1526,10 @@ class JsonLegalCacheStore {
         // null means "unknown", and the client draws no badge for it.
         inForce: law.inForce ?? null,
         endOfValidity: law.endOfValidity || null,
+        // Lets the client tell "not yet in force" from "no longer in force";
+        // both read `inForce: false`. Absent on records predating the field,
+        // and the client falls back to the weaker label when it is missing.
+        entryIntoForce: law.entryIntoForce || null,
       }));
   }
 
@@ -1590,6 +1630,7 @@ module.exports = {
   buildFulltextMatchExpression,
   JsonLegalCacheStore,
   SQLITE_SCHEMA_VERSION,
+  isNotYetInForce,
   containedAliasKeys,
   documentPrior,
   normalizeCelexLookupKey,

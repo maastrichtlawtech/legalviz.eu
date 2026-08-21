@@ -7,6 +7,8 @@ const path = require("node:path");
 const {
   JsonLegalCacheStore,
   containedAliasKeys,
+  documentPrior,
+  isNotYetInForce,
 } = require("./legal-cache-store");
 const { buildSqliteData } = require("./build-sqlite-data");
 const { openFulltextDatabase, FULLTEXT_SCHEMA_VERSION } = require("./fulltext-index-build");
@@ -63,6 +65,7 @@ function publicRecord(record) {
     eurovoc: record?.eurovoc,
     inForce: record?.inForce,
     endOfValidity: record?.endOfValidity,
+    entryIntoForce: record?.entryIntoForce,
     celexYear: record?.celexYear,
     celexNumber: record?.celexNumber,
     aliases: record?.aliases,
@@ -1175,4 +1178,82 @@ test("fulltext source: FTS metacharacters in the query never throw or break the 
 
   store.close();
   fs.rmSync(tempDir, { recursive: true, force: true });
+});
+
+// --- not yet in force -------------------------------------------------------
+//
+// `inForce: false` means "not in force on the day Cellar was asked" and nothing
+// more. Acts are harvested when published, normally before entry into force, so
+// a brand-new regulation reads `false` for its first weeks. Until entryIntoForce
+// was fetched there was no way to tell that from an act that expired in 1994 —
+// and both the label and the ranking prior treated it as the latter.
+
+test("isNotYetInForce separates an upcoming act from an expired one", () => {
+  const today = "2026-08-21";
+  // 32026R1818 as Cellar actually answers it: in-force 0, entry 2026-08-30.
+  assert.equal(isNotYetInForce({ inForce: false, entryIntoForce: "2026-08-30" }, today), true);
+  // 31970R0729: entered into force in 1970, ran out in 1999.
+  assert.equal(isNotYetInForce({ inForce: false, entryIntoForce: "1970-05-18" }, today), false);
+  // Today is not "yet to come".
+  assert.equal(isNotYetInForce({ inForce: false, entryIntoForce: today }, today), false);
+  // Records predating the field, and acts Cellar has no entry date for.
+  assert.equal(isNotYetInForce({ inForce: false }, today), false);
+  assert.equal(isNotYetInForce({ inForce: false, entryIntoForce: null }, today), false);
+  // A live act is never "not yet".
+  assert.equal(isNotYetInForce({ inForce: true, entryIntoForce: "2026-08-30" }, today), false);
+  assert.equal(isNotYetInForce(undefined, today), false);
+});
+
+test("an act that has not entered into force yet is not demoted as expired", () => {
+  const parsed = { originalQuery: "regulation on packaging", terms: ["packaging"] };
+  const counts = new Map();
+  const future = new Date(Date.now() + 30 * 86_400_000).toISOString().slice(0, 10);
+
+  const upcoming = documentPrior(parsed, { celex: "32026R1818", type: "regulation", inForce: false, entryIntoForce: future }, counts);
+  const expired = documentPrior(parsed, { celex: "31970R0729", type: "regulation", inForce: false, entryIntoForce: "1970-05-18" }, counts);
+  const live = documentPrior(parsed, { celex: "32016R0679", type: "regulation", inForce: true, entryIntoForce: "2016-05-24" }, counts);
+
+  assert.ok(upcoming > expired, "an upcoming act must not rank below an expired one");
+  assert.ok(upcoming < live, "nor above one already in force — this fixes a penalty, it does not add a boost");
+});
+
+test("entryIntoForce survives the SQLite whitelist and reaches search results", () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "legal-cache-store-entry-"));
+  const cachePath = path.join(tempDir, "search-cache.json");
+  const caseLawPath = path.join(tempDir, "case-law.json");
+  const sqlitePath = path.join(tempDir, "data.sqlite");
+  const future = new Date(Date.now() + 30 * 86_400_000).toISOString().slice(0, 10);
+
+  const record = {
+    celex: "32026R1818",
+    title: "Regulation (EU) 2026/1818 of the European Parliament and of the Council on packaging",
+    type: "regulation",
+    date: "2026-06-17",
+    // Required: isPrimaryAct is derived from the ELI, and a record without one
+    // is filtered out of the store entirely.
+    eli: "http://data.europa.eu/eli/reg/2026/1818/oj",
+    fmxAvailable: true,
+    eurovoc: ["packaging"],
+    inForce: false,
+    endOfValidity: null,
+    entryIntoForce: future,
+  };
+  fs.writeFileSync(cachePath, JSON.stringify({ count: 1, records: [record] }), "utf8");
+  fs.writeFileSync(caseLawPath, "{}", "utf8");
+  buildSqliteData({ searchCachePath: cachePath, caseLawCachePath: caseLawPath, outputPath: sqlitePath });
+
+  // Both backends, because compactSqliteRecord is an explicit whitelist: a
+  // field missing from it flows fine through the JSON dev path and vanishes in
+  // production, which loads from SQLite.
+  for (const store of [
+    new JsonLegalCacheStore(cachePath, { preferJson: true }),
+    new JsonLegalCacheStore(cachePath, { sqlitePath, requireSqlite: true }),
+  ]) {
+    assert.equal(store.load(), true);
+    const hit = store.searchLaws("packaging", { limit: 5 }).find((law) => law.celex === "32026R1818");
+    assert.ok(hit, `expected a hit from the ${store.source} backend`);
+    assert.equal(hit.inForce, false);
+    assert.equal(hit.entryIntoForce, future, `entryIntoForce lost by the ${store.source} backend`);
+    store.close?.();
+  }
 });

@@ -138,6 +138,11 @@ export function LawOverviewPage({
         {status ? (
           status.inForce ? (
             <Pill variant="ok">{t("metadata.inForce")}</Pill>
+          ) : status.notYetInForce ? (
+            <Pill variant="warn">
+              {t("metadata.notYetInForce")}
+              {status.startsOn ? ` · ${formatMetaDate(status.startsOn, locale)}` : ""}
+            </Pill>
           ) : (
             <Pill variant="muted">
               {t("metadata.notInForce")}

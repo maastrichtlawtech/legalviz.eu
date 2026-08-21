@@ -92,7 +92,67 @@ describe("SearchBox — in-force badge", () => {
     const row = rowFor("2016/679");
     expect(row).toBeTruthy();
     expect(row.textContent).toContain("In force");
-    expect(row.textContent).not.toContain("No longer in force");
+    expect(row.textContent).not.toContain("Not in force");
+  });
+
+  // The reason entryIntoForce is fetched at all. Acts are harvested when
+  // published, normally before they enter into force, so a brand-new regulation
+  // carries `inForce: false` — the same flag as an act that expired in 1994.
+  // Regulation 2026/1818 really is Cellar's answer here: in-force 0, entry
+  // 2026-08-30. It used to be labelled "No longer in force" and greyed out.
+  it("badges an act published but not yet in force, and dates it from entryIntoForce", async () => {
+    const future = new Date(Date.now() + 30 * 86_400_000).toISOString().slice(0, 10);
+    searchLaws.mockResolvedValue({
+      results: [{
+        celex: "32026R1818",
+        title: "Regulation on packaging",
+        date: "2026-06-17",
+        inForce: false,
+        endOfValidity: null,
+        entryIntoForce: future,
+      }],
+    });
+    renderSearchBox();
+
+    typeQuery("packaging");
+    await flush();
+
+    const row = rowFor("2026/1818");
+    expect(row).toBeTruthy();
+    expect(row.textContent).toContain("Not yet in force");
+
+    const badge = Array.from(row.querySelectorAll("[title]")).find((el) => el.title.includes(future));
+    expect(badge).toBeTruthy();
+    expect(badge.title).toBe(`Enters into force on ${future}`);
+    expect(badge.title).not.toContain("{date}");
+
+    // Not greyed out: an act that has not started is the opposite of spent.
+    const title = row.querySelector(".font-display");
+    expect(title.className).not.toContain("text-gray-400");
+  });
+
+  // An entry date in the past is not a reason to soften anything: the act
+  // started and then stopped, which is exactly "not in force" today.
+  it("treats a past entry-into-force date as not in force, not as upcoming", async () => {
+    searchLaws.mockResolvedValue({
+      results: [{
+        celex: "31970R0729",
+        title: "Regulation on agricultural policy financing",
+        date: "1970-04-21",
+        inForce: false,
+        endOfValidity: "1999-07-02",
+        entryIntoForce: "1970-05-18",
+      }],
+    });
+    renderSearchBox();
+
+    typeQuery("agricultural policy financing");
+    await flush();
+
+    const row = rowFor("1970/729");
+    expect(row).toBeTruthy();
+    expect(row.textContent).toContain("Not in force");
+    expect(row.textContent).not.toContain("Not yet in force");
   });
 
   it("badges an act that is no longer in force, and dates it from endOfValidity", async () => {
@@ -112,7 +172,10 @@ describe("SearchBox — in-force badge", () => {
 
     const row = rowFor("95/46");
     expect(row).toBeTruthy();
-    expect(row.textContent).toContain("No longer in force");
+    // The pill states only what the flag supports. "No longer" is a claim about
+    // the past that `inForce: false` alone cannot make — see the not-yet case
+    // below, which carries the same flag and means the opposite.
+    expect(row.textContent).toContain("Not in force");
 
     // The tooltip carries the date, and must interpolate rather than leak the
     // raw {date} placeholder.

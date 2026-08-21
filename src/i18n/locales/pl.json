@@ -79,7 +79,12 @@
     "shortcut": "Cmd+K",
     "submitLawSearch": "Szukaj praw",
     "typeCurrentLaw": "Wpisz, aby szukać w {law}.",
-    "typeLaws": "Wyszukuj akty pierwotne UE według tytułu, odniesienia lub CELEX."
+    "typeLaws": "Wyszukuj akty pierwotne UE według tytułu, odniesienia lub CELEX.",
+    "notYetInForce": "Jeszcze nie obowiązuje",
+    "entryIntoForce": "Wchodzi w życie {date}",
+    "inForce": "Obowiązuje",
+    "notInForce": "Nie obowiązuje",
+    "endOfValidity": "Już nie obowiązuje od {date}"
   },
   "topBar": {
     "byline": "Autor: Konrad Kollnig, Law & Tech Lab Maastricht",
@@ -296,6 +301,7 @@
     "inForce": "Obowiązuje",
     "loading": "Ładowanie metadanych…",
     "notInForce": "Już nie obowiązuje",
+    "notYetInForce": "Jeszcze nie obowiązuje",
     "status": "Stan prawny",
     "title": "Status i daty",
     "unavailable": "Metadane niedostępne",

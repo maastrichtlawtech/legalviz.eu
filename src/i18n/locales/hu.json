@@ -79,7 +79,12 @@
     "shortcut": "Cmd+K",
     "submitLawSearch": "Jogszabályok keresése",
     "typeCurrentLaw": "Írjon a(z) {law} jogszabályban való kereséshez.",
-    "typeLaws": "Keressen elsődleges uniós jogi aktusokat cím, hivatkozás vagy CELEX szerint."
+    "typeLaws": "Keressen elsődleges uniós jogi aktusokat cím, hivatkozás vagy CELEX szerint.",
+    "notYetInForce": "Még nem hatályos",
+    "entryIntoForce": "Hatályba lép: {date}",
+    "inForce": "Hatályos",
+    "notInForce": "Nem hatályos",
+    "endOfValidity": "Már nem hatályos {date} óta"
   },
   "topBar": {
     "byline": "Készítette: Konrad Kollnig, Law & Tech Lab Maastricht",
@@ -296,6 +301,7 @@
     "inForce": "Hatályos",
     "loading": "Metaadatok betöltése…",
     "notInForce": "Már nem hatályos",
+    "notYetInForce": "Még nem hatályos",
     "status": "Állapot",
     "title": "Állapot és dátumok",
     "unavailable": "A metaadatok nem érhetők el",

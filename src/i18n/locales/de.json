@@ -79,7 +79,12 @@
     "shortcut": "Cmd+K",
     "submitLawSearch": "Gesetze suchen",
     "typeCurrentLaw": "Tippen Sie, um in {law} zu suchen.",
-    "typeLaws": "Suchen Sie primäre EU-Rechtsakte nach Titel, Referenz oder CELEX. Sekundärrechtsakte sind noch nicht enthalten."
+    "typeLaws": "Suchen Sie primäre EU-Rechtsakte nach Titel, Referenz oder CELEX. Sekundärrechtsakte sind noch nicht enthalten.",
+    "notYetInForce": "Noch nicht in Kraft",
+    "entryIntoForce": "Tritt am {date} in Kraft",
+    "inForce": "In Kraft",
+    "notInForce": "Nicht in Kraft",
+    "endOfValidity": "Nicht mehr in Kraft seit {date}"
   },
   "topBar": {
     "byline": "Von Konrad Kollnig, Law & Tech Lab Maastricht",
@@ -296,6 +301,7 @@
     "inForce": "In Kraft",
     "loading": "Metadaten werden geladen…",
     "notInForce": "Nicht mehr in Kraft",
+    "notYetInForce": "Noch nicht in Kraft",
     "status": "Status",
     "title": "Status und Daten",
     "unavailable": "Metadaten nicht verfügbar",

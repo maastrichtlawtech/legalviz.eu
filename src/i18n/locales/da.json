@@ -79,7 +79,12 @@
     "shortcut": "Cmd+K",
     "submitLawSearch": "Søg love",
     "typeCurrentLaw": "Skriv for at søge i {law}.",
-    "typeLaws": "Søg i primære EU-retsakter efter titel, reference eller CELEX. Sekundære retsakter er endnu ikke inkluderet."
+    "typeLaws": "Søg i primære EU-retsakter efter titel, reference eller CELEX. Sekundære retsakter er endnu ikke inkluderet.",
+    "notYetInForce": "Endnu ikke i kraft",
+    "entryIntoForce": "Træder i kraft den {date}",
+    "inForce": "I kraft",
+    "notInForce": "Ikke i kraft",
+    "endOfValidity": "Ikke længere i kraft siden {date}"
   },
   "topBar": {
     "byline": "Af Konrad Kollnig, Law & Tech Lab Maastricht",
@@ -296,6 +301,7 @@
     "inForce": "I kraft",
     "loading": "Indlæser metadata…",
     "notInForce": "Ikke længere i kraft",
+    "notYetInForce": "Endnu ikke i kraft",
     "status": "Status",
     "title": "Status og datoer",
     "unavailable": "Metadata ikke tilgængelige",

@@ -79,7 +79,12 @@
     "shortcut": "Cmd+K",
     "submitLawSearch": "Meklēt likumus",
     "typeCurrentLaw": "Rakstiet, lai meklētu likumā {law}.",
-    "typeLaws": "Meklējiet ES primāros tiesību aktus pēc nosaukuma, atsauces vai CELEX."
+    "typeLaws": "Meklējiet ES primāros tiesību aktus pēc nosaukuma, atsauces vai CELEX.",
+    "notYetInForce": "Vēl nav spēkā",
+    "entryIntoForce": "Stājas spēkā {date}",
+    "inForce": "Spēkā",
+    "notInForce": "Nav spēkā",
+    "endOfValidity": "Vairs nav spēkā kopš {date}"
   },
   "topBar": {
     "byline": "Konrada Kollniga autors, Māstrihtas tiesību un tehnoloģijas laboratorija",
@@ -296,6 +301,7 @@
     "inForce": "Spēkā",
     "loading": "Metadatu ielāde…",
     "notInForce": "Vairs nav spēkā",
+    "notYetInForce": "Vēl nav spēkā",
     "status": "Statuss",
     "title": "Statuss un datumi",
     "unavailable": "Metadati nav pieejami",

@@ -79,7 +79,12 @@
     "shortcut": "Cmd+K",
     "submitLawSearch": "Otsi seadusi",
     "typeCurrentLaw": "Tippige seadusest {law} otsimiseks.",
-    "typeLaws": "Otsige ELi esmaseid õigusakte pealkirja, viite või CELEXi järgi. Teisesed õigusaktid ei ole veel kaasatud."
+    "typeLaws": "Otsige ELi esmaseid õigusakte pealkirja, viite või CELEXi järgi. Teisesed õigusaktid ei ole veel kaasatud.",
+    "notYetInForce": "Ei ole veel jõustunud",
+    "entryIntoForce": "Jõustub {date}",
+    "inForce": "Kehtiv",
+    "notInForce": "Ei kehti",
+    "endOfValidity": "Ei ole enam kehtiv alates {date}"
   },
   "topBar": {
     "byline": "Konrad Kollnigi autor, Maastrichti õiguse ja tehnoloogia labor",
@@ -296,6 +301,7 @@
     "inForce": "Kehtiv",
     "loading": "Metaandmete laadimine…",
     "notInForce": "Ei ole enam kehtiv",
+    "notYetInForce": "Ei ole veel jõustunud",
     "status": "Staatus",
     "title": "Staatus ja kuupäevad",
     "unavailable": "Metaandmed pole saadaval",

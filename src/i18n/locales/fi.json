@@ -79,7 +79,12 @@
     "shortcut": "Cmd+K",
     "submitLawSearch": "Hae lakeja",
     "typeCurrentLaw": "Kirjoita hakeaksesi laista {law}.",
-    "typeLaws": "Hae EU:n ensisijaisia säädöksiä otsikon, viitteen tai CELEX-tunnuksen mukaan. Toissijaisia säädöksiä ei ole vielä mukana."
+    "typeLaws": "Hae EU:n ensisijaisia säädöksiä otsikon, viitteen tai CELEX-tunnuksen mukaan. Toissijaisia säädöksiä ei ole vielä mukana.",
+    "notYetInForce": "Ei vielä voimassa",
+    "entryIntoForce": "Tulee voimaan {date}",
+    "inForce": "Voimassa",
+    "notInForce": "Ei voimassa",
+    "endOfValidity": "Ei enää voimassa {date} alkaen"
   },
   "topBar": {
     "byline": "Konrad Kollnigin tekijä, Maastrichtin Law & Tech Lab",
@@ -296,6 +301,7 @@
     "inForce": "Voimassa",
     "loading": "Ladataan metatietoja…",
     "notInForce": "Ei enää voimassa",
+    "notYetInForce": "Ei vielä voimassa",
     "status": "Tila",
     "title": "Tila ja päivämäärät",
     "unavailable": "Metatiedot eivät ole saatavilla",

@@ -79,7 +79,12 @@
     "shortcut": "Cmd+K",
     "submitLawSearch": "Cuardaigh dlíthe",
     "typeCurrentLaw": "Clóscríobh chun cuardach a dhéanamh i {law}.",
-    "typeLaws": "Cuardaigh gníomhartha príomha an AE de réir teidil, tagartha nó CELEX."
+    "typeLaws": "Cuardaigh gníomhartha príomha an AE de réir teidil, tagartha nó CELEX.",
+    "notYetInForce": "Níl i bhfeidhm fós",
+    "entryIntoForce": "Tagann i bhfeidhm ar {date}",
+    "inForce": "I bhfeidhm",
+    "notInForce": "Níl i bhfeidhm",
+    "endOfValidity": "Níl i bhfeidhm a thuilleadh ó {date}"
   },
   "topBar": {
     "byline": "Konrad Kollnig, Law & Tech Lab Maastricht",
@@ -296,6 +301,7 @@
     "inForce": "I bhfeidhm",
     "loading": "Meiteashonraí á lódáil…",
     "notInForce": "Níl i bhfeidhm a thuilleadh",
+    "notYetInForce": "Níl i bhfeidhm fós",
     "status": "Stádas",
     "title": "Stádas agus dátaí",
     "unavailable": "Meiteashonraí nach bhfuil ar fáil",

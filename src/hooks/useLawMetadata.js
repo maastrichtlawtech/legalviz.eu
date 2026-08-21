@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { fetchLawMetadata, fetchAmendments, fetchImplementingActs, fetchLawCitedBy } from "../utils/formexApi.js";
+import { earliestEntryIntoForce, todayIso } from "../utils/lawStatus.js";
 
 // Cellar's sentinel for "open-ended" (still in force).
 const IN_FORCE_SENTINEL = "9999-12-31";
@@ -61,15 +62,28 @@ export function useLawMetadata(celex) {
     return () => { cancelled = true; };
   }, [celex]);
 
-  // Derive in-force status from endOfValidity (reliable) rather than the CDM
-  // boolean (unreliable after amendments). Absent metadata → no status at all.
+  // Status is still derived from endOfValidity rather than the CDM boolean: the
+  // boolean was parsed wrong here for a long time (Cellar answers "1"/"0", the
+  // code compared to "true"), so every act read false and this derivation grew
+  // up around it. That parse is fixed in shared/law-queries.js, but switching
+  // the derivation over would restate 80k acts' status in one go and belongs in
+  // its own change.
+  //
+  // What is corrected here is the case the date test gets flatly backwards: an
+  // act published but not yet in force has no end of validity, so it was shown
+  // "In force" while the search results — reading the same Cellar flag — said
+  // the opposite. The entry dates were already fetched; they just weren't used.
   let status = null;
   if (metadata) {
     const eov = metadata.endOfValidity;
     const noLongerInForce = Boolean(eov && eov !== IN_FORCE_SENTINEL && new Date(eov) < new Date());
+    const startsOn = earliestEntryIntoForce(metadata.entryIntoForce);
+    const notYetInForce = Boolean(!noLongerInForce && startsOn && startsOn > todayIso());
     status = {
-      inForce: !noLongerInForce,
-      // The end date is only meaningful to surface when the law has lapsed.
+      inForce: !noLongerInForce && !notYetInForce,
+      notYetInForce,
+      // Each date is only meaningful in the state it explains.
+      startsOn: notYetInForce ? startsOn : null,
       endedOn: noLongerInForce ? eov : null,
     };
   }

@@ -15,6 +15,7 @@ import {
 import { buildImportedLawCandidate, getCanonicalLawRoute, parseCelexQuery } from "../utils/lawRouting.js";
 import { inferOfficialReferenceFromCelex, saveLawMeta } from "../utils/library.js";
 import { cleanLawTitle, extractShortLawTitle, formatOfficialReference } from "../utils/lawDisplay.js";
+import { lawStatus } from "../utils/lawStatus.js";
 import { DefinitionSearchResult } from "./search/DefinitionSearchResult.jsx";
 import { FulltextSearchResult } from "./search/FulltextSearchResult.jsx";
 import { McpTopBarButton } from "./McpPromo.jsx";
@@ -1186,7 +1187,7 @@ export function SearchBox({
                                   <>
                                     <div className="flex w-full min-w-0 items-baseline gap-2">
                                       <span className={`min-w-0 flex-1 truncate font-display font-bold ${dense ? "text-[14px]" : "text-[15px]"} ${
-                                        item.inForce === false
+                                        lawStatus(item) === "notInForce"
                                           ? "text-gray-400 dark:text-gray-500"
                                           : "text-eu-navy dark:text-white"
                                       }`}>
@@ -1202,17 +1203,26 @@ export function SearchBox({
                                           {item.law_label}
                                         </span>
                                       )}
-                                      {/* Tri-state, so compare to true/false explicitly: null means
-                                          Cellar has no status for this act, and drawing nothing is
-                                          the only honest answer. `false` means "no longer in force"
-                                          and nothing more — there is no repeal data behind it. */}
-                                      {item.inForce === true && (
+                                      {/* Four states, and `null` is one of them: Cellar has no
+                                          status for ~13% of the corpus, and drawing nothing is the
+                                          only honest answer there. See lawStatus() for why `false`
+                                          alone is not enough to say "no longer". */}
+                                      {lawStatus(item) === "inForce" && (
                                         <span className="inline-flex flex-shrink-0 items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
                                           <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 dark:bg-emerald-400" aria-hidden="true" />
                                           {t("search.inForce")}
                                         </span>
                                       )}
-                                      {item.inForce === false && (
+                                      {lawStatus(item) === "notYetInForce" && (
+                                        <span
+                                          className="inline-flex flex-shrink-0 items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-amber-700 dark:bg-amber-900/40 dark:text-amber-300"
+                                          title={t("search.entryIntoForce").replace("{date}", item.entryIntoForce)}
+                                        >
+                                          <span className="h-1.5 w-1.5 rounded-full bg-amber-500 dark:bg-amber-400" aria-hidden="true" />
+                                          {t("search.notYetInForce")}
+                                        </span>
+                                      )}
+                                      {lawStatus(item) === "notInForce" && (
                                         <span
                                           className="flex-shrink-0 rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-gray-500 dark:bg-gray-800 dark:text-gray-400"
                                           title={item.endOfValidity ? t("search.endOfValidity").replace("{date}", item.endOfValidity) : undefined}
@@ -1223,7 +1233,7 @@ export function SearchBox({
                                     </div>
                                     {lawDisplay?.secondaryTitle ? (
                                       <p className={`text-xs leading-relaxed line-clamp-2 ${
-                                        item.inForce === false
+                                        lawStatus(item) === "notInForce"
                                           ? "text-gray-400 dark:text-gray-500"
                                           : "text-gray-500 dark:text-gray-400"
                                       }`}>

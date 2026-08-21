@@ -79,7 +79,12 @@
     "shortcut": "Cmd+K",
     "submitLawSearch": "Търсене на закони",
     "typeCurrentLaw": "Въведете, за да търсите в {law}.",
-    "typeLaws": "Търсете първични актове на ЕС по заглавие, референция или CELEX. Вторичните актове все още не са включени."
+    "typeLaws": "Търсете първични актове на ЕС по заглавие, референция или CELEX. Вторичните актове все още не са включени.",
+    "notYetInForce": "Още не е в сила",
+    "entryIntoForce": "Влиза в сила на {date}",
+    "inForce": "В сила",
+    "notInForce": "Не е в сила",
+    "endOfValidity": "Вече не е в сила от {date}"
   },
   "topBar": {
     "byline": "От Konrad Kollnig, Law & Tech Lab Maastricht",
@@ -296,6 +301,7 @@
     "inForce": "В сила",
     "loading": "Зареждане на метаданни…",
     "notInForce": "Вече не е в сила",
+    "notYetInForce": "Още не е в сила",
     "status": "Статус",
     "title": "Статус и дати",
     "unavailable": "Метаданните не са налични",

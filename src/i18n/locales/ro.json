@@ -79,7 +79,12 @@
     "shortcut": "Cmd+K",
     "submitLawSearch": "Caută legi",
     "typeCurrentLaw": "Tastați pentru a căuta în {law}.",
-    "typeLaws": "Căutați acte primare UE după titlu, referință sau CELEX."
+    "typeLaws": "Căutați acte primare UE după titlu, referință sau CELEX.",
+    "notYetInForce": "Încă nu este în vigoare",
+    "entryIntoForce": "Intră în vigoare la {date}",
+    "inForce": "În vigoare",
+    "notInForce": "Nu este în vigoare",
+    "endOfValidity": "Nu mai este în vigoare din {date}"
   },
   "topBar": {
     "byline": "De Konrad Kollnig, Law & Tech Lab Maastricht",
@@ -296,6 +301,7 @@
     "inForce": "În vigoare",
     "loading": "Se încarcă metadatele…",
     "notInForce": "Nu mai este în vigoare",
+    "notYetInForce": "Încă nu este în vigoare",
     "status": "Stare",
     "title": "Stare și date",
     "unavailable": "Metadate indisponibile",

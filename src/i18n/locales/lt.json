@@ -79,7 +79,12 @@
     "shortcut": "Cmd+K",
     "submitLawSearch": "Ieškoti įstatymų",
     "typeCurrentLaw": "Rašykite, kad ieškotumėte įstatyme {law}.",
-    "typeLaws": "Ieškokite pirminių ES teisės aktų pagal pavadinimą, nuorodą arba CELEX."
+    "typeLaws": "Ieškokite pirminių ES teisės aktų pagal pavadinimą, nuorodą arba CELEX.",
+    "notYetInForce": "Dar neįsigaliojo",
+    "entryIntoForce": "Įsigalioja {date}",
+    "inForce": "Galioja",
+    "notInForce": "Negalioja",
+    "endOfValidity": "Nebegalioja nuo {date}"
   },
   "topBar": {
     "byline": "Konrado Kollnigo autorius, Maastrichto teisės ir technologijų laboratorija",
@@ -296,6 +301,7 @@
     "inForce": "Galioja",
     "loading": "Įkeliami metaduomenys…",
     "notInForce": "Nebegalioja",
+    "notYetInForce": "Dar neįsigaliojo",
     "status": "Būsena",
     "title": "Būsena ir datos",
     "unavailable": "Metaduomenys neprieinami",

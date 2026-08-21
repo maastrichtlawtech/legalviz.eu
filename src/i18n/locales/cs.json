@@ -79,7 +79,12 @@
     "shortcut": "Cmd+K",
     "submitLawSearch": "Hledat zákony",
     "typeCurrentLaw": "Začněte psát pro vyhledávání v {law}.",
-    "typeLaws": "Vyhledávejte primární právní akty EU podle názvu, reference nebo CELEX. Sekundární akty zatím nejsou zahrnuty."
+    "typeLaws": "Vyhledávejte primární právní akty EU podle názvu, reference nebo CELEX. Sekundární akty zatím nejsou zahrnuty.",
+    "notYetInForce": "Dosud není v platnosti",
+    "entryIntoForce": "Vstupuje v platnost {date}",
+    "inForce": "V platnosti",
+    "notInForce": "Není v platnosti",
+    "endOfValidity": "Již neplatný od {date}"
   },
   "topBar": {
     "byline": "Od Konrada Kollniga, Law & Tech Lab Maastricht",
@@ -296,6 +301,7 @@
     "inForce": "V platnosti",
     "loading": "Načítání metadat…",
     "notInForce": "Již neplatný",
+    "notYetInForce": "Dosud není v platnosti",
     "status": "Stav",
     "title": "Stav a data",
     "unavailable": "Metadata nejsou k dispozici",

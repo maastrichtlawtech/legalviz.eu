@@ -79,7 +79,12 @@
     "shortcut": "Cmd+K",
     "submitLawSearch": "Pretraži zakone",
     "typeCurrentLaw": "Upišite za pretraživanje unutar {law}.",
-    "typeLaws": "Pretražujte primarne akte EU prema naslovu, referenci ili CELEX-u. Sekundarni akti još nisu uključeni."
+    "typeLaws": "Pretražujte primarne akte EU prema naslovu, referenci ili CELEX-u. Sekundarni akti još nisu uključeni.",
+    "notYetInForce": "Još nije na snazi",
+    "entryIntoForce": "Stupa na snagu {date}",
+    "inForce": "Na snazi",
+    "notInForce": "Nije na snazi",
+    "endOfValidity": "Više nije na snazi od {date}"
   },
   "topBar": {
     "byline": "Konrad Kollnig, Law & Tech Lab Maastricht",
@@ -296,6 +301,7 @@
     "inForce": "Na snazi",
     "loading": "Učitavanje metapodataka…",
     "notInForce": "Više nije na snazi",
+    "notYetInForce": "Još nije na snazi",
     "status": "Stanje",
     "title": "Status i datumi",
     "unavailable": "Metapodaci nisu dostupni",

@@ -79,7 +79,12 @@
     "shortcut": "Cmd+K",
     "submitLawSearch": "Hľadať zákony",
     "typeCurrentLaw": "Začnite písať pre vyhľadávanie v {law}.",
-    "typeLaws": "Vyhľadávajte primárne právne akty EÚ podľa názvu, referencie alebo CELEX."
+    "typeLaws": "Vyhľadávajte primárne právne akty EÚ podľa názvu, referencie alebo CELEX.",
+    "notYetInForce": "Zatiaľ nie je v platnosti",
+    "entryIntoForce": "Nadobúda platnosť {date}",
+    "inForce": "V platnosti",
+    "notInForce": "Nie je v platnosti",
+    "endOfValidity": "Už neplatný od {date}"
   },
   "topBar": {
     "byline": "Konrad Kollnig, Law & Tech Lab Maastricht",
@@ -296,6 +301,7 @@
     "inForce": "V platnosti",
     "loading": "Načítavanie metaúdajov…",
     "notInForce": "Už neplatný",
+    "notYetInForce": "Zatiaľ nie je v platnosti",
     "status": "Stav",
     "title": "Stav a dátumy",
     "unavailable": "Metaúdaje nie sú k dispozícii",

@@ -79,7 +79,12 @@
     "shortcut": "Cmd+K",
     "submitLawSearch": "Fittex liġijiet",
     "typeCurrentLaw": "Ittajpja biex tfittex f'{law}.",
-    "typeLaws": "Fittex atti primarji tal-UE skont it-titlu, ir-referenza jew CELEX."
+    "typeLaws": "Fittex atti primarji tal-UE skont it-titlu, ir-referenza jew CELEX.",
+    "notYetInForce": "Għadu mhux fis-seħħ",
+    "entryIntoForce": "Jidħol fis-seħħ fi {date}",
+    "inForce": "Fis-seħħ",
+    "notInForce": "Mhux fis-seħħ",
+    "endOfValidity": "M'għadux fis-seħħ mill-{date}"
   },
   "topBar": {
     "byline": "Konrad Kollnig, Law & Tech Lab Maastricht",
@@ -296,6 +301,7 @@
     "inForce": "Fis-seħħ",
     "loading": "Qed jitgħabbew il-metadata…",
     "notInForce": "M'għadux fis-seħħ",
+    "notYetInForce": "Għadu mhux fis-seħħ",
     "status": "Istatus",
     "title": "Status u dati",
     "unavailable": "Metadata mhux disponibbli",

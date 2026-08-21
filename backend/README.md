@@ -634,14 +634,25 @@ status for the act. Three things about it are easy to get wrong:
 - **`false` means "no longer in force" and nothing more.** Cellar exposes no
   repeal predicate, so there is no way to tell a repealed act from one that
   expired on its own terms (`31970R0729` ran out in 1999 and was never repealed).
-  Don't let a label upgrade this into a claim the data can't support — EUR-Lex
-  itself says "No longer in force".
+  Don't let a label upgrade this into a claim the data can't support. The pill
+  says "Not in force" on the flag alone; it only says "No longer in force" where
+  an end-of-validity date backs it, and "Not yet in force" where an
+  entry-into-force date in the future does.
 - **The flag is authoritative; never derive status from dates.** They disagree:
   `32015L2366` (PSD2) is flagged in force while carrying an `endOfValidity` of
   `2026-06-18`, already in the past.
 - **`9999-12-31` is a sentinel**, not a date. `in-force-enrich.js` normalises it
-  to `null`; `entry-into-force` is deliberately not fetched because it is
-  multi-valued and fans every act out into duplicate rows.
+  to `null`, in `endOfValidity` and `entryIntoForce` alike, along with
+  placeholder years no act could carry (Cellar answers `32026D1296` with
+  `1001-01-01`).
+- **`entry-into-force` is fetched**, as `entryIntoForce`, and it is the only
+  thing that separates the two meanings of `false`. It is genuinely
+  multi-valued — the GDPR carries 2016-05-24 and 2018-05-25, `32026R1818`
+  carries ten dates out to 2036 — so joining it fans an act out into one row per
+  date. That is only safe because nothing is aggregated server-side any more:
+  `reduceBindings` takes the earliest, which is when the act enters into force,
+  the later dates staging individual provisions. Measured cost on a 500-act
+  sample: 1.19x rows, ~520ms per 100-id batch, ~7 minutes for a full sweep.
 
 All three journals are **gitignored build-time artifacts** and resume journals
 only: they mean an interrupted harvest (~800 batches over Cellar) doesn't restart

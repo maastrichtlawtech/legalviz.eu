@@ -24,11 +24,21 @@
 //     EUR-Lex itself says "No longer in force" for exactly this reason.
 //   * `9999-12-31` is Cellar's sentinel for "no end of validity", not a real
 //     date. It is normalised to null here so callers never render the year 9999.
-//   * `entry-into-force` is deliberately NOT fetched: it is multi-valued (the
-//     GDPR carries both 2016-05-24 and 2018-05-25), so joining it fans every act
-//     out into duplicate rows. The aggregate below would hide that, but the
-//     field would still be a coin flip between the two. `date` already covers
-//     the adoption date the UI shows.
+//   * `entry-into-force` IS fetched, as `entryIntoForce`, but it took removing
+//     the server-side aggregation to make that safe. It is multi-valued — the
+//     GDPR carries both 2016-05-24 and 2018-05-25, and 32026R1818 carries ten
+//     dates staged out to 2036 — so joining it fans an act into one row per
+//     date. Under the old `GROUP BY` that was a coin flip between them; now the
+//     rows come back raw and reduceBindings() takes the earliest, which is the
+//     date the act enters into force. The later ones stage individual
+//     provisions and are not a property of the act as a whole.
+//   * Why it is worth the fan-out: `false` does not mean "no longer in force".
+//     Acts are harvested when published, normally *before* entry into force, so
+//     a new act reads `false` and flips to `true` later (see in-force-recheck).
+//     Without an entry date there is no way to tell a regulation that takes
+//     effect next week from one that expired in 1994, and the UI was labelling
+//     the former "No longer in force". `date` is the adoption date and cannot
+//     answer this.
 
 const fs = require("fs");
 const path = require("path");
@@ -44,6 +54,11 @@ const MAX_ATTEMPTS = 5;
 
 // Cellar's "no end of validity" sentinel, not a date anyone should see.
 const NO_END_OF_VALIDITY = "9999-12-31";
+
+// Entry-into-force carries placeholders as well as sentinels: 32026D1296 comes
+// back as 1001-01-01. Nothing in the corpus predates the ECSC, so a date before
+// this is data, not history, and is dropped rather than rendered.
+const EARLIEST_PLAUSIBLE_ENTRY = "1950-01-01";
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -100,12 +115,13 @@ function buildQuery(celexBatch) {
   return `
 PREFIX cdm: <http://publications.europa.eu/ontology/cdm#>
 PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
-SELECT ?celex ?inForceValue ?endValue
+SELECT ?celex ?inForceValue ?endValue ?entryValue
 WHERE {
   VALUES ?celex { ${values} }
   ?work cdm:resource_legal_id_celex ?celex .
   OPTIONAL { ?work cdm:resource_legal_in-force ?inForceValue }
   OPTIONAL { ?work cdm:resource_legal_date_end-of-validity ?endValue }
+  OPTIONAL { ?work cdm:resource_legal_date_entry-into-force ?entryValue }
 }
 `.trim();
 }
@@ -119,6 +135,12 @@ WHERE {
 // and unparseable values already filtered out by parseEndOfValidity — so an act
 // whose only date is the sentinel correctly reduces to null rather than
 // inheriting a neighbour's.
+//
+// `entryIntoForce` takes the earliest plausible date for the same reason it has
+// to be reduced here at all: it is genuinely multi-valued, and the earliest is
+// the one that answers "has this act entered into force yet". Later dates stage
+// individual provisions — 32026R1818 carries ten, out to 2036 — and describe
+// parts of the act rather than the act.
 function reduceBindings(bindings) {
   const byCelex = new Map();
   for (const binding of bindings || []) {
@@ -127,7 +149,7 @@ function reduceBindings(bindings) {
 
     let entry = byCelex.get(celex);
     if (!entry) {
-      entry = { inForce: null, endOfValidity: null };
+      entry = { inForce: null, endOfValidity: null, entryIntoForce: null };
       byCelex.set(celex, entry);
     }
 
@@ -137,6 +159,10 @@ function reduceBindings(bindings) {
     const end = parseEndOfValidity(binding.endValue?.value);
     if (end !== null && (entry.endOfValidity === null || end < entry.endOfValidity)) {
       entry.endOfValidity = end;
+    }
+    const start = parseEntryIntoForce(binding.entryValue?.value);
+    if (start !== null && (entry.entryIntoForce === null || start < entry.entryIntoForce)) {
+      entry.entryIntoForce = start;
     }
   }
   return byCelex;
@@ -188,6 +214,15 @@ function parseEndOfValidity(value) {
   return /^\d{4}-\d{2}-\d{2}$/.test(text) ? text : null;
 }
 
+// Same shape as parseEndOfValidity, plus a floor: the sentinel shows up here
+// too, and so do placeholder years no act could have.
+function parseEntryIntoForce(value) {
+  const text = String(value ?? "").trim();
+  if (!text || text.startsWith(NO_END_OF_VALIDITY)) return null;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) return null;
+  return text >= EARLIEST_PLAUSIBLE_ENTRY ? text : null;
+}
+
 // Mutates `records` in place, setting `inForce` and `endOfValidity` on every
 // record that doesn't already have them. Records whose status is already known
 // (from the journal, or carried over from a previous cache) cost nothing.
@@ -196,6 +231,16 @@ function parseEndOfValidity(value) {
 // flushed on the way out even when a batch throws, and the caller decides
 // whether a SPARQL outage should fail the whole build or just ship without
 // status.
+// A journal entry from before entryIntoForce existed is not wrong, just short,
+// and re-fetching is the only way to fill it. Key presence rather than a null
+// check: null is a real answer ("Cellar has no entry date") and must not be
+// re-asked on every run.
+function isCompleteEntry(journaled) {
+  return Boolean(journaled)
+    && typeof journaled === "object"
+    && Object.prototype.hasOwnProperty.call(journaled, "entryIntoForce");
+}
+
 async function enrichRecordsWithInForce(records, options = {}) {
   const {
     journalPath = DEFAULT_JOURNAL_PATH,
@@ -222,6 +267,7 @@ async function enrichRecordsWithInForce(records, options = {}) {
   const applyEntry = (record, entry) => {
     record.inForce = entry.inForce ?? null;
     record.endOfValidity = entry.endOfValidity ?? null;
+    record.entryIntoForce = entry.entryIntoForce ?? null;
     if (record.inForce !== null) {
       stats.withStatus += 1;
       if (record.inForce) stats.inForce += 1;
@@ -230,7 +276,11 @@ async function enrichRecordsWithInForce(records, options = {}) {
 
   const needsStatus = [];
   for (const record of records) {
-    if (record.inForce !== undefined) {
+    // Both fields, not just `inForce`: a record or journal entry written before
+    // entryIntoForce existed carries a status but no entry date, and treating
+    // that as "already known" would leave it permanently unfilled — the field
+    // would only ever reach acts harvested after this change.
+    if (record.inForce !== undefined && record.entryIntoForce !== undefined) {
       stats.alreadyPresent += 1;
       continue;
     }
@@ -238,7 +288,7 @@ async function enrichRecordsWithInForce(records, options = {}) {
     stats.targeted += 1;
 
     const journaled = journal[record.celex];
-    if (journaled && typeof journaled === "object") {
+    if (isCompleteEntry(journaled)) {
       applyEntry(record, journaled);
       stats.fromJournal += 1;
       continue;
@@ -271,7 +321,7 @@ async function enrichRecordsWithInForce(records, options = {}) {
       // An act Cellar has no status for is journaled as unknown so a rerun skips
       // it rather than re-asking for an answer it already gave. `null` is an
       // honest "we don't know", and the UI renders no badge for it.
-      const unknown = { inForce: null, endOfValidity: null };
+      const unknown = { inForce: null, endOfValidity: null, entryIntoForce: null };
       for (const celex of batch) {
         if (found.has(celex)) continue;
         journal[celex] = unknown;
@@ -296,10 +346,13 @@ async function enrichRecordsWithInForce(records, options = {}) {
 
 module.exports = {
   DEFAULT_JOURNAL_PATH,
+  EARLIEST_PLAUSIBLE_ENTRY,
   NO_END_OF_VALIDITY,
   buildQuery,
   enrichRecordsWithInForce,
+  isCompleteEntry,
   parseEndOfValidity,
+  parseEntryIntoForce,
   parseInForce,
   readJournal,
   reduceBindings,

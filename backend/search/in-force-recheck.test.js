@@ -56,15 +56,15 @@ test("runRecheck re-checks out-of-force acts too, so one entering into force is 
 
 test("runRecheck counts actual flips and changes, not the number re-queried", async () => {
   const records = [
-    { celex: "REPEALED", inForce: true, endOfValidity: "2020-01-01" }, // flips to false
-    { celex: "STILL_TRUE", inForce: true, endOfValidity: "2020-01-01" }, // unchanged
-    { celex: "GAINED", inForce: null, endOfValidity: null }, // changes, but is not a flip
+    { celex: "REPEALED", inForce: true, endOfValidity: "2020-01-01", entryIntoForce: "2000-01-01" }, // flips to false
+    { celex: "STILL_TRUE", inForce: true, endOfValidity: "2020-01-01", entryIntoForce: "2000-01-01" }, // unchanged
+    { celex: "GAINED", inForce: null, endOfValidity: null, entryIntoForce: null }, // changes, but is not a flip
   ];
 
   const result = await runRecheck(records, {
     runQueryFn: async () => bindings([
-      { celex: { value: "REPEALED" }, inForceValue: { value: "0" } },
-      { celex: { value: "STILL_TRUE" }, inForceValue: { value: "1" }, endValue: { value: "2020-01-01" } },
+      { celex: { value: "REPEALED" }, inForceValue: { value: "0" }, entryValue: { value: "2000-01-01" } },
+      { celex: { value: "STILL_TRUE" }, inForceValue: { value: "1" }, endValue: { value: "2020-01-01" }, entryValue: { value: "2000-01-01" } },
       { celex: { value: "GAINED" }, inForceValue: { value: "1" } },
     ]),
   });
@@ -77,10 +77,12 @@ test("runRecheck counts actual flips and changes, not the number re-queried", as
 });
 
 test("runRecheck reports no change when every status is confirmed as-is", async () => {
-  const records = [{ celex: "A", inForce: true, endOfValidity: null }];
+  const records = [{ celex: "A", inForce: true, endOfValidity: null, entryIntoForce: "2016-05-24" }];
 
   const result = await runRecheck(records, {
-    runQueryFn: async () => bindings([{ celex: { value: "A" }, inForceValue: { value: "1" } }]),
+    runQueryFn: async () => bindings([
+      { celex: { value: "A" }, inForceValue: { value: "1" }, entryValue: { value: "2016-05-24" } },
+    ]),
   });
 
   assert.equal(result.changed, 0);
@@ -92,8 +94,8 @@ test("runRecheck reports no change when every status is confirmed as-is", async 
 // all, which is precisely what backend-docker.yml fails the build over. --limit
 // must therefore bound the targets, not the enrichment.
 test("runRecheck --limit leaves unre-checked records fully intact", async () => {
-  const first = { celex: "FIRST", inForce: true, endOfValidity: null };
-  const second = { celex: "SECOND", inForce: true, endOfValidity: "2030-01-01" };
+  const first = { celex: "FIRST", inForce: true, endOfValidity: null, entryIntoForce: "2016-05-24" };
+  const second = { celex: "SECOND", inForce: true, endOfValidity: "2030-01-01", entryIntoForce: "2010-01-01" };
 
   const result = await runRecheck([first, second], {
     limit: 1,
@@ -103,7 +105,33 @@ test("runRecheck --limit leaves unre-checked records fully intact", async () => 
   assert.equal(result.rechecked, 1);
   assert.equal(second.inForce, true);
   assert.equal(second.endOfValidity, "2030-01-01");
+  assert.equal(second.entryIntoForce, "2010-01-01");
+  // A cleared-but-unrefilled record is what the Docker status guard fails over.
   assert.ok("inForce" in second);
+  assert.ok("entryIntoForce" in second);
+});
+
+// The sweep that first ships entryIntoForce sees every record change, because
+// every record gains the key. That is a real difference in the published asset,
+// so it must be reported as changed and written — not hashed as a quiet month.
+test("runRecheck treats a newly filled entryIntoForce as a change", async () => {
+  const records = [
+    { celex: "DATED", inForce: true, endOfValidity: null },
+    // Cellar has no entry date for this one; it still gains an explicit null.
+    { celex: "UNDATED", inForce: true, endOfValidity: null },
+  ];
+
+  const result = await runRecheck(records, {
+    runQueryFn: async () => bindings([
+      { celex: { value: "DATED" }, inForceValue: { value: "1" }, entryValue: { value: "2016-05-24" } },
+      { celex: { value: "UNDATED" }, inForceValue: { value: "1" } },
+    ]),
+  });
+
+  assert.equal(result.changed, 2);
+  assert.equal(result.flipped, 0, "gaining a date is not a status flip");
+  assert.equal(records[0].entryIntoForce, "2016-05-24");
+  assert.equal(records[1].entryIntoForce, null);
 });
 
 test("assertStatusNotDegraded refuses a run that erased known statuses in bulk", () => {

@@ -46,8 +46,14 @@ test("buildQuery does not aggregate server-side", () => {
 
 // entry-into-force is multi-valued (the GDPR has two), so joining it fans each
 // act out into duplicate rows. It must stay out of the query.
-test("buildQuery does not join the multi-valued entry-into-force property", () => {
-  assert.doesNotMatch(buildQuery(["32016R0679"]), /entry-into-force/);
+// Joined deliberately, and only safe because nothing is aggregated server-side:
+// the property is multi-valued, so the rows fan out and reduceBindings() picks
+// the earliest. Under the old GROUP BY this was a coin flip between the dates.
+test("buildQuery joins entry-into-force as an OPTIONAL, unaggregated", () => {
+  const query = buildQuery(["32016R0679"]);
+  assert.match(query, /OPTIONAL \{ \?work cdm:resource_legal_date_entry-into-force \?entryValue \}/);
+  assert.doesNotMatch(query, /GROUP BY/);
+  assert.doesNotMatch(query, /SAMPLE|MIN\(/);
 });
 
 test("parseInForce maps Cellar's boolean literal, and refuses to guess", () => {
@@ -84,8 +90,8 @@ test("readJournal treats a missing or corrupt journal as empty", () => {
 // unchanged acts must not be refetched.
 test("enrich fills status from the journal without any network call", async () => {
   const journalPath = tempJournal({
-    "32016R0679": { inForce: true, endOfValidity: null },
-    "31995L0046": { inForce: false, endOfValidity: "2018-05-24" },
+    "32016R0679": { inForce: true, endOfValidity: null, entryIntoForce: "2016-05-24" },
+    "31995L0046": { inForce: false, endOfValidity: "2018-05-24", entryIntoForce: "1995-12-13" },
   });
   const records = [{ celex: "32016R0679" }, { celex: "31995L0046" }];
 
@@ -96,6 +102,7 @@ test("enrich fills status from the journal without any network call", async () =
 
   assert.equal(records[0].inForce, true);
   assert.equal(records[0].endOfValidity, null);
+  assert.equal(records[0].entryIntoForce, "2016-05-24");
   assert.equal(records[1].inForce, false);
   assert.equal(records[1].endOfValidity, "2018-05-24");
   assert.equal(stats.fromJournal, 2);
@@ -111,20 +118,23 @@ test("enrich writes status from a SPARQL response and journals it", async () => 
   const stats = await enrichRecordsWithInForce(records, {
     journalPath,
     runQueryFn: async () => bindings([
-      { celex: { value: "32016R0679" }, inForceValue: { value: "1" }, endValue: { value: "9999-12-31" } },
-      { celex: { value: "31995L0046" }, inForceValue: { value: "0" }, endValue: { value: "2018-05-24" } },
+      { celex: { value: "32016R0679" }, inForceValue: { value: "1" }, endValue: { value: "9999-12-31" }, entryValue: { value: "2016-05-24" } },
+      { celex: { value: "31995L0046" }, inForceValue: { value: "0" }, endValue: { value: "2018-05-24" }, entryValue: { value: "1995-12-13" } },
     ]),
   });
 
   assert.equal(records[0].inForce, true);
   assert.equal(records[0].endOfValidity, null);
+  assert.equal(records[0].entryIntoForce, "2016-05-24");
   assert.equal(records[1].inForce, false);
   assert.equal(records[1].endOfValidity, "2018-05-24");
+  assert.equal(records[1].entryIntoForce, "1995-12-13");
   assert.equal(stats.fetched, 2);
   assert.equal(stats.inForce, 1);
   assert.deepEqual(readJournal(journalPath)["31995L0046"], {
     inForce: false,
     endOfValidity: "2018-05-24",
+    entryIntoForce: "1995-12-13",
   });
 });
 
@@ -141,17 +151,21 @@ test("enrich records an unanswered CELEX as unknown, not as out of force", async
 
   assert.equal(records[0].inForce, null);
   assert.equal(records[0].endOfValidity, null);
+  assert.equal(records[0].entryIntoForce, null);
   // Journaled, so a rerun doesn't re-ask for an answer Cellar already withheld.
-  assert.deepEqual(readJournal(journalPath)["31957E0001"], { inForce: null, endOfValidity: null });
+  assert.deepEqual(
+    readJournal(journalPath)["31957E0001"],
+    { inForce: null, endOfValidity: null, entryIntoForce: null },
+  );
 });
 
 test("enrich skips records that already carry a status, including a known-false one", async () => {
   const journalPath = tempJournal();
   const records = [
-    { celex: "32016R0679", inForce: true, endOfValidity: null },
-    { celex: "31995L0046", inForce: false, endOfValidity: "2018-05-24" },
+    { celex: "32016R0679", inForce: true, endOfValidity: null, entryIntoForce: "2016-05-24" },
+    { celex: "31995L0046", inForce: false, endOfValidity: "2018-05-24", entryIntoForce: "1995-12-13" },
     // null is a real answer ("Cellar has no status"), not a gap to refill.
-    { celex: "31957E0001", inForce: null, endOfValidity: null },
+    { celex: "31957E0001", inForce: null, endOfValidity: null, entryIntoForce: null },
   ];
 
   const stats = await enrichRecordsWithInForce(records, {
@@ -161,6 +175,41 @@ test("enrich skips records that already carry a status, including a known-false 
 
   assert.equal(stats.alreadyPresent, 3);
   assert.equal(stats.targeted, 0);
+});
+
+// Records and journal entries written before entryIntoForce existed carry a
+// status but no entry date. Counting those as "already known" would strand the
+// field on every act already in the cache — it would only ever reach acts
+// harvested after the change, which is no use to the 80k already there.
+test("enrich refetches a record whose status predates entryIntoForce", async () => {
+  const journalPath = tempJournal({
+    // Same shortfall in the journal: present, but written before the field.
+    "31995L0046": { inForce: false, endOfValidity: "2018-05-24" },
+  });
+  const records = [
+    { celex: "32016R0679", inForce: true, endOfValidity: null },
+    { celex: "31995L0046", inForce: false, endOfValidity: "2018-05-24" },
+  ];
+  let asked = [];
+
+  await enrichRecordsWithInForce(records, {
+    journalPath,
+    runQueryFn: async (query) => {
+      asked = ["32016R0679", "31995L0046"].filter((celex) => query.includes(celex));
+      return bindings([
+        { celex: { value: "32016R0679" }, inForceValue: { value: "1" }, entryValue: { value: "2016-05-24" } },
+        { celex: { value: "31995L0046" }, inForceValue: { value: "0" }, endValue: { value: "2018-05-24" }, entryValue: { value: "1995-12-13" } },
+      ]);
+    },
+  });
+
+  assert.deepEqual(asked, ["32016R0679", "31995L0046"], "both must be re-asked");
+  assert.equal(records[0].entryIntoForce, "2016-05-24");
+  assert.equal(records[1].entryIntoForce, "1995-12-13");
+  // And the status they already had must survive the refill unchanged.
+  assert.equal(records[0].inForce, true);
+  assert.equal(records[1].inForce, false);
+  assert.equal(records[1].endOfValidity, "2018-05-24");
 });
 
 test("enrich honours --limit for smoke tests", async () => {
@@ -215,8 +264,35 @@ test("reduceBindings collapses fan-out to one entry per CELEX", () => {
 
   assert.equal(reduced.size, 2);
   // Earliest real end-of-validity wins, as MIN() used to do.
-  assert.deepEqual(reduced.get("A"), { inForce: true, endOfValidity: "2027-06-30" });
-  assert.deepEqual(reduced.get("B"), { inForce: false, endOfValidity: null });
+  assert.deepEqual(reduced.get("A"), { inForce: true, endOfValidity: "2027-06-30", entryIntoForce: null });
+  assert.deepEqual(reduced.get("B"), { inForce: false, endOfValidity: null, entryIntoForce: null });
+});
+
+// Entry-into-force is the genuinely multi-valued one — 32026R1818 carries ten
+// dates out to 2036. The earliest is when the act enters into force; the rest
+// stage individual provisions and say nothing about the act as a whole.
+test("reduceBindings takes the earliest of several entry-into-force dates", () => {
+  const reduced = reduceBindings([
+    { celex: { value: "32026R1818" }, inForceValue: { value: "0" }, entryValue: { value: "2030-07-01" } },
+    { celex: { value: "32026R1818" }, inForceValue: { value: "0" }, entryValue: { value: "2026-08-30" } },
+    { celex: { value: "32026R1818" }, inForceValue: { value: "0" }, entryValue: { value: "2036-08-31" } },
+  ]);
+
+  assert.equal(reduced.get("32026R1818").entryIntoForce, "2026-08-30");
+});
+
+// Cellar returns placeholders here as well as the sentinel: 32026D1296 comes
+// back as 1001-01-01, which is not a date any act entered into force on.
+test("reduceBindings drops placeholder and sentinel entry-into-force dates", () => {
+  const reduced = reduceBindings([
+    { celex: { value: "32026D1296" }, inForceValue: { value: "0" }, entryValue: { value: "1001-01-01" } },
+    { celex: { value: "SENTINEL" }, inForceValue: { value: "1" }, entryValue: { value: "9999-12-31" } },
+    { celex: { value: "GOOD" }, inForceValue: { value: "1" }, entryValue: { value: "2016-05-24" } },
+  ]);
+
+  assert.equal(reduced.get("32026D1296").entryIntoForce, null);
+  assert.equal(reduced.get("SENTINEL").entryIntoForce, null);
+  assert.equal(reduced.get("GOOD").entryIntoForce, "2016-05-24");
 });
 
 // The exact shape that made the aggregated query leak: an act whose only date is
@@ -227,8 +303,8 @@ test("reduceBindings keeps a sentinel-only act null and never borrows another ac
     { celex: { value: "32006R1066" }, inForceValue: { value: "1" }, endValue: { value: "9999-12-31" } },
   ]);
 
-  assert.deepEqual(reduced.get("32006R0988"), { inForce: true, endOfValidity: "2020-12-31" });
-  assert.deepEqual(reduced.get("32006R1066"), { inForce: true, endOfValidity: null });
+  assert.deepEqual(reduced.get("32006R0988"), { inForce: true, endOfValidity: "2020-12-31", entryIntoForce: null });
+  assert.deepEqual(reduced.get("32006R1066"), { inForce: true, endOfValidity: null, entryIntoForce: null });
 });
 
 test("reduceBindings ignores rows without a celex", () => {

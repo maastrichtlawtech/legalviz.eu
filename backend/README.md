@@ -598,8 +598,9 @@ The automated release train is split across three workflows: `Refresh corpus`
 `43 3 5 * *`, then successful `workflow_run` events trigger `Refresh data`
 ([`refresh-data.yml`](../.github/workflows/refresh-data.yml)) and `Refresh
 fulltext` ([`refresh-fulltext.yml`](../.github/workflows/refresh-fulltext.yml)).
-The chain publishes validated immutable `corpus-vN`, `data-vN`, and
-`fulltext-vN` releases automatically and opens separate Docker tag-bump PRs for
+The chain publishes validated immutable dated releases automatically
+(`<train>-YYYY-MM-DD.NN`, see `.github/scripts/release-tags.sh`) and opens
+separate Docker tag-bump PRs for
 `DATA_RELEASE_TAG` and `FULLTEXT_RELEASE_TAG`. Merging those PRs is the only
 human deploy gate; no environment approval is required.
 
@@ -726,7 +727,7 @@ Two properties matter to the pipeline it runs in:
 
 - **It rewrites the cache only if a status actually moved.** Confirming 30k
   unchanged statuses leaves the file byte-identical, so `refresh-data.yml`'s
-  change digest still reports "unchanged" and no `data-vN` release — and no
+  change digest still reports "unchanged" and no data release — and no
   Docker tag PR — is cut on a quiet month.
 - **It refuses to write a degraded result.** If more than `--max-null-ratio`
   (default 5%) of the re-checked records lose a previously known status, Cellar
@@ -772,7 +773,7 @@ of complete — that is not hypothetical, it is what the first `data-v7` upload
 did, and CI only caught half of it. `fetch-in-force.js` refuses to write if the
 date or EuroVoc counts regress against the cache it loaded.
 
-Publish `search-cache.json.gz` as the next `data-vN` release asset and bump
+Publish `search-cache.json.gz` as the next data release asset and bump
 `DATA_RELEASE_TAG` in `backend/Dockerfile`. Docker fetches both JSON assets and
 converts them into one runtime SQLite file, so a release must carry both assets
 even when only one changed. A future release may ship SQLite directly and

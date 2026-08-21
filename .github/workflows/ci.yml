@@ -12,6 +12,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+      # The release-tag grammar is shared by the three refresh workflows, which
+      # only ever run on a schedule; this keeps it honest on every PR.
+      - run: bash .github/scripts/release-tags.sh selftest
       - uses: actions/setup-node@v5
         with: { node-version: '24' }
       - run: npm ci

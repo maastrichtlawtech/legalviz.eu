@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: Optional exact next corpus-vN tag; otherwise derive it from the latest published corpus release
+        description: Optional exact corpus release tag to mint or resume (dated corpus-YYYY-MM-DD.NN, or legacy corpus-vN); otherwise resolve today's next tag automatically
         type: string
         required: false
 
@@ -56,35 +56,35 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          release_list=$(gh release list \
-            --repo "${{ github.repository }}" \
-            --limit 100 \
-            --json tagName,isDraft,isPrerelease)
-          current_tag=$(jq -er '
-            [ .[]
-              | select(.tagName | test("^corpus-v[0-9]+$"))
-              | select(.isDraft == false and .isPrerelease == false)
-              | .tagName
-            ]
-            | if length == 0 then "corpus-v1" else max_by(sub("corpus-v"; "") | tonumber) end
-          ' <<< "$release_list")
-          [[ "$current_tag" =~ ^corpus-v([0-9]+)$ ]]
-          next_tag="corpus-v$((BASH_REMATCH[1] + 1))"
           requested_tag="$REQUESTED_TAG"
           if [ -n "$requested_tag" ]; then
-            test "$requested_tag" = "$next_tag" || {
-              echo "release_tag must be the next corpus tag ($next_tag), got $requested_tag" >&2
-              exit 1
-            }
+            .github/scripts/release-tags.sh validate corpus "$requested_tag"
+            next_tag="$requested_tag"
+            resume_draft=false
+            if existing=$(gh release view "$next_tag" --repo "${{ github.repository }}" --json isDraft 2>/dev/null); then
+              jq -e '.isDraft == true' <<< "$existing" >/dev/null || {
+                echo "A published release already exists for $next_tag; resolve it before retrying." >&2
+                exit 1
+              }
+              resume_draft=true
+            fi
+          else
+            resolved=$(.github/scripts/release-tags.sh resolve corpus)
+            next_tag=$(sed -n 's/^tag=//p' <<< "$resolved")
+            resolve_state=$(sed -n 's/^state=//p' <<< "$resolved")
+            case "$resolve_state" in
+              absent) resume_draft=false ;;
+              draft) resume_draft=true ;;
+              *)
+                echo "Unexpected state from release-tags.sh resolve: $resolve_state" >&2
+                exit 1
+                ;;
+            esac
           fi
-          resume_draft=false
-          if existing=$(gh release view "$next_tag" --repo "${{ github.repository }}" --json isDraft 2>/dev/null); then
-            jq -e '.isDraft == true' <<< "$existing" >/dev/null || {
-              echo "A published release already exists for $next_tag; resolve it before retrying." >&2
-              exit 1
-            }
-            resume_draft=true
-          fi
+          # This job unconditionally downloads its corpus inputs from the
+          # latest published corpus release below; there is no cold-start
+          # case where none exists, so a missing one fails loudly here.
+          current_tag=$(.github/scripts/release-tags.sh latest corpus)
           {
             echo "current_tag=$current_tag"
             echo "next_tag=$next_tag"
@@ -99,7 +99,7 @@ jobs:
           set -euo pipefail
           data_tag=$(sed -n 's/^ARG DATA_RELEASE_TAG=//p' backend/Dockerfile)
           test "$(printf '%s\n' "$data_tag" | sed '/^$/d' | wc -l | tr -d ' ')" = 1
-          [[ "$data_tag" =~ ^data-v[0-9]+$ ]]
+          .github/scripts/release-tags.sh validate data "$data_tag"
           echo "tag=$data_tag" >> "$GITHUB_OUTPUT"
 
       - name: Download current corpus and cache inputs

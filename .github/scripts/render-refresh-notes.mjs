@@ -131,7 +131,7 @@ if (options.kind === "data") {
       `Integrity: SQLite \`${manifest.integrity?.sqlite ?? "—"}\`, ${num(manifest.integrity?.orphanLawMappings)} orphan law mappings, ${num(manifest.integrity?.orphanFtsMappings)} orphan FTS mappings.`,
     );
   }
-  sections.push(assetSection(["search-cache.json.gz", "case-law-cache.json.gz", "citation-graph.json.gz", "definitions.json.gz", "data.sqlite"]));
+  sections.push(assetSection(["search-cache.json.gz", "case-law-cache.json.gz", "citation-graph.json.gz", "definitions.json.gz", "data.sqlite.gz"]));
   // What the backfill actually added, not what it was asked to try. These
   // differ: the scan that builds corpus-missing.txt derives ids from corpus
   // filenames, and anything Cellar has no primary ELI for is dropped rather

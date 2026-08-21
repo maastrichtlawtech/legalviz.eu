@@ -53,10 +53,15 @@ COPY search/build-sqlite-data.js search/search-ranking.js ./search/
 #   search/data/definitions.json.gz     -> optional definition search index
 # Placed before `COPY . .` so this (large) layer stays cached across code
 # changes and only re-runs when DATA_RELEASE_TAG is bumped for a new data build.
+# Release tags are dated: <train>-YYYY-MM-DD.NN, where NN is a same-day
+# sequence starting at 01 (data-2026-08-21.02). The older <train>-vN tags are
+# still valid pins for the releases that already carry them, but the refresh
+# workflows never mint another one — see .github/scripts/release-tags.sh.
 ARG DATA_RELEASE_REPO=maastrichtlawtech/legalviz.eu
 ARG DATA_RELEASE_TAG=data-v14
-# The full-text index ships on its own release tag, decoupled from data-vN —
-# see FULLTEXT_RELEASE_TAG in the root CLAUDE.md cache-invalidation table.
+# The full-text index ships on its own release tag, decoupled from the data
+# train — see FULLTEXT_RELEASE_TAG in the root CLAUDE.md cache-invalidation
+# table.
 ARG FULLTEXT_RELEASE_TAG=fulltext-v3
 # Every asset comes from this one tag, so a new release must carry the full set —
 # re-upload the unchanged ones alongside the changed one or this fetch 404s.
@@ -99,7 +104,7 @@ FROM dependencies AS final
 COPY . .
 COPY --from=data-builder /app/search/data/data.sqlite ./search/data/data.sqlite
 COPY --from=data-builder /app/search/data/data.sqlite.manifest.json ./search/data/data.sqlite.manifest.json
-# fulltext.sqlite is optional (own fulltext-vN release train, see FULLTEXT_RELEASE_TAG
+# fulltext.sqlite is optional (own fulltext release train, see FULLTEXT_RELEASE_TAG
 # above): the data-builder stage always leaves a file at this path — the real gunzip'd
 # asset, or an empty placeholder `touch`ed when the release asset was absent — so this
 # COPY never fails the build. legal-cache-store.js treats a missing/invalid/empty

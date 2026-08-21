@@ -8,11 +8,11 @@ on:
   workflow_dispatch:
     inputs:
       publish:
-        description: Publish the validated candidate as a fulltext-vN release
+        description: Publish the validated candidate as a fulltext release
         type: boolean
         default: true
       release_tag:
-        description: Optional next fulltext-vN tag when publishing
+        description: Optional explicit fulltext release tag when publishing
         type: string
         required: false
 
@@ -104,19 +104,9 @@ jobs:
         run: |
           set -euo pipefail
           fulltext_tag=$(sed -n 's/^ARG FULLTEXT_RELEASE_TAG=//p' backend/Dockerfile)
-          [[ "$fulltext_tag" =~ ^fulltext-v[0-9]+$ ]]
-          data_tag=$(gh release list \
-            --repo "${{ github.repository }}" \
-            --limit 100 \
-            --json tagName,isDraft,isPrerelease \
-            | jq -er '[.[] | select(.isDraft == false and .isPrerelease == false) | select(.tagName | test("^data-v[0-9]+$"))] | sort_by((.tagName | ltrimstr("data-v") | tonumber)) | .[-1].tagName')
-          [[ "$data_tag" =~ ^data-v[0-9]+$ ]]
-          corpus_tag=$(gh release list \
-            --repo "${{ github.repository }}" \
-            --limit 100 \
-            --json tagName,isDraft,isPrerelease \
-            | jq -er '[.[] | select(.isDraft == false and .isPrerelease == false) | select(.tagName | test("^corpus-v[0-9]+$"))] | sort_by((.tagName | ltrimstr("corpus-v") | tonumber)) | .[-1].tagName')
-          [[ "$corpus_tag" =~ ^corpus-v[0-9]+$ ]]
+          .github/scripts/release-tags.sh validate fulltext "$fulltext_tag"
+          data_tag=$(.github/scripts/release-tags.sh latest data)
+          corpus_tag=$(.github/scripts/release-tags.sh latest corpus)
           {
             echo "data_tag=$data_tag"
             echo "fulltext_tag=$fulltext_tag"
@@ -415,22 +405,26 @@ jobs:
           name: fulltext-data-${{ github.run_id }}
           path: release-assets
 
-      - name: Resolve and validate the next fulltext tag
+      - name: Resolve the fulltext release tag
         id: tag
         shell: bash
         run: |
           set -euo pipefail
-          current=$(sed -n 's/^ARG FULLTEXT_RELEASE_TAG=//p' backend/Dockerfile)
-          [[ "$current" =~ ^fulltext-v([0-9]+)$ ]]
-          expected="fulltext-v$((BASH_REMATCH[1] + 1))"
-          requested="${RELEASE_TAG:-$expected}"
-          test "$requested" = "$expected" || {
-            echo "release_tag must be the next fulltext tag ($expected), got: $requested" >&2
-            exit 1
-          }
+          if [ -n "${RELEASE_TAG:-}" ]; then
+            # Operator escape hatch: honour the explicit tag verbatim (after
+            # validating its grammar) and let the draft/published recovery
+            # handling below run against it.
+            .github/scripts/release-tags.sh validate fulltext "$RELEASE_TAG"
+            next="$RELEASE_TAG"
+            explicit=true
+          else
+            resolved=$(.github/scripts/release-tags.sh resolve fulltext)
+            next=$(sed -n 's/^tag=//p' <<< "$resolved")
+            explicit=false
+          fi
           {
-            echo "current=$current"
-            echo "next=$requested"
+            echo "next=$next"
+            echo "explicit=$explicit"
           } >> "$GITHUB_OUTPUT"
 
       - name: Render the release and pull-request summary
@@ -455,6 +449,7 @@ jobs:
         run: |
           set -euo pipefail
           tag="${{ steps.tag.outputs.next }}"
+          explicit="${{ steps.tag.outputs.explicit }}"
           if release_json=$(gh release view "$tag" --repo "${{ github.repository }}" --json isDraft,isPrerelease,assets 2>/dev/null); then
             is_draft=$(jq -r '.isDraft' <<< "$release_json")
             if [ "$is_draft" = true ]; then
@@ -470,6 +465,10 @@ jobs:
               # run carries that run's numbers, not this one's.
               gh release edit "$tag" --repo "${{ github.repository }}" --notes-file release-notes.md --draft=false
             else
+              if [ "$explicit" != true ]; then
+                echo "::error::Resolved fulltext tag $tag is already published but no explicit release_tag override was given; resolve() should never return a taken tag, so this is a bug, not a recovery case." >&2
+                exit 1
+              fi
               echo "Release $tag is already published; verifying its exact assets."
               test "$(jq -r '.isPrerelease' <<< "$release_json")" = false || {
                 echo "Existing release $tag is a prerelease; refusing to reuse it." >&2

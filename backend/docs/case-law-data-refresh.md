@@ -15,18 +15,19 @@ stale citation/definitions limits.
 ## Schedule and dispatch
 
 `Refresh corpus` runs monthly at 03:43 UTC on the fifth day of the month
-(`43 3 5 * *`). Manual and scheduled runs publish the next immutable
-`corpus-vN` automatically after validation. The only human deploy gate is
-merging the downstream Docker tag-bump PRs; no environment approval gate is
-involved.
+(`43 3 5 * *`). Manual and scheduled runs publish the next immutable, dated
+corpus release (`corpus-YYYY-MM-DD.NN`; see the
+[release tag grammar](legislation-data-refresh.md#release-tag-grammar))
+automatically after validation. The only human deploy gate is merging the
+downstream Docker tag-bump PRs; no environment approval gate is involved.
 
 GitHub's built-in workflow failure notifications are the only notifications
 emitted by the workflow.
 
 ## Harvest sequence
 
-1. Restore the latest published `corpus-vN` archives and harvest journals, plus
-   the current `search-cache.json.gz` used for legislation gap comparison.
+1. Restore the latest published corpus release archives and harvest journals,
+   plus the current `search-cache.json.gz` used for legislation gap comparison.
 2. Run `search/cellar-gap-audit.js` for the current and previous years. Missing
    English primary acts are written one CELEX per line to `missing.txt`.
 3. Backfill missing legislation into the raw `laws/` corpus. The corpus job
@@ -40,13 +41,13 @@ emitted by the workflow.
    release. Permanent `missing` judgments are allowed and recorded.
 6. Package `laws.tar`, `laws-html.tar`, and `case-law.tar` plus harvest state,
    targets, misses, and optional metadata journals. Publish them as the next
-   immutable `corpus-vN`; never replace a published corpus tag.
+   immutable dated corpus release; never replace a published corpus tag.
 
 The downstream data workflow consumes the successful corpus release and updates
 `case-law-cache.json.gz`, then the full-text workflow consumes the successful
-data run. Case-law itself does not open a Docker PR; `Refresh data` opens the
-separate `automation/data-vN` PR and `Refresh fulltext` opens
-`automation/fulltext-vN` when its act count grows.
+data run. Case-law itself does not open a Docker PR; `Refresh data` opens its
+own `automation/<tag>` PR for the data release and `Refresh fulltext` opens
+`automation/<tag>` for the fulltext release when its act count grows.
 
 ## EUR-Lex WAF and harvest behavior
 

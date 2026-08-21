@@ -235,3 +235,30 @@ test("reduceBindings ignores rows without a celex", () => {
   assert.equal(reduceBindings([{ inForceValue: { value: "1" } }]).size, 0);
   assert.equal(reduceBindings(undefined).size, 0);
 });
+
+// The re-check writes its cache once at the end, so it has nothing to resume
+// from; journalling would only rewrite a 30k-entry file every few batches.
+test("enrich with useJournal false neither reads nor writes the journal", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "in-force-nojournal-"));
+  const journalPath = path.join(dir, "in-force.json");
+  fs.writeFileSync(journalPath, JSON.stringify({ A: { inForce: false, endOfValidity: null } }), "utf8");
+
+  const records = [{ celex: "A" }];
+  const stats = await enrichRecordsWithInForce(records, {
+    journalPath,
+    useJournal: false,
+    runQueryFn: async () => ({
+      results: { bindings: [{ celex: { value: "A" }, inForceValue: { value: "1" } }] },
+    }),
+  });
+
+  // The on-disk answer was ignored in favour of a fresh query...
+  assert.equal(stats.fromJournal, 0);
+  assert.equal(stats.fetched, 1);
+  assert.equal(records[0].inForce, true);
+  // ...and the file is left exactly as it was.
+  assert.deepEqual(
+    JSON.parse(fs.readFileSync(journalPath, "utf8")),
+    { A: { inForce: false, endOfValidity: null } },
+  );
+});

@@ -202,12 +202,21 @@ async function enrichRecordsWithInForce(records, options = {}) {
     saveEvery = 5,
     limit = 0,
     log = () => {},
+    // The journal is a resume aid for builders, whose harvests run for hours
+    // and must survive an interruption. A caller that writes its output once at
+    // the end, all-or-nothing, has nothing to resume from and gains nothing but
+    // a rewrite of a 30k-entry file every few batches — see
+    // search/in-force-recheck.js, which passes false.
+    useJournal = true,
     // Seam for tests: the SPARQL round-trip is the one part that can't be
     // exercised offline.
     runQueryFn = runQuery,
   } = options;
 
-  const journal = readJournal(journalPath);
+  const journal = useJournal ? readJournal(journalPath) : {};
+  const saveJournal = () => {
+    if (useJournal) writeJournal(journalPath, journal);
+  };
   const stats = { targeted: 0, fromJournal: 0, fetched: 0, withStatus: 0, inForce: 0, alreadyPresent: 0 };
 
   const applyEntry = (record, entry) => {
@@ -274,12 +283,12 @@ async function enrichRecordsWithInForce(records, options = {}) {
       batches += 1;
       log(`batch ${batches} (${batch.length} records, ${found.size} with status) — ${Math.min(offset + batch.length, targets.length)}/${targets.length}`);
 
-      if (batches % saveEvery === 0) writeJournal(journalPath, journal);
+      if (batches % saveEvery === 0) saveJournal();
     }
   } finally {
     // Persist whatever the run gathered even if a batch threw, so the next
     // attempt resumes from here rather than from zero.
-    writeJournal(journalPath, journal);
+    saveJournal();
   }
 
   return stats;
@@ -294,7 +303,4 @@ module.exports = {
   parseInForce,
   readJournal,
   reduceBindings,
-  // Exported for search/in-force-recheck.js, which rewrites the journal to drop
-  // the entries that would otherwise let a re-check answer from disk.
-  writeJournal,
 };

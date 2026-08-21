@@ -1,37 +1,34 @@
 "use strict";
 
-// Periodic in-force RE-check (issue #167).
+// Periodic in-force re-check (issue #167).
 //
 // in-force-enrich.js only ever fills a *gap*: it skips any record that already
-// carries `inForce`, and separately skips any celex already answered in
-// data/in-force.json. Every record restored from the published search cache
-// carries the field, and the journal survives every rebuild, so in practice no
-// act's status is ever re-asked after its first harvest — a repealed act keeps
-// reading `inForce: true` forever.
+// carries `inForce`. Every record restored from the published search cache
+// carries it, so no act's status is ever re-asked after its first harvest — a
+// repealed act keeps reading `inForce: true` forever.
 //
-// This module defeats both skips: it clears `inForce` / `endOfValidity` on the
-// records it is re-checking AND drops their journal entries, then hands them to
-// enrichRecordsWithInForce, which then has no choice but to ask Cellar again.
-//
-// Scope: everything NOT already known to be out of force. `inForce: false` is
-// effectively terminal — an act that has fallen out of force does not come back
-// — so re-asking those 50k records buys nothing. What is left is small enough to
-// sweep whole on every run:
+// This tool clears the field and asks Cellar again. It re-checks everything NOT
+// already known to be out of force: `inForce: false` is effectively terminal —
+// an act that has fallen out of force does not come back — and that is 50,393
+// of the 80,469 acts in data-v11. What is left is small enough to sweep whole
+// on every run:
 //
 //   inForce: true    19,588   can be repealed or expire     -> swept
 //   inForce: null    10,488   Cellar had no status yet      -> swept (may gain one)
 //   inForce: false   50,393   terminal                      -> skipped (--all to include)
 //
 // ~30k records is ~301 SPARQL batches at 100 ids each, measured at 200-400ms per
-// batch against Cellar — about two minutes. There is deliberately no rotation,
-// batch budget or turnover cycle: at this cost, a partial re-check would only
-// buy staleness back. `--all` re-checks the out-of-force records too, for the
-// rare case (annulment, corrigendum) where one is restored.
+// batch against Cellar: about two minutes, most of it spent parsing and
+// re-serialising the cache rather than on the network. There is deliberately no
+// slicing, batch budget or turnover cycle — at this cost, a partial re-check
+// would only buy staleness back.
 //
-// The cache is rewritten ONLY if a status actually moved. A run that confirms
-// 30k unchanged statuses must leave the file byte-identical, or refresh-data.yml
-// would cut a new data-vN release — and a Docker tag PR — every single month on
-// no substantive change.
+// Nor is there a resume journal. The run is all-or-nothing: it writes the cache
+// once, at the end, only if a status actually moved, so a run that fails
+// partway leaves nothing behind to resume from and is simply re-run. Passing
+// `useJournal: false` also spares ~60 rewrites of a 30k-entry file per run.
+// (The builders that call the same enrichment keep the journal — an interrupted
+// multi-hour harvest genuinely needs to resume.)
 //
 // Usage:
 //   node --max-old-space-size=8192 search/in-force-recheck.js
@@ -41,81 +38,21 @@ const fs = require("fs");
 const zlib = require("zlib");
 
 const { JsonLegalCacheStore } = require("./legal-cache-store");
-const {
-  DEFAULT_JOURNAL_PATH,
-  enrichRecordsWithInForce,
-  readJournal,
-  writeJournal,
-} = require("./in-force-enrich");
+const { enrichRecordsWithInForce } = require("./in-force-enrich");
 
 const LABEL = "in-force-recheck";
 
-// Cellar answering "no status" for a swept record that previously had one is
-// indistinguishable, per record, from a genuine retraction. In bulk it is not:
-// it means the endpoint is degraded but still returning 200s. Refuse to write
-// past this fraction of the slice rather than let a bad afternoon at Cellar
-// erase the status coverage the Docker guard checks for (>80%, currently 87%).
+// Cellar answering "no status" for a re-checked record that previously had one
+// is indistinguishable, per record, from a genuine retraction. In bulk it is
+// not: it means the endpoint is degraded but still returning 200s. Refuse to
+// write past this fraction rather than let a bad afternoon at Cellar erase the
+// status coverage the Docker guard checks for (>80%, currently 87%).
 const DEFAULT_MAX_NULL_RATIO = 0.05;
-
-function todayIso() {
-  return new Date().toISOString().slice(0, 10);
-}
-
-function isExpiredButInForce(record, today) {
-  return record.inForce === true
-    && typeof record.endOfValidity === "string"
-    && record.endOfValidity < today;
-}
 
 // `false` is terminal; everything else (true, null, or a record that predates
 // the field entirely) is a status that can still move.
 function isRecheckable(record) {
   return record.inForce !== false;
-}
-
-// Order matters only for a run that dies halfway: the records already known to
-// be wrong — flagged in force past their own end-of-validity — are re-asked
-// first so a partial run still fixes the most confidently stale entries.
-// `limit` exists for smoke tests; a real run is unbounded by design.
-function selectRecheckSlice(records, options = {}) {
-  const { today = todayIso(), all = false, limit = 0 } = options;
-  const eligible = records.filter((record) => record.celex && (all || isRecheckable(record)));
-
-  const expired = [];
-  const rest = [];
-  for (const record of eligible) {
-    (isExpiredButInForce(record, today) ? expired : rest).push(record);
-  }
-  const ordered = expired.concat(rest);
-
-  return limit > 0 ? ordered.slice(0, limit) : ordered;
-}
-
-// Defeats both in-force-enrich.js skips for exactly this slice: the in-memory
-// field guard (`record.inForce !== undefined`) and the on-disk journal entry
-// keyed by celex. Mutates `slice` members in place and rewrites the journal
-// file with the slice's entries removed; everything else in the journal (and
-// every record outside the slice) is left alone.
-//
-// Deleting the two fields and letting enrichment re-add them re-appends them at
-// the end of each record object. That is where they already are in the
-// published cache (verified: 80,469/80,469 records carry inForce/endOfValidity
-// as their last two keys, because enrichment is what appended them), so key
-// order — and therefore the serialised bytes of an unchanged record — survives
-// the round trip.
-function primeSliceForRecheck(slice, journalPath) {
-  const journal = readJournal(journalPath);
-  let journalEntriesDropped = 0;
-  for (const record of slice) {
-    delete record.inForce;
-    delete record.endOfValidity;
-    if (Object.prototype.hasOwnProperty.call(journal, record.celex)) {
-      delete journal[record.celex];
-      journalEntriesDropped += 1;
-    }
-  }
-  writeJournal(journalPath, journal);
-  return { journalEntriesDropped };
 }
 
 function classifyFlip(before, after) {
@@ -137,31 +74,34 @@ function lostStatus(before, after) {
   return (before.inForce === true || before.inForce === false) && after.inForce === null;
 }
 
-// Orchestrates one recheck run over `records` (mutated in place, same contract
-// as enrichRecordsWithInForce). Reports what was re-queried, what actually
-// changed, and — separately — the flips, because a re-check that silently stops
+// Orchestrates one re-check over `records` (mutated in place, same contract as
+// enrichRecordsWithInForce). Reports what was re-queried, what actually changed,
+// and — separately — the flips, because a re-check that silently stops
 // re-checking looks identical to a quiet month unless flips are counted apart
 // from work done.
+//
+// `limit` is applied when choosing the targets, never passed down to the
+// enrichment: clearing a record the enrichment then declines to refill would
+// leave it with no `inForce` key at all, which is exactly what the Docker guard
+// fails the build over.
 async function runRecheck(records, options = {}) {
-  const {
-    journalPath = DEFAULT_JOURNAL_PATH,
-    all = false,
-    limit = 0,
-    today = todayIso(),
-    log = () => {},
-    runQueryFn,
-  } = options;
+  const { all = false, limit = 0, log = () => {}, runQueryFn } = options;
 
-  const slice = selectRecheckSlice(records, { today, all, limit });
+  const eligible = records.filter((record) => record.celex && (all || isRecheckable(record)));
+  const targets = limit > 0 ? eligible.slice(0, limit) : eligible;
+
   const before = new Map(
-    slice.map((record) => [record.celex, { inForce: record.inForce, endOfValidity: record.endOfValidity }]),
+    targets.map((record) => [record.celex, { inForce: record.inForce, endOfValidity: record.endOfValidity }]),
   );
+  // Defeats the enrichment's "already knows this one" skip.
+  for (const record of targets) {
+    delete record.inForce;
+    delete record.endOfValidity;
+  }
+  log(`re-checking ${targets.length} records (all=${all})`);
 
-  const { journalEntriesDropped } = primeSliceForRecheck(slice, journalPath);
-  log(`slice=${slice.length} all=${all} journalEntriesDropped=${journalEntriesDropped}`);
-
-  const enrichStats = await enrichRecordsWithInForce(slice, {
-    journalPath,
+  const enrichStats = await enrichRecordsWithInForce(targets, {
+    useJournal: false,
     log,
     ...(runQueryFn ? { runQueryFn } : {}),
   });
@@ -170,7 +110,7 @@ async function runRecheck(records, options = {}) {
   let flippedToInForce = 0;
   let changed = 0;
   let lostStatusCount = 0;
-  for (const record of slice) {
+  for (const record of targets) {
     const prev = before.get(record.celex);
     const flip = classifyFlip(prev, record);
     if (flip === "toRepealed") flippedToRepealed += 1;
@@ -180,8 +120,7 @@ async function runRecheck(records, options = {}) {
   }
 
   return {
-    sliceSize: slice.length,
-    journalEntriesDropped,
+    rechecked: targets.length,
     requeried: enrichStats.fetched,
     changed,
     lostStatus: lostStatusCount,
@@ -192,15 +131,15 @@ async function runRecheck(records, options = {}) {
   };
 }
 
-// Throws when too much of the slice lost a previously-known status at once.
-// Bounded by the slice, not the whole cache, so it stays meaningful under
-// --limit as well as on a full sweep.
+// Throws when too much of the run lost a previously known status at once.
+// Bounded by what was re-checked, not by the whole cache, so it stays
+// meaningful under --limit as well as on a full sweep.
 function assertStatusNotDegraded(result, maxNullRatio = DEFAULT_MAX_NULL_RATIO) {
-  if (result.sliceSize === 0) return 0;
-  const ratio = result.lostStatus / result.sliceSize;
+  if (result.rechecked === 0) return 0;
+  const ratio = result.lostStatus / result.rechecked;
   if (ratio > maxNullRatio) {
     throw new Error(
-      `refusing to write: ${result.lostStatus}/${result.sliceSize} re-checked records `
+      `refusing to write: ${result.lostStatus}/${result.rechecked} re-checked records `
       + `(${(ratio * 100).toFixed(1)}%) lost a previously known status, above the `
       + `${(maxNullRatio * 100).toFixed(1)}% threshold. Cellar is answering but degraded; `
       + "re-run rather than publish this.",
@@ -302,8 +241,8 @@ async function main() {
   });
 
   console.log(
-    `[${LABEL}] re-checked ${result.sliceSize} records`
-    + ` (${result.journalEntriesDropped} journal entries dropped, ${result.requeried} re-queried against Cellar)`,
+    `[${LABEL}] re-checked ${result.rechecked} records`
+    + ` (${result.requeried} re-queried against Cellar)`,
   );
   console.log(
     `[${LABEL}] status flips: ${result.flipped} total`
@@ -341,9 +280,6 @@ module.exports = {
   assertStatusNotDegraded,
   classifyFlip,
   hasChanged,
-  isExpiredButInForce,
   isRecheckable,
-  primeSliceForRecheck,
   runRecheck,
-  selectRecheckSlice,
 };

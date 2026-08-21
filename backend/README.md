@@ -673,7 +673,7 @@ carries `inForce` and any celex already answered in `data/in-force.json`, so it
 never re-asks Cellar about a status once known. Because `inForce` is
 time-varying (an act can be repealed after its first harvest), that first-ever
 value would otherwise be carried forward indefinitely.
-`search/in-force-recheck.js` is the periodic counterpart: it clears both skips
+`search/in-force-recheck.js` is the periodic counterpart: it clears the field
 and re-queries Cellar (issue #167). It runs automatically as a step of
 `refresh-data.yml`; run it by hand only to patch a published cache out of band:
 
@@ -687,8 +687,14 @@ come back — and that is 50,393 of the 80,469 acts in `data-v11`, so skipping
 them cuts the sweep to ~30k records (19,588 in force, 10,488 whose status
 Cellar has never answered and may yet). At 100 CELEX ids per SPARQL batch and
 200–400 ms per batch that is ~301 requests, about two minutes: there is
-deliberately no rotation, batch budget or turnover cycle, because at that cost a
+deliberately no slicing, batch budget or turnover cycle, because at that cost a
 partial re-check would only buy staleness back.
+
+It also runs with `useJournal: false`, so `data/in-force.json` is neither read
+nor written. The run is all-or-nothing — the cache is written once, at the end —
+so there is nothing to resume from, and journalling would only rewrite a
+30k-entry file every few batches. The builders keep the journal; an interrupted
+multi-hour harvest genuinely needs it.
 
 Both this and `fetch-in-force.js` query Cellar **unaggregated**, collapsing
 fan-out client-side in `reduceBindings`. The earlier
@@ -713,9 +719,9 @@ Two properties matter to the pipeline it runs in:
   `backend-docker.yml` asserts (>80%, currently 87%). The run fails instead.
 
 Flags: `--all` re-checks out-of-force acts too, for the rare case (annulment,
-corrigendum) where one is restored; `--limit N` caps the sweep for a smoke test,
-keeping the known-wrong records first; `--no-gz` skips the `.gz` sidecar when
-the caller gzips the JSON itself, as the workflow does.
+corrigendum) where one is restored; `--limit N` caps the run for a smoke test;
+`--no-gz` skips the `.gz` sidecar when the caller gzips the JSON itself, as the
+workflow does.
 
 If whole acts are missing rather than a field — a transient Cellar failure during
 the sweep, or an act Cellar had not indexed yet when it ran — add them by CELEX

@@ -179,6 +179,24 @@ jobs:
             : > ../refresh-output/backfill.log
           fi
 
+      # `inForce` is time-varying, but nothing else in this pipeline re-asks for
+      # it: the backfill above enriches only acts new to the cache, and
+      # in-force-enrich skips any record that already carries the field, so an
+      # act repealed since its first harvest keeps reading `inForce: true`
+      # indefinitely (issue #167). This re-queries every act not already known
+      # to be out of force — ~30k of the ~80k, ~301 SPARQL batches, about two
+      # minutes — and rewrites the cache only when a status actually moved, so a
+      # quiet month still hashes identical below and publishes no release.
+      - name: Re-check in-force status against Cellar
+        working-directory: backend
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --max-old-space-size=8192 search/in-force-recheck.js \
+            --cache-path search/data/search-cache.json \
+            --no-gz \
+            2>&1 | tee ../refresh-output/in-force-recheck.log
+
       - name: Parse case-law corpus
         working-directory: backend
         shell: bash

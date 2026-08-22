@@ -98,6 +98,40 @@ describe("useSearchNavigation", () => {
     });
   });
 
+  it("persists EuroVoc topics when a law result carries them", async () => {
+    await act(async () => {
+      root.render(<Probe lawKey="gdpr" />);
+    });
+    await act(async () => {
+      await navigateToSearchResult({
+        search_kind: "law",
+        celex: "32016R0679",
+        title: "General Data Protection Regulation",
+        topics: ["Data protection", "Privacy"],
+      });
+    });
+
+    expect(mockSaveLawMeta).toHaveBeenCalledWith(
+      expect.objectContaining({ topics: ["Data protection", "Privacy"] }),
+    );
+  });
+
+  it("does not navigate a match result when neither the item nor the current law resolves a slug", async () => {
+    await act(async () => {
+      root.render(<Probe lawKey={null} />);
+    });
+    await act(async () => {
+      await navigateToSearchResult({
+        search_kind: "match",
+        id: "7",
+        type: "recital",
+        title: "A recital",
+      });
+    });
+
+    expect(mockNavigate).not.toHaveBeenCalled();
+  });
+
   it("navigates a match result to a clean route without stale query params", async () => {
     await act(async () => {
       root.render(<Probe lawKey="gdpr" />);

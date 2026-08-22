@@ -68,6 +68,7 @@ export function useSearchNavigation(lawKey) {
           celex: item.celex,
           label: item.title,
           officialReference,
+          topics: item.topics,
         }).catch(() => {});
       }
 

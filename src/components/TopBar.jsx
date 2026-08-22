@@ -238,15 +238,6 @@ export function SearchBox({
   const isMatchesMode = searchMode === "matches";
   const isDefinitionsMode = searchMode === "definitions";
   const isFulltextMode = searchMode === "fulltext";
-  const isCurrentBusy = isCurrentMode && isBuildingCurrent;
-  const isMatchesBusy = isMatchesMode && (isBuildingGlobal || isSearchLoading);
-  const isBusy = isLawMode
-    ? lawSearch.isLoading
-    : isDefinitionsMode
-      ? definitionSearch.isLoading
-      : isFulltextMode
-        ? fulltextSearch.isLoading
-        : isCurrentBusy || isMatchesBusy;
 
   const localIndexes = useLocalSearchIndexes({
     lists,
@@ -268,6 +259,19 @@ export function SearchBox({
     runCurrentSearch,
     runGlobalMatchSearch,
   } = localIndexes;
+
+  // Must stay below the useLocalSearchIndexes destructuring: referencing the
+  // building flags any earlier reads them before initialization whenever the
+  // active mode is "current" or "matches" (the law reader's default mode).
+  const isCurrentBusy = isCurrentMode && isBuildingCurrent;
+  const isMatchesBusy = isMatchesMode && (isBuildingGlobal || isSearchLoading);
+  const isBusy = isLawMode
+    ? lawSearch.isLoading
+    : isDefinitionsMode
+      ? definitionSearch.isLoading
+      : isFulltextMode
+        ? fulltextSearch.isLoading
+        : isCurrentBusy || isMatchesBusy;
 
   useEffect(() => {
     if (!availableModes.includes(searchMode)) {

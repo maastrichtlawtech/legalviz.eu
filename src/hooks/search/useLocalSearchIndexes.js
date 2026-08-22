@@ -127,19 +127,31 @@ export function useLocalSearchIndexes({
   }, [globalLists, globalSearchIndex, isBuildingGlobal, isMatchesMode, isOpen, isSearchLoading]);
 
   // Run the current/matches search as the query settles and the index is ready.
+  // Run the current/matches search as the query settles and the index is
+  // ready. A sub-minimum query clears the results instead of returning
+  // early: nothing else resets them for these modes, so backspacing below
+  // two characters would otherwise leave stale rows on screen.
   useEffect(() => {
-    if (!isOpen || query.length < 2) return;
-    if (isCurrentMode && !isBuildingCurrent) {
+    if (!isOpen || !isCurrentMode) return;
+    if (query.length < 2) {
+      setResults([]);
+      return;
+    }
+    if (!isBuildingCurrent) {
       runCurrentSearch(query);
     }
-  }, [isBuildingCurrent, isCurrentMode, isOpen, query, runCurrentSearch]);
+  }, [isBuildingCurrent, isCurrentMode, isOpen, query, runCurrentSearch, setResults]);
 
   useEffect(() => {
-    if (!isOpen || query.length < 2) return;
-    if (isMatchesMode && !isBuildingGlobal && !isSearchLoading) {
+    if (!isOpen || !isMatchesMode) return;
+    if (query.length < 2) {
+      setResults([]);
+      return;
+    }
+    if (!isBuildingGlobal && !isSearchLoading) {
       runGlobalMatchSearch(query);
     }
-  }, [globalEntryCount, isBuildingGlobal, isMatchesMode, isOpen, isSearchLoading, query, runGlobalMatchSearch]);
+  }, [globalEntryCount, isBuildingGlobal, isMatchesMode, isOpen, isSearchLoading, query, runGlobalMatchSearch, setResults]);
 
   // Resolve a deferred search once the reason it was deferred clears.
   useEffect(() => {

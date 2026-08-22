@@ -109,7 +109,6 @@ describe("formexApi cache hygiene", () => {
       // Nothing was written to the cache.
       expect(await getLawEntry(indexedDb, CACHE_KEY)).toBeUndefined();
       expect(await api.getCachedFormex("32016R0679", "EN")).toBeNull();
-      expect(await api.hasCachedFormex("32016R0679", "EN")).toBe(false);
     });
 
     it("rejects a JSON envelope that does not contain Formex XML without caching it", async () => {
@@ -151,7 +150,6 @@ describe("formexApi cache hygiene", () => {
 
       // Every read path must agree with getCachedLawPayload: miss, not hit.
       expect(await api.getCachedFormex("32016R0679", "EN")).toBeNull();
-      expect(await api.hasCachedFormex("32016R0679", "EN")).toBe(false);
       expect(await api.getCachedLawPayload("32016R0679", "EN")).toBeNull();
 
       // fetchFormex must not serve the poisoned string; it refetches and

@@ -10,11 +10,16 @@ const {
   normalizeCites,
 } = require('./ai-digest-utils');
 
+const {
+  caseLawCacheVersion: CASE_LAW_CACHE_VERSION,
+  articleDigest: {
+    schemaVersion: SCHEMA_VERSION,
+    promptVersion: PROMPT_VERSION,
+  },
+} = require('./digest-cache-version.json');
+
 const CACHE_FILE = 'article-digest-cache-v1.json';
 const CACHE_VERSION = 1;
-const SCHEMA_VERSION = 2;
-const PROMPT_VERSION = 1;
-const CASE_LAW_CACHE_VERSION = 'case-law-cache-v5';
 const MAX_ARTICLE_TEXT_CHARS = 5500;
 const MAX_DECLARATION_CHARS = 1800;
 

@@ -61,7 +61,14 @@ function enqueueLawMetaUpsert(celex, updates) {
   const previous = pendingUpserts.get(celex) || Promise.resolve();
   const next = previous
     .catch(() => {})
-    .then(() => upsertLawMeta(celex, updates));
+    .then(() => upsertLawMeta(celex, updates))
+    .catch((err) => {
+      // A failing IndexedDB put (quota pressure, private browsing) must not
+      // surface as an unhandled rejection or crash the caller — log it once
+      // and resolve null so the chain stays quiet and UX stays non-crashing.
+      console.warn(`[Library] Failed to persist library metadata for ${celex}:`, err);
+      return null;
+    });
   pendingUpserts.set(celex, next);
   next.finally(() => {
     if (pendingUpserts.get(celex) === next) pendingUpserts.delete(celex);

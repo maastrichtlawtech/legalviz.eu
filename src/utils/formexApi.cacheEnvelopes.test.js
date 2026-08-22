@@ -225,11 +225,10 @@ describe("parsed-law envelope (PARSER_VERSION)", () => {
   });
 
   it("ignores a poisoned raw entry that is not a Formex document", async () => {
-    const { getCachedFormex, getCachedLawPayload, hasCachedFormex } = await importFormexApi();
+    const { getCachedFormex, getCachedLawPayload } = await importFormexApi();
     await seedCache(CACHE_KEY, HTML_ERROR_PAGE);
 
     expect(await getCachedFormex(CELEX, "EN")).toBeNull();
-    expect(await hasCachedFormex(CELEX, "EN")).toBe(false);
     expect(await getCachedLawPayload(CELEX, "EN")).toBeNull();
   });
 
@@ -387,14 +386,23 @@ describe("law-text fetch body validation", () => {
 describe("API JSON envelope (API_JSON_CACHE_VERSION)", () => {
   const CITED_BY_KEY = `${CELEX}_cited_by_act`;
 
-  async function seedApiJson({ version, cachedAt = Date.now(), payload = { citingLaws: ["cached"] } }) {
+  const ACT_CITED_BY_PAYLOAD = {
+    celex: CELEX,
+    actOnly: { provisions: 1, judgments: 0, total: 1 },
+    article: { provisions: 0, judgments: 0, total: 0 },
+    articles: [],
+    citingLaws: { total: 1, laws: [{ celex: "32020R0002", title: "Other Regulation", date: "2020-01-01", provisions: 1 }] },
+    totals: { provisions: 1, judgments: 0, total: 1 },
+  };
+
+  async function seedApiJson({ version, cachedAt = Date.now(), payload = ACT_CITED_BY_PAYLOAD }) {
     await seedCache(CITED_BY_KEY, { format: "api-json-v1", version, cachedAt, payload });
   }
 
   async function currentApiJsonVersion() {
     // Read it back off a freshly written envelope rather than hard-coding it,
     // so a bump doesn't need this test edited.
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({ citingLaws: ["network"] })));
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(ACT_CITED_BY_PAYLOAD)));
     const { fetchLawCitedBy } = await importFormexApi();
     await fetchLawCitedBy(CELEX);
     const written = await readCache(CITED_BY_KEY);
@@ -411,7 +419,7 @@ describe("API JSON envelope (API_JSON_CACHE_VERSION)", () => {
     const { fetchLawCitedBy } = await importFormexApi();
 
     const result = await fetchLawCitedBy(CELEX);
-    expect(result).toMatchObject({ citingLaws: ["cached"], localCached: true });
+    expect(result).toMatchObject({ citingLaws: { laws: [{ celex: "32020R0002" }] }, localCached: true });
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
@@ -419,11 +427,11 @@ describe("API JSON envelope (API_JSON_CACHE_VERSION)", () => {
     const version = await currentApiJsonVersion();
     await seedApiJson({ version: version - 1 });
 
-    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ citingLaws: ["network"] }));
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(ACT_CITED_BY_PAYLOAD));
     vi.stubGlobal("fetch", fetchMock);
     const { fetchLawCitedBy } = await importFormexApi();
 
-    expect(await fetchLawCitedBy(CELEX)).toMatchObject({ citingLaws: ["network"] });
+    expect(await fetchLawCitedBy(CELEX)).toMatchObject({ citingLaws: { laws: [{ celex: "32020R0002" }] } });
     expect(fetchMock).toHaveBeenCalledOnce();
   });
 
@@ -432,11 +440,11 @@ describe("API JSON envelope (API_JSON_CACHE_VERSION)", () => {
     const eightDaysAgo = Date.now() - 8 * 24 * 60 * 60 * 1000;
     await seedApiJson({ version, cachedAt: eightDaysAgo });
 
-    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ citingLaws: ["network"] }));
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(ACT_CITED_BY_PAYLOAD));
     vi.stubGlobal("fetch", fetchMock);
     const { fetchLawCitedBy } = await importFormexApi();
 
-    expect(await fetchLawCitedBy(CELEX)).toMatchObject({ citingLaws: ["network"] });
+    expect(await fetchLawCitedBy(CELEX)).toMatchObject({ citingLaws: { laws: [{ celex: "32020R0002" }] } });
     expect(fetchMock).toHaveBeenCalledOnce();
   });
 
@@ -447,7 +455,7 @@ describe("API JSON envelope (API_JSON_CACHE_VERSION)", () => {
     await seedApiJson({ version, cachedAt: eightDaysAgo });
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({ error: "boom" }, { ok: false, status: 503 })));
     const failing = await importFormexApi();
-    expect(await failing.fetchLawCitedBy(CELEX)).toMatchObject({ citingLaws: ["cached"], localCached: true });
+    expect(await failing.fetchLawCitedBy(CELEX)).toMatchObject({ citingLaws: { laws: [{ celex: "32020R0002" }] }, localCached: true });
 
     await seedApiJson({ version, cachedAt: eightDaysAgo });
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({ error: "gone" }, { ok: false, status: 404 })));

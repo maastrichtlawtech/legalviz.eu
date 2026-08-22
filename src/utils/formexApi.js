@@ -7,6 +7,7 @@
 
 import { PARSER_VERSION, parseFmxToCombined, isFmxDocument } from "./fmxParser.js";
 import lawSummaryCacheVersion from "../../backend/shared/law-summary-cache-version.json" with { type: "json" };
+import digestCacheVersion from "../../backend/shared/digest-cache-version.json" with { type: "json" };
 
 export const API_BASE = (() => {
   if (typeof import.meta !== "undefined" && import.meta.env?.VITE_FORMEX_API_BASE) {
@@ -450,19 +451,20 @@ async function metaGet(celex) {
   }
 }
 
+// Persists user data (library entries, resume positions), so failures must
+// surface as rejections rather than silently masquerading as success — a save
+// that vanishes under quota pressure/private browsing would otherwise be
+// indistinguishable from one that succeeded.
 async function metaPut(value) {
-  try {
-    const db = await openDb();
-    return new Promise((resolve) => {
-      const tx = db.transaction(META_STORE_NAME, "readwrite");
-      const store = tx.objectStore(META_STORE_NAME);
-      store.put(value);
-      tx.oncomplete = () => resolve(value);
-      tx.onerror = () => resolve(value);
-    });
-  } catch {
-    return value;
-  }
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(META_STORE_NAME, "readwrite");
+    const store = tx.objectStore(META_STORE_NAME);
+    store.put(value);
+    tx.oncomplete = () => resolve(value);
+    tx.onerror = () => reject(tx.error || new Error("IndexedDB meta write failed"));
+    tx.onabort = () => reject(tx.error || new Error("IndexedDB meta write aborted"));
+  });
 }
 
 async function metaDelete(celex) {
@@ -812,7 +814,9 @@ export async function fetchFormex(celex, lang = "EN") {
 
     if (hasContent) {
       await cacheSet(cacheKey, xmlText);
-      await upsertLawMeta(celex, { cachedAt: Date.now() });
+      await upsertLawMeta(celex, { cachedAt: Date.now() }).catch((err) => {
+        console.warn(`[FormexAPI] Failed to persist library metadata for ${celex}:`, err);
+      });
       await pruneCacheIfNeeded(celex, PROTECTED_BUNDLED_CELEXES);
       if (typeof window !== "undefined") {
         window.dispatchEvent(new CustomEvent("legalviz-formex-cache-updated", {
@@ -833,10 +837,6 @@ export async function getCachedFormex(celex, lang = "EN") {
   if (typeof cached === "string") return isFmxDocument(cached) ? cached : null;
   if (isCombinedLawEnvelope(cached) && cached.rawXml) return cached.rawXml;
   return null;
-}
-
-export async function hasCachedFormex(celex, lang = "EN") {
-  return (await getCachedFormex(celex, lang)) != null;
 }
 
 export async function getCachedLawPayload(celex, lang = "EN") {
@@ -1026,14 +1026,56 @@ export async function fetchLawSummary(celex) {
   }));
 }
 
+export function makeArticleCaseLawDigestCacheKey(celex, articleNumber, lang = "EN") {
+  const { schemaVersion, promptVersion } = digestCacheVersion.articleDigest;
+  return `${celex}_${toApiLang(lang)}_digest_${articleNumber}_schema${schemaVersion}_prompt${promptVersion}`;
+}
+
+export function makeCaseLawDigestCacheKey(celex, lang = "EN") {
+  const { schemaVersion, promptVersion } = digestCacheVersion.caseLawDigest;
+  return `${celex}_${toApiLang(lang)}_case_law_digest_schema${schemaVersion}_prompt${promptVersion}`;
+}
+
+// Digest responses don't stamp schema/prompt versions — the key above folds
+// them in — but they do stamp the case-law enrichment version, so a stale
+// enrichment shape is still rejected rather than served from cache.
+function isCurrentArticleCaseLawDigestPayload(payload) {
+  return payload?.caseLawCacheVersion === digestCacheVersion.caseLawCacheVersion;
+}
+
+function isCurrentCaseLawDigestPayload(payload) {
+  return payload?.caseLawCacheVersion === digestCacheVersion.caseLawCacheVersion;
+}
+
+// Cited-by payloads carry no version fields, so their keys are not versioned;
+// the structural checks only guard against caching a non-conforming body.
+function isArticleCitedByPayload(payload) {
+  return !!payload
+    && typeof payload === "object"
+    && Array.isArray(payload.citingProvisions)
+    && Array.isArray(payload.citingJudgments)
+    && !!payload.counts
+    && Number.isFinite(payload.counts.total);
+}
+
+function isLawCitedByPayload(payload) {
+  return !!payload
+    && typeof payload === "object"
+    && !!payload.citingLaws
+    && Array.isArray(payload.citingLaws.laws)
+    && !!payload.totals
+    && Number.isFinite(payload.totals.total);
+}
+
 export async function fetchArticleCaseLawDigest(celex, articleNumber, lang = "EN") {
   const apiLang = toApiLang(lang);
-  const key = `${celex}_${apiLang}_digest_${articleNumber}`;
+  const key = makeArticleCaseLawDigestCacheKey(celex, articleNumber, lang);
   return getInFlightRequest(`article-case-law-digest:${key}`, () => fetchJsonWithCache({
     cacheKey: key,
     url: `${API_BASE}/api/laws/${encodeURIComponent(celex)}/articles/${encodeURIComponent(articleNumber)}/case-law-digest?lang=${apiLang}`,
     errorLabel: "Article case-law digest fetch failed",
     cacheFirst: true,
+    validatePayload: isCurrentArticleCaseLawDigestPayload,
   }));
 }
 
@@ -1044,6 +1086,7 @@ export async function fetchArticleCitedBy(celex, articleNumber) {
     url: `${API_BASE}/api/laws/${encodeURIComponent(celex)}/articles/${encodeURIComponent(articleNumber)}/cited-by?limit=200`,
     errorLabel: "Article cited-by fetch failed",
     cacheFirst: true,
+    validatePayload: isArticleCitedByPayload,
   }));
 }
 
@@ -1054,17 +1097,19 @@ export async function fetchLawCitedBy(celex) {
     url: `${API_BASE}/api/laws/${encodeURIComponent(celex)}/cited-by?citingLaws=10`,
     errorLabel: "Law cited-by fetch failed",
     cacheFirst: true,
+    validatePayload: isLawCitedByPayload,
   }));
 }
 
 export async function fetchCaseLawDigest(celex, lang = "EN") {
   const apiLang = toApiLang(lang);
-  const key = `${celex}_${apiLang}_case_law_digest`;
+  const key = makeCaseLawDigestCacheKey(celex, lang);
   return getInFlightRequest(`case-law-digest:${key}`, () => fetchJsonWithCache({
     cacheKey: key,
     url: `${API_BASE}/api/laws/${encodeURIComponent(celex)}/case-law-digest?lang=${apiLang}`,
     errorLabel: "Case-law digest fetch failed",
     cacheFirst: true,
+    validatePayload: isCurrentCaseLawDigestPayload,
   }));
 }
 
@@ -1187,18 +1232,6 @@ export async function fetchTopicsForCelexes(celexes, { signal } = {}) {
   return payload?.topics && typeof payload.topics === "object" ? payload.topics : {};
 }
 
-export async function fetchFormexByReference(reference, lang = "EN") {
-  const query = buildReferenceQuery(reference, lang);
-  const url = `${API_BASE}/api/laws/by-reference?${query}`;
-  const res = await apiFetch(url);
-
-  if (!res.ok) {
-    await readApiError(res, `Formex reference fetch failed (${res.status})`);
-  }
-
-  return res.text();
-}
-
 // `version` — only the literal "current" is meaningful today (#149's first
 // slice; the backend 400s on anything else) — asks the backend for the
 // consolidated ("as amended") reading instead of the act as adopted. It is
@@ -1245,7 +1278,9 @@ export async function fetchParsedLaw(celex, lang = "EN", { version = null } = {}
       || (payload.version === "current" && !payload.versionUnavailable);
     if (payloadHasContent(payload) && cacheablePayload) {
       await cacheSet(cacheKey, createCombinedLawEnvelope(payload));
-      await upsertLawMeta(celex, { cachedAt: Date.now() });
+      await upsertLawMeta(celex, { cachedAt: Date.now() }).catch((err) => {
+        console.warn(`[FormexAPI] Failed to persist library metadata for ${celex}:`, err);
+      });
       await pruneCacheIfNeeded(celex, PROTECTED_BUNDLED_CELEXES);
       if (typeof window !== "undefined") {
         window.dispatchEvent(new CustomEvent("legalviz-formex-cache-updated", {

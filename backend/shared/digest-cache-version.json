@@ -1,0 +1,11 @@
+{
+  "caseLawCacheVersion": "case-law-cache-v5",
+  "articleDigest": {
+    "schemaVersion": 2,
+    "promptVersion": 1
+  },
+  "caseLawDigest": {
+    "schemaVersion": 1,
+    "promptVersion": 1
+  }
+}

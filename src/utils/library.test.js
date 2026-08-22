@@ -70,6 +70,18 @@ describe("saveLawMeta", () => {
     const updates = upsertLawMeta.mock.calls[0][1];
     expect(updates).not.toHaveProperty("topics");
   });
+
+  it("warns and resolves null when the underlying meta write rejects", async () => {
+    upsertLawMeta.mockRejectedValueOnce(new Error("quota exceeded"));
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const saved = await saveLawMeta({ celex: "32016R0679", label: "GDPR" });
+      expect(saved).toBeNull();
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
 });
 
 describe("markLawOpened", () => {

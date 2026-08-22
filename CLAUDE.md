@@ -64,8 +64,8 @@ Nearly every expensive operation — Formex parsing, TF‑IDF recital mapping, C
 | Offline CJEU detail shape (declarations, `articleRefs`) | `CASE_LAW_CACHE_FILE` → `case-law-cache-vN.json` (keep the offline legacy-migration path) | `backend/shared/law-queries.js` |
 | Recital-title prompt/output format | `CACHE_VERSION` | `backend/shared/recital-title-service.js` |
 | Law-summary cache / JSON schema / prompt | `cacheVersion` / `schemaVersion` / `promptVersion` | `backend/shared/law-summary-cache-version.json` (shared by backend and frontend) |
-| Article-digest JSON schema / prompt | `SCHEMA_VERSION` / `PROMPT_VERSION` | `backend/shared/article-digest-service.js` |
-| Whole-law digest JSON schema / prompt | `SCHEMA_VERSION` / `PROMPT_VERSION` | `backend/shared/case-law-digest-service.js` |
+| Article-digest JSON schema / prompt | `articleDigest.schemaVersion` / `promptVersion` | `backend/shared/digest-cache-version.json` (shared by backend and frontend) |
+| Whole-law digest JSON schema / prompt | `caseLawDigest.schemaVersion` / `promptVersion` | `backend/shared/digest-cache-version.json` (shared by backend and frontend) |
 | Persisted analytics shape (`analytics.json` fields) | `ANALYTICS_SCHEMA_VERSION` | `backend/shared/analytics.js` |
 | Runtime SQLite tables/indexes | `SQLITE_SCHEMA_VERSION` | `backend/search/legal-cache-store.js`, `backend/search/build-sqlite-data.js`, and `backend/search/citation-graph-store.js` (three copies, kept in lock-step) |
 | Full-text `units` schema / builder output shape | `FULLTEXT_SCHEMA_VERSION` | `backend/search/fulltext-index-build.js`, with a lock-step copy in `backend/search/legal-cache-store.js` |
@@ -80,9 +80,11 @@ The full-text index follows the same republish discipline as the data caches —
 
 `PARSER_VERSION` lives in the Formex parser but versions **both** parsers' output. `eurlex-html-parser.js` reads a different document format, yet imports its cross-reference grammar (`extractCrossRefsFromText` and friends) straight from `fmxParser.mjs`, and its definition grammar (`buildMeansRegex` and the other term/definition regex builders) from `formex-parser/languages.mjs` — so a change in either changes what HTML laws yield too, and both parsers stamp the same constant onto their result. Bump it for a fix in *any* of the three files; there is deliberately no second constant to keep in sync.
 
-`PARSER_VERSION` is **shared with the frontend** (imported into `src/utils/formexApi.js`), so bumping it re-parses the browser IndexedDB cache too. When you bump `CASE_LAW_CACHE_FILE`, also update `CASE_LAW_CACHE_VERSION` in `article-digest-service.js` **and** `case-law-digest-service.js` — they are kept in lock-step so digests regenerate when enrichment shape changes.
+`PARSER_VERSION` is **shared with the frontend** (imported into `src/utils/formexApi.js`), so bumping it re-parses the browser IndexedDB cache too. When you bump `CASE_LAW_CACHE_FILE`, also update `caseLawCacheVersion` in `backend/shared/digest-cache-version.json` — both digest services import it from there, so they can never drift and digests regenerate when enrichment shape changes.
 
 The law-summary cache versions are also shared with the frontend through `backend/shared/law-summary-cache-version.json`. `fetchLawSummary` includes all three values in its IndexedDB key, so bumping any backend summary cache/schema/prompt version makes browsers fetch the regenerated summary immediately after loading the updated frontend.
+
+The article and whole-law digest versions are shared with the frontend the same way through `backend/shared/digest-cache-version.json`: `fetchArticleCaseLawDigest` / `fetchCaseLawDigest` fold each feature's `schemaVersion`/`promptVersion` pair into their IndexedDB keys (and validate the `caseLawCacheVersion` stamp), so a backend digest prompt/schema bump stops browsers serving the stale 7-day-cached copy.
 
 **Frontend, browser** (`src/`):
 

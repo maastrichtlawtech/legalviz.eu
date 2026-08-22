@@ -11,14 +11,16 @@ const {
   normalizeCites,
 } = require('./ai-digest-utils');
 
+const {
+  caseLawCacheVersion: CASE_LAW_CACHE_VERSION,
+  caseLawDigest: {
+    schemaVersion: SCHEMA_VERSION,
+    promptVersion: PROMPT_VERSION,
+  },
+} = require('./digest-cache-version.json');
+
 const CACHE_FILE = 'case-law-digest-cache-v1.json';
 const CACHE_VERSION = 1;
-const SCHEMA_VERSION = 1;
-const PROMPT_VERSION = 1;
-// Kept in lock-step with law-queries' CASE_LAW_CACHE_FILE so the digest is
-// regenerated whenever the underlying enrichment (declarations, article refs)
-// changes shape.
-const CASE_LAW_CACHE_VERSION = 'case-law-cache-v5';
 
 const MAX_CASES = 60;
 const MAX_DECLARATION_CHARS = 1200;

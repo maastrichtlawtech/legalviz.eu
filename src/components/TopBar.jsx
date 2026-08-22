@@ -5,7 +5,6 @@ import { ChevronLeft, Search, X, Loader2 } from "lucide-react";
 import { Button } from "./Button.jsx";
 import { ThemeToggle } from "./ThemeToggle.jsx";
 import { LanguageSelector } from "./LanguageSelector.jsx";
-import { searchContent, searchIndex as searchWithIndex, buildSearchIndex } from "../utils/nlp.js";
 import { useI18n } from "../i18n/useI18n.js";
 import {
   searchDefinitions as searchDefinitionsApi,
@@ -16,6 +15,7 @@ import { parseCelexQuery } from "../utils/lawRouting.js";
 import { inferOfficialReferenceFromCelex } from "../utils/library.js";
 import { useSearchNavigation } from "../hooks/useSearchNavigation.js";
 import { useNetworkedSearch } from "../hooks/search/useNetworkedSearch.js";
+import { useLocalSearchIndexes } from "../hooks/search/useLocalSearchIndexes.js";
 import { ToolsMenu } from "./ToolsMenu.jsx";
 import { cleanLawTitle, extractShortLawTitle, formatOfficialReference } from "../utils/lawDisplay.js";
 import { lawStatus } from "../utils/lawStatus.js";
@@ -90,10 +90,6 @@ export function SearchBox({
   const [results, setResults] = useState([]);
   const [isOpen, setIsOpen] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(-1);
-  const [currentSearchIndex, setCurrentSearchIndex] = useState(null);
-  const [globalSearchIndex, setGlobalSearchIndex] = useState(null);
-  const [isBuildingCurrent, setIsBuildingCurrent] = useState(false);
-  const [isBuildingGlobal, setIsBuildingGlobal] = useState(false);
   const [searchMode, setSearchMode] = useState(() => (
     persistedState?.searchMode && availableModes.includes(persistedState.searchMode)
       ? persistedState.searchMode
@@ -283,6 +279,27 @@ export function SearchBox({
         ? fulltextSearch.isLoading
         : isCurrentBusy || isMatchesBusy;
 
+  const localIndexes = useLocalSearchIndexes({
+    lists,
+    globalLists: effectiveGlobalLists,
+    query,
+    isOpen,
+    searchMode,
+    isSearchLoading,
+    onSearchOpen,
+    globalEntryCount,
+    searchableLawCount,
+    hasSearchInitialized,
+    setResults,
+    pendingSearchRef,
+  });
+  const {
+    isBuildingCurrent,
+    isBuildingGlobal,
+    runCurrentSearch,
+    runGlobalMatchSearch,
+  } = localIndexes;
+
   useEffect(() => {
     if (!availableModes.includes(searchMode)) {
       setSearchMode(
@@ -318,30 +335,6 @@ export function SearchBox({
       input.setSelectionRange(length, length);
     });
   }, [isOpen]);
-
-  const runCurrentSearch = useCallback((nextQuery) => {
-    if (nextQuery.length < 2) {
-      setResults([]);
-      return;
-    }
-
-    const nextResults = currentSearchIndex
-      ? searchWithIndex(nextQuery, currentSearchIndex)
-      : searchContent(nextQuery, lists);
-    setResults(nextResults);
-  }, [currentSearchIndex, lists]);
-
-  const runGlobalMatchSearch = useCallback((nextQuery, sourceLists = effectiveGlobalLists, sourceIndex = globalSearchIndex) => {
-    if (nextQuery.length < 2) {
-      setResults([]);
-      return;
-    }
-
-    const nextResults = sourceIndex
-      ? searchWithIndex(nextQuery, sourceIndex)
-      : searchContent(nextQuery, sourceLists || { articles: [], recitals: [], annexes: [] });
-    setResults(nextResults);
-  }, [effectiveGlobalLists, globalSearchIndex]);
 
   const executeSearch = useCallback((mode, nextQuery) => {
     if (mode === "laws") {
@@ -424,9 +417,8 @@ export function SearchBox({
     }
   }, [isMatchesMode, isOpen, onSearchOpen]);
 
-  // Reset indices when source data changes
+  // Reset results when source data changes
   useEffect(() => {
-    setCurrentSearchIndex(null);
     setResults([]);
     clearLawSearchError();
     clearDefinitionSearchError();
@@ -434,46 +426,11 @@ export function SearchBox({
   }, [clearLawSearchError, clearDefinitionSearchError, clearFulltextSearchError, lists]);
 
   useEffect(() => {
-    setGlobalSearchIndex(null);
     setResults([]);
     clearLawSearchError();
     clearDefinitionSearchError();
     clearFulltextSearchError();
   }, [clearLawSearchError, clearDefinitionSearchError, clearFulltextSearchError, effectiveGlobalLists]);
-
-  // Build current-law index on open if needed
-  useEffect(() => {
-    if (isOpen && isCurrentMode && !currentSearchIndex && !isBuildingCurrent) {
-      setIsBuildingCurrent(true);
-      setTimeout(() => {
-        try {
-          const idx = buildSearchIndex(lists);
-          setCurrentSearchIndex(idx);
-        } catch (e) {
-          console.error("Failed to build current search index", e);
-        } finally {
-          setIsBuildingCurrent(false);
-        }
-      }, 100);
-    }
-  }, [currentSearchIndex, isBuildingCurrent, isCurrentMode, isOpen, lists]);
-
-  // Build global library index on open if needed
-  useEffect(() => {
-    if (isOpen && isMatchesMode && !isSearchLoading && !globalSearchIndex && !isBuildingGlobal) {
-      setIsBuildingGlobal(true);
-      setTimeout(() => {
-        try {
-          const idx = buildSearchIndex(effectiveGlobalLists || { articles: [], recitals: [], annexes: [] });
-          setGlobalSearchIndex(idx);
-        } catch (e) {
-          console.error("Failed to build global search index", e);
-        } finally {
-          setIsBuildingGlobal(false);
-        }
-      }, 100);
-    }
-  }, [effectiveGlobalLists, globalSearchIndex, isBuildingGlobal, isMatchesMode, isOpen, isSearchLoading]);
 
   useEffect(() => () => {
     abortLawSearch();
@@ -623,25 +580,18 @@ export function SearchBox({
       setResults([]);
       return;
     }
+    // current/matches run through the hook's query-change effect once their
+    // index is ready; executing here too would run the search twice per
+    // keystroke.
+    if (isCurrentMode || isMatchesMode) return;
     executeSearch(searchMode, q);
   };
 
   useEffect(() => {
-    if (!isOpen || query.length < 2) return;
-    if (isCurrentMode && !isBuildingCurrent) {
-      runCurrentSearch(query);
-    }
-  }, [isBuildingCurrent, isCurrentMode, isOpen, query, runCurrentSearch]);
-
-  useEffect(() => {
-    if (!isOpen || query.length < 2) return;
-    if (isMatchesMode && !isBuildingGlobal && !isSearchLoading) {
-      runGlobalMatchSearch(query);
-    }
-  }, [globalEntryCount, isBuildingGlobal, isMatchesMode, isOpen, isSearchLoading, query, runGlobalMatchSearch]);
-
-  useEffect(() => {
     if (!isOpen) return;
+    // current/matches are driven by the local-index hook's query-change
+    // effect; this orchestrator handles only the networked modes.
+    if (isCurrentMode || isMatchesMode) return;
     setSelectedIndex(-1);
     setResults([]);
     clearLawSearchError();
@@ -652,40 +602,7 @@ export function SearchBox({
       return;
     }
     executeSearch(searchMode, query);
-  }, [executeSearch, isLawMode, isOpen, query, scheduleLawSearch, clearLawSearchError, clearDefinitionSearchError, clearFulltextSearchError, searchMode]);
-
-  useEffect(() => {
-    if (!isOpen) return;
-    const pending = pendingSearchRef.current;
-    if (!pending) return;
-
-    if (pending.mode === "current" && !isBuildingCurrent) {
-      pendingSearchRef.current = null;
-      runCurrentSearch(pending.query);
-      return;
-    }
-
-    if (pending.mode === "matches" && !isSearchLoading && !isBuildingGlobal) {
-      if (
-        typeof onSearchOpen === "function" && globalEntryCount === 0 && searchableLawCount > 0
-      ) {
-        return;
-      }
-      pendingSearchRef.current = null;
-      runGlobalMatchSearch(pending.query);
-    }
-  }, [
-    globalEntryCount,
-    hasSearchInitialized,
-    isBuildingCurrent,
-    isBuildingGlobal,
-    isOpen,
-    isSearchLoading,
-    onSearchOpen,
-    runCurrentSearch,
-    runGlobalMatchSearch,
-    searchableLawCount,
-  ]);
+  }, [executeSearch, isCurrentMode, isLawMode, isMatchesMode, isOpen, query, scheduleLawSearch, clearLawSearchError, clearDefinitionSearchError, clearFulltextSearchError, searchMode]);
 
   const modeSummary = isCurrentMode
     ? t("search.searchingCurrentLaw", { law: currentLawLabel || t("search.currentLawFallback") })

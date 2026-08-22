@@ -142,9 +142,6 @@ jobs:
           tar -xf refresh-inputs/laws-html.tar -C backend/search/data
           test -d backend/search/data/laws
           test -d backend/search/data/laws-html
-          mkdir -p backend/search/data/fulltext-corpus
-          cp -al backend/search/data/laws/. backend/search/data/fulltext-corpus/
-          cp -al backend/search/data/laws-html/. backend/search/data/fulltext-corpus/
 
       - name: Restore and validate the current fulltext index
         shell: bash
@@ -265,7 +262,7 @@ jobs:
           SEARCH_CACHE_PATH="$PWD/search/data/search-cache.json.gz" \
             timeout --signal=INT 250m \
             node --max-old-space-size=3072 search/fulltext-index-build.js \
-              --corpusDir search/data/fulltext-corpus \
+              --corpusDir search/data/laws \
               --pool 2 \
               --workerHeapMb 512 \
               --out ../refresh-output/fulltext.sqlite \

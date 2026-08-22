@@ -627,7 +627,7 @@ jobs:
           pnpm rebuild better-sqlite3
           node -e "const D = require('better-sqlite3'); new D(':memory:').close()"
 
-      - name: Download corpus and build the merged fulltext corpus tree
+      - name: Download corpus
         shell: bash
         run: |
           set -euo pipefail
@@ -643,9 +643,6 @@ jobs:
           done
           test -d backend/search/data/laws
           test -d backend/search/data/laws-html
-          mkdir -p backend/search/data/fulltext-corpus
-          cp -al backend/search/data/laws/. backend/search/data/fulltext-corpus/
-          cp -al backend/search/data/laws-html/. backend/search/data/fulltext-corpus/
 
       - name: Download search-cache resolver input
         shell: bash
@@ -715,7 +712,7 @@ jobs:
             "${{ github.workspace }}/.github/scripts/memory-watch.sh" fulltext -- \
             timeout --signal=INT 300m \
             node --max-old-space-size=3072 search/fulltext-index-build.js \
-              --corpusDir search/data/fulltext-corpus \
+              --corpusDir search/data/laws \
               --pool 2 \
               --workerHeapMb 512 \
               --out ../rederive-output/fulltext.sqlite \

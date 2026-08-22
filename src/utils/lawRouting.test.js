@@ -8,7 +8,6 @@ import {
   findBundledLawBySlug,
   getCanonicalLawRoute,
   buildImportedLawCandidate,
-  getActTypeChoices,
   parseOfficialReferenceSlug,
   parseCelexQuery,
 } from "./lawRouting.js";
@@ -178,16 +177,6 @@ describe("buildImportedLawCandidate", () => {
     });
     expect(result.celex).toBe("32021R0123");
     expect(result.slug).toBe("regulation-2021-123");
-  });
-});
-
-describe("getActTypeChoices", () => {
-  it("returns regulation, directive, decision", () => {
-    const choices = getActTypeChoices();
-    expect(choices).toContain("regulation");
-    expect(choices).toContain("directive");
-    expect(choices).toContain("decision");
-    expect(choices).toHaveLength(3);
   });
 });
 

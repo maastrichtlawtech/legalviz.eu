@@ -19,7 +19,3 @@ export function loadCaseLaw(celex) {
   }
   return cache.get(celex);
 }
-
-export function peekCaseLaw(celex) {
-  return cache.get(celex) || null;
-}

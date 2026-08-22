@@ -1,37 +1,9 @@
 import { describe, it, expect } from "vitest";
 import {
-  getLawSlugFromPath,
   buildEurlexSearchUrl,
   buildEurlexOjUrl,
   buildEurlexCelexUrl,
 } from "./url.js";
-
-describe("getLawSlugFromPath", () => {
-  it("extracts slug from simple path", () => {
-    expect(getLawSlugFromPath("/gdpr")).toBe("gdpr");
-  });
-
-  it("extracts slug ignoring trailing segments", () => {
-    expect(getLawSlugFromPath("/gdpr/article/5")).toBe("gdpr");
-  });
-
-  it("returns null for root path", () => {
-    expect(getLawSlugFromPath("/")).toBeNull();
-  });
-
-  it("excludes /law/ prefix", () => {
-    expect(getLawSlugFromPath("/law/gdpr")).toBeNull();
-  });
-
-  it("excludes /import paths", () => {
-    expect(getLawSlugFromPath("/import")).toBeNull();
-    expect(getLawSlugFromPath("/import/something")).toBeNull();
-  });
-
-  it("handles regulation-style slugs", () => {
-    expect(getLawSlugFromPath("/regulation-2016-679")).toBe("regulation-2016-679");
-  });
-});
 
 describe("buildEurlexSearchUrl", () => {
   it("builds valid URL with text and language", () => {

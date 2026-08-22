@@ -160,10 +160,6 @@ export function buildImportedLawCandidate(entry = {}) {
   };
 }
 
-export function getActTypeChoices() {
-  return Array.from(VALID_ACT_TYPES);
-}
-
 // Sector-3 CELEX shape: "3" + 4-digit year + act-type letter + 1-4 digit
 // number, with an optional "(NN)" disambiguation suffix (e.g. "32016R0679").
 const SECTOR3_CELEX = /^3(\d{4})([RLD])(\d{1,4})(\(\d+\))?$/;

@@ -15,6 +15,7 @@ import {
 import { parseCelexQuery } from "../utils/lawRouting.js";
 import { inferOfficialReferenceFromCelex } from "../utils/library.js";
 import { useSearchNavigation } from "../hooks/useSearchNavigation.js";
+import { useNetworkedSearch } from "../hooks/search/useNetworkedSearch.js";
 import { ToolsMenu } from "./ToolsMenu.jsx";
 import { cleanLawTitle, extractShortLawTitle, formatOfficialReference } from "../utils/lawDisplay.js";
 import { lawStatus } from "../utils/lawStatus.js";
@@ -100,15 +101,7 @@ export function SearchBox({
         ? defaultSearchMode
       : availableModes[0]
   ));
-  const [isLawSearchLoading, setIsLawSearchLoading] = useState(false);
-  const [lawSearchError, setLawSearchError] = useState("");
-  const [lastLawSearchQuery, setLastLawSearchQuery] = useState("");
-  const [isDefinitionSearchLoading, setIsDefinitionSearchLoading] = useState(false);
-  const [lastDefinitionSearchQuery, setLastDefinitionSearchQuery] = useState("");
   const [definitionDiscoveryFilter, setDefinitionDiscoveryFilter] = useState("");
-  const [isFulltextSearchLoading, setIsFulltextSearchLoading] = useState(false);
-  const [fulltextSearchError, setFulltextSearchError] = useState(null);
-  const [lastFulltextSearchQuery, setLastFulltextSearchQuery] = useState("");
   const [isSmallViewport, setIsSmallViewport] = useState(() => {
     if (typeof window === "undefined" || typeof window.matchMedia !== "function") return false;
     return window.matchMedia("(max-width: 639px)").matches;
@@ -118,14 +111,156 @@ export function SearchBox({
   const heroInputRef = useRef(null);
   const modalInputRef = useRef(null);
   const resultsRef = useRef(null);
-  const lawSearchAbortRef = useRef(null);
-  const lawSearchRequestIdRef = useRef(0);
-  const lawSearchDebounceRef = useRef(null);
-  const definitionSearchAbortRef = useRef(null);
-  const definitionSearchDebounceRef = useRef(null);
-  const fulltextSearchAbortRef = useRef(null);
-  const fulltextSearchDebounceRef = useRef(null);
   const pendingSearchRef = useRef(null);
+
+  const handleSearchResults = useCallback((nextResults) => {
+    setResults(nextResults);
+    setSelectedIndex(-1);
+  }, []);
+
+  const handleLawSearchError = useCallback(() => {
+    setResults([]);
+  }, []);
+
+  const handleDefinitionSearchError = useCallback((error) => {
+    console.error("Failed to search definitions", error);
+    setResults([]);
+  }, []);
+
+  const handleFulltextSearchError = useCallback((error) => {
+    console.error("Failed to search full text", error);
+    setResults([]);
+  }, []);
+
+  const handleDefinitionSearchReset = useCallback(() => {
+    setDefinitionDiscoveryFilter("");
+  }, []);
+
+  const runLawSearch = useCallback(async (query, { signal }) => {
+    const celexQuery = parseCelexQuery(query);
+    // Derive a stable title from the CELEX (e.g. "Regulation (EU) 2016/679") so
+    // the result — and the library label saved on navigation — is meaningful
+    // rather than empty when no backend record supplies a real title.
+    const celexTitle = celexQuery
+      ? formatOfficialReference(inferOfficialReferenceFromCelex(celexQuery)) || ""
+      : "";
+    const buildCelexResult = () => ({
+      celex: celexQuery,
+      title: celexTitle,
+      search_kind: "law",
+      id: celexQuery,
+      directCelex: true,
+    });
+    // A pasted EUR-Lex URL (or "CELEX:"-prefixed id) identifies exactly one act,
+    // but the backend anchors its CELEX regex at the start of the query, so it
+    // never extracts the id from the surrounding URL text and falls back to a
+    // fuzzy token search — leaving the target buried among unrelated hits. When
+    // we've already resolved the CELEX client-side, query the backend by that
+    // canonical id so it returns the act as the deterministic top result.
+    const backendQuery = celexQuery || query;
+    try {
+      const payload = await searchLawsApi(backendQuery, { limit: 12, signal });
+      const nextResults = Array.isArray(payload?.results)
+        ? payload.results.map((item) => ({
+          ...item,
+          search_kind: "law",
+          id: item.celex,
+        }))
+        : [];
+      const hasCelexExact = celexQuery
+        && nextResults.some((item) => String(item.celex || "").toUpperCase() === celexQuery);
+      return celexQuery && !hasCelexExact ? [buildCelexResult(), ...nextResults] : nextResults;
+    } catch (error) {
+      if (error?.name === "AbortError") throw error;
+      console.error("Failed to search laws", error);
+      // Even if the backend search fails, a valid CELEX can still be opened.
+      if (celexQuery) return [buildCelexResult()];
+      throw error;
+    }
+  }, []);
+
+  const runDefinitionSearch = useCallback(async (query, { signal, filter = "" }) => {
+    setDefinitionDiscoveryFilter(filter);
+    const payload = await searchDefinitionsApi(query, { limit: 12, filter, signal });
+    return Array.isArray(payload?.results)
+      ? payload.results.map((item, index) => ({
+        ...item,
+        search_kind: "definition",
+        id: item.normalizedTerm || item.term || index,
+      }))
+      : [];
+  }, []);
+
+  const runFulltextSearch = useCallback(async (query, { signal }) => {
+    const payload = await searchFulltextApi(query, { limit: 12, signal });
+    const sourceResults = Array.isArray(payload) ? payload : payload?.results;
+    return Array.isArray(sourceResults)
+      ? sourceResults.map((item, index) => {
+        // A stable key must not contain an accidental `undefined`: the
+        // backend contract normally supplies all three parts, but keeping
+        // a deterministic fallback avoids React key collisions on a bad row.
+        const celex = String(item?.celex || "unknown-celex").toUpperCase();
+        const unitType = String(item?.unitType || "unit").toLowerCase();
+        const number = item?.number == null || item.number === ""
+          ? "unnumbered"
+          : String(item.number);
+        return {
+          ...item,
+          search_kind: "fulltext",
+          id: `${celex}:${unitType}:${number}:${index}`,
+        };
+      })
+      : [];
+  }, []);
+
+  const lawSearch = useNetworkedSearch({
+    minQueryLength: 2,
+    debounceMs: LAW_SEARCH_DEBOUNCE_MS,
+    run: runLawSearch,
+    onResults: handleSearchResults,
+    onError: handleLawSearchError,
+    invalidateOnReset: true,
+  });
+
+  const definitionSearch = useNetworkedSearch({
+    minQueryLength: 2,
+    debounceMs: LAW_SEARCH_DEBOUNCE_MS,
+    run: runDefinitionSearch,
+    onResults: handleSearchResults,
+    onError: handleDefinitionSearchError,
+    onReset: handleDefinitionSearchReset,
+    invalidateOnReset: false,
+  });
+
+  const fulltextSearch = useNetworkedSearch({
+    minQueryLength: 2,
+    debounceMs: LAW_SEARCH_DEBOUNCE_MS,
+    run: runFulltextSearch,
+    onResults: handleSearchResults,
+    onError: handleFulltextSearchError,
+    abortOnSchedule: true,
+    invalidateOnReset: false,
+  });
+
+  const {
+    schedule: scheduleLawSearch,
+    execute: executeLawSearch,
+    abort: abortLawSearch,
+    clearError: clearLawSearchError,
+  } = lawSearch;
+  const {
+    schedule: scheduleDefinitionSearch,
+    execute: executeDefinitionSearch,
+    abort: abortDefinitionSearch,
+    reset: resetDefinitionSearch,
+    clearError: clearDefinitionSearchError,
+  } = definitionSearch;
+  const {
+    schedule: scheduleFulltextSearch,
+    abort: abortFulltextSearch,
+    reset: resetFulltextSearch,
+    clearError: clearFulltextSearchError,
+  } = fulltextSearch;
   const hasGlobalSearch = availableModes.includes("laws")
     || availableModes.includes("matches")
     || availableModes.includes("definitions")
@@ -141,11 +276,11 @@ export function SearchBox({
   const isCurrentBusy = isCurrentMode && isBuildingCurrent;
   const isMatchesBusy = isMatchesMode && (isBuildingGlobal || isSearchLoading);
   const isBusy = isLawMode
-    ? isLawSearchLoading
+    ? lawSearch.isLoading
     : isDefinitionsMode
-      ? isDefinitionSearchLoading
+      ? definitionSearch.isLoading
       : isFulltextMode
-        ? isFulltextSearchLoading
+        ? fulltextSearch.isLoading
         : isCurrentBusy || isMatchesBusy;
 
   useEffect(() => {
@@ -207,245 +342,6 @@ export function SearchBox({
       : searchContent(nextQuery, sourceLists || { articles: [], recitals: [], annexes: [] });
     setResults(nextResults);
   }, [effectiveGlobalLists, globalSearchIndex]);
-
-  const runLawSearch = useCallback((nextQuery) => {
-    const trimmedQuery = String(nextQuery || "").trim();
-    const requestId = lawSearchRequestIdRef.current + 1;
-    lawSearchRequestIdRef.current = requestId;
-
-    if (lawSearchAbortRef.current) {
-      lawSearchAbortRef.current.abort();
-    }
-
-    setLawSearchError("");
-
-    if (trimmedQuery.length < 2) {
-      setResults([]);
-      setLastLawSearchQuery("");
-      setIsLawSearchLoading(false);
-      return;
-    }
-
-    const controller = new AbortController();
-    lawSearchAbortRef.current = controller;
-    setIsLawSearchLoading(true);
-    setLastLawSearchQuery(trimmedQuery);
-
-    // A typed CELEX can be opened directly regardless of the search index, so
-    // surface it as a result even when the backend finds no (or no exact) match.
-    const celexQuery = parseCelexQuery(trimmedQuery);
-    // Derive a stable title from the CELEX (e.g. "Regulation (EU) 2016/679") so
-    // the result — and the library label saved on navigation — is meaningful
-    // rather than empty when no backend record supplies a real title.
-    const celexTitle = celexQuery
-      ? formatOfficialReference(inferOfficialReferenceFromCelex(celexQuery)) || ""
-      : "";
-    const buildCelexResult = () => ({
-      celex: celexQuery,
-      title: celexTitle,
-      search_kind: "law",
-      id: celexQuery,
-      directCelex: true,
-    });
-
-    // A pasted EUR-Lex URL (or "CELEX:"-prefixed id) identifies exactly one act,
-    // but the backend anchors its CELEX regex at the start of the query, so it
-    // never extracts the id from the surrounding URL text and falls back to a
-    // fuzzy token search — leaving the target buried among unrelated hits. When
-    // we've already resolved the CELEX client-side, query the backend by that
-    // canonical id so it returns the act as the deterministic top result.
-    const backendQuery = celexQuery || trimmedQuery;
-
-    searchLawsApi(backendQuery, { limit: 12, signal: controller.signal })
-      .then((payload) => {
-        if (lawSearchRequestIdRef.current !== requestId) return;
-        const nextResults = Array.isArray(payload?.results)
-          ? payload.results.map((item) => ({
-            ...item,
-            search_kind: "law",
-            id: item.celex,
-          }))
-          : [];
-        const hasCelexExact = celexQuery
-          && nextResults.some((item) => String(item.celex || "").toUpperCase() === celexQuery);
-        setResults(celexQuery && !hasCelexExact ? [buildCelexResult(), ...nextResults] : nextResults);
-        setSelectedIndex(-1);
-      })
-      .catch((error) => {
-        if (error?.name === "AbortError" || lawSearchRequestIdRef.current !== requestId) return;
-        console.error("Failed to search laws", error);
-        // Even if the index lookup fails, a valid CELEX can still be opened.
-        if (celexQuery) {
-          setResults([buildCelexResult()]);
-          setSelectedIndex(-1);
-          return;
-        }
-        setResults([]);
-        setLawSearchError(error?.message || t("search.apiUnavailable"));
-      })
-      .finally(() => {
-        if (lawSearchAbortRef.current === controller) {
-          lawSearchAbortRef.current = null;
-          setIsLawSearchLoading(false);
-        }
-      });
-  }, [t]);
-
-  // Debounced entry point for law search: clears any pending timer and only
-  // fires the network request once the user pauses typing.
-  const scheduleLawSearch = useCallback((nextQuery) => {
-    if (lawSearchDebounceRef.current) {
-      clearTimeout(lawSearchDebounceRef.current);
-      lawSearchDebounceRef.current = null;
-    }
-
-    // Empty/too-short queries reset immediately — no request, no spinner.
-    if (String(nextQuery || "").trim().length < 2) {
-      runLawSearch(nextQuery);
-      return;
-    }
-
-    // Show the loading state right away so typing feels responsive, but hold
-    // the actual request until the pause elapses.
-    setIsLawSearchLoading(true);
-    lawSearchDebounceRef.current = setTimeout(() => {
-      lawSearchDebounceRef.current = null;
-      runLawSearch(nextQuery);
-    }, LAW_SEARCH_DEBOUNCE_MS);
-  }, [runLawSearch]);
-
-  const runDefinitionSearch = useCallback((nextQuery, discoveryFilter = "") => {
-    const trimmedQuery = String(nextQuery || "").trim();
-    definitionSearchAbortRef.current?.abort();
-    setLawSearchError("");
-    setDefinitionDiscoveryFilter(discoveryFilter);
-
-    if (trimmedQuery.length < 2 && !discoveryFilter) {
-      setResults([]);
-      setLastDefinitionSearchQuery("");
-      setIsDefinitionSearchLoading(false);
-      return;
-    }
-
-    const controller = new AbortController();
-    definitionSearchAbortRef.current = controller;
-    setIsDefinitionSearchLoading(true);
-    setLastDefinitionSearchQuery(trimmedQuery);
-
-    searchDefinitionsApi(trimmedQuery, { limit: 12, filter: discoveryFilter, signal: controller.signal })
-      .then((payload) => {
-        const nextResults = Array.isArray(payload?.results)
-          ? payload.results.map((item, index) => ({
-            ...item,
-            search_kind: "definition",
-            id: item.normalizedTerm || item.term || index,
-          }))
-          : [];
-        setResults(nextResults);
-        setSelectedIndex(-1);
-      })
-      .catch((error) => {
-        if (error?.name === "AbortError") return;
-        console.error("Failed to search definitions", error);
-        setResults([]);
-        setLawSearchError(error?.message || t("search.definitionApiUnavailable"));
-      })
-      .finally(() => {
-        if (definitionSearchAbortRef.current === controller) {
-          definitionSearchAbortRef.current = null;
-          setIsDefinitionSearchLoading(false);
-        }
-      });
-  }, [t]);
-
-  const scheduleDefinitionSearch = useCallback((nextQuery) => {
-    if (definitionSearchDebounceRef.current) {
-      clearTimeout(definitionSearchDebounceRef.current);
-      definitionSearchDebounceRef.current = null;
-    }
-    if (String(nextQuery || "").trim().length < 2) {
-      runDefinitionSearch(nextQuery);
-      return;
-    }
-    setIsDefinitionSearchLoading(true);
-    definitionSearchDebounceRef.current = setTimeout(() => {
-      definitionSearchDebounceRef.current = null;
-      runDefinitionSearch(nextQuery);
-    }, LAW_SEARCH_DEBOUNCE_MS);
-  }, [runDefinitionSearch]);
-
-  const runFulltextSearch = useCallback((nextQuery) => {
-    const trimmedQuery = String(nextQuery || "").trim();
-    fulltextSearchAbortRef.current?.abort();
-    setFulltextSearchError(null);
-
-    if (trimmedQuery.length < 2) {
-      setResults([]);
-      setLastFulltextSearchQuery("");
-      setIsFulltextSearchLoading(false);
-      return;
-    }
-
-    const controller = new AbortController();
-    fulltextSearchAbortRef.current = controller;
-    setIsFulltextSearchLoading(true);
-    setLastFulltextSearchQuery(trimmedQuery);
-
-    searchFulltextApi(trimmedQuery, { limit: 12, signal: controller.signal })
-      .then((payload) => {
-        if (fulltextSearchAbortRef.current !== controller) return;
-        const sourceResults = Array.isArray(payload) ? payload : payload?.results;
-        const nextResults = Array.isArray(sourceResults)
-          ? sourceResults.map((item, index) => {
-            // A stable key must not contain an accidental `undefined`: the
-            // backend contract normally supplies all three parts, but keeping
-            // a deterministic fallback avoids React key collisions on a bad row.
-            const celex = String(item?.celex || "unknown-celex").toUpperCase();
-            const unitType = String(item?.unitType || "unit").toLowerCase();
-            const number = item?.number == null || item.number === ""
-              ? "unnumbered"
-              : String(item.number);
-            return {
-              ...item,
-              search_kind: "fulltext",
-              id: `${celex}:${unitType}:${number}:${index}`,
-            };
-          })
-          : [];
-        setResults(nextResults);
-        setSelectedIndex(-1);
-      })
-      .catch((error) => {
-        if (error?.name === "AbortError" || fulltextSearchAbortRef.current !== controller) return;
-        console.error("Failed to search full text", error);
-        setResults([]);
-        setFulltextSearchError(error);
-      })
-      .finally(() => {
-        if (fulltextSearchAbortRef.current === controller) {
-          fulltextSearchAbortRef.current = null;
-          setIsFulltextSearchLoading(false);
-        }
-      });
-  }, []);
-
-  const scheduleFulltextSearch = useCallback((nextQuery) => {
-    fulltextSearchAbortRef.current?.abort();
-    fulltextSearchAbortRef.current = null;
-    if (fulltextSearchDebounceRef.current) {
-      clearTimeout(fulltextSearchDebounceRef.current);
-      fulltextSearchDebounceRef.current = null;
-    }
-    if (String(nextQuery || "").trim().length < 2) {
-      runFulltextSearch(nextQuery);
-      return;
-    }
-    setIsFulltextSearchLoading(true);
-    fulltextSearchDebounceRef.current = setTimeout(() => {
-      fulltextSearchDebounceRef.current = null;
-      runFulltextSearch(nextQuery);
-    }, LAW_SEARCH_DEBOUNCE_MS);
-  }, [runFulltextSearch]);
 
   const executeSearch = useCallback((mode, nextQuery) => {
     if (mode === "laws") {
@@ -515,9 +411,9 @@ export function SearchBox({
     onSearchOpen,
     runCurrentSearch,
     runGlobalMatchSearch,
+    scheduleLawSearch,
     scheduleDefinitionSearch,
     scheduleFulltextSearch,
-    scheduleLawSearch,
     searchableLawCount,
   ]);
 
@@ -532,16 +428,18 @@ export function SearchBox({
   useEffect(() => {
     setCurrentSearchIndex(null);
     setResults([]);
-    setLawSearchError("");
-    setFulltextSearchError(null);
-  }, [lists]);
+    clearLawSearchError();
+    clearDefinitionSearchError();
+    clearFulltextSearchError();
+  }, [clearLawSearchError, clearDefinitionSearchError, clearFulltextSearchError, lists]);
 
   useEffect(() => {
     setGlobalSearchIndex(null);
     setResults([]);
-    setLawSearchError("");
-    setFulltextSearchError(null);
-  }, [effectiveGlobalLists]);
+    clearLawSearchError();
+    clearDefinitionSearchError();
+    clearFulltextSearchError();
+  }, [clearLawSearchError, clearDefinitionSearchError, clearFulltextSearchError, effectiveGlobalLists]);
 
   // Build current-law index on open if needed
   useEffect(() => {
@@ -578,65 +476,25 @@ export function SearchBox({
   }, [effectiveGlobalLists, globalSearchIndex, isBuildingGlobal, isMatchesMode, isOpen, isSearchLoading]);
 
   useEffect(() => () => {
-    lawSearchAbortRef.current?.abort();
-    definitionSearchAbortRef.current?.abort();
-    fulltextSearchAbortRef.current?.abort();
-    if (lawSearchDebounceRef.current) {
-      clearTimeout(lawSearchDebounceRef.current);
-    }
-    if (definitionSearchDebounceRef.current) {
-      clearTimeout(definitionSearchDebounceRef.current);
-    }
-    if (fulltextSearchDebounceRef.current) {
-      clearTimeout(fulltextSearchDebounceRef.current);
-    }
-  }, []);
+    abortLawSearch();
+    abortDefinitionSearch();
+    abortFulltextSearch();
+  }, [abortLawSearch, abortDefinitionSearch, abortFulltextSearch]);
 
   // Prevent a delayed response from the mode the user just left replacing
   // the results for the newly selected mode.
   useEffect(() => {
-    if (!isLawMode) {
-      lawSearchRequestIdRef.current += 1;
-      lawSearchAbortRef.current?.abort();
-      lawSearchAbortRef.current = null;
-      if (lawSearchDebounceRef.current) {
-        clearTimeout(lawSearchDebounceRef.current);
-        lawSearchDebounceRef.current = null;
-      }
-      setIsLawSearchLoading(false);
-    }
-    if (!isDefinitionsMode) {
-      definitionSearchAbortRef.current?.abort();
-      definitionSearchAbortRef.current = null;
-      if (definitionSearchDebounceRef.current) {
-        clearTimeout(definitionSearchDebounceRef.current);
-        definitionSearchDebounceRef.current = null;
-      }
-      setIsDefinitionSearchLoading(false);
-    }
-    if (!isFulltextMode) {
-      fulltextSearchAbortRef.current?.abort();
-      fulltextSearchAbortRef.current = null;
-      if (fulltextSearchDebounceRef.current) {
-        clearTimeout(fulltextSearchDebounceRef.current);
-        fulltextSearchDebounceRef.current = null;
-      }
-      setIsFulltextSearchLoading(false);
-    }
-  }, [isDefinitionsMode, isFulltextMode, isLawMode]);
+    if (!isLawMode) abortLawSearch();
+    if (!isDefinitionsMode) abortDefinitionSearch();
+    if (!isFulltextMode) abortFulltextSearch();
+  }, [isDefinitionsMode, isFulltextMode, isLawMode, abortLawSearch, abortDefinitionSearch, abortFulltextSearch]);
 
   // Closing the spotlight is also a full-text search boundary: there is no
   // visible consumer left for a pending response, so cancel it immediately.
   useEffect(() => {
     if (isOpen || !isFulltextMode) return;
-    fulltextSearchAbortRef.current?.abort();
-    fulltextSearchAbortRef.current = null;
-    if (fulltextSearchDebounceRef.current) {
-      clearTimeout(fulltextSearchDebounceRef.current);
-      fulltextSearchDebounceRef.current = null;
-    }
-    setIsFulltextSearchLoading(false);
-  }, [isFulltextMode, isOpen]);
+    abortFulltextSearch();
+  }, [isFulltextMode, isOpen, abortFulltextSearch]);
 
   useEffect(() => {
     if (typeof window === "undefined" || typeof window.matchMedia !== "function") return undefined;
@@ -747,8 +605,9 @@ export function SearchBox({
     const q = e.target.value;
     setQuery(q);
     setSelectedIndex(-1);
-    setLawSearchError("");
-    setFulltextSearchError(null);
+    clearLawSearchError();
+    clearDefinitionSearchError();
+    clearFulltextSearchError();
 
     if (!isOpen && triggerVariant === "hero") {
       if (q.trim().length === 0) {
@@ -758,9 +617,9 @@ export function SearchBox({
       setIsOpen(true);
     }
 
-    if ((isLawMode && q.trim() !== lastLawSearchQuery)
-      || (isDefinitionsMode && q.trim() !== lastDefinitionSearchQuery)
-      || (isFulltextMode && q.trim() !== lastFulltextSearchQuery)) {
+    if ((isLawMode && q.trim() !== lawSearch.lastQuery)
+      || (isDefinitionsMode && q.trim() !== definitionSearch.lastQuery)
+      || (isFulltextMode && q.trim() !== fulltextSearch.lastQuery)) {
       setResults([]);
       return;
     }
@@ -785,14 +644,15 @@ export function SearchBox({
     if (!isOpen) return;
     setSelectedIndex(-1);
     setResults([]);
-    setLawSearchError("");
-    setFulltextSearchError(null);
+    clearLawSearchError();
+    clearDefinitionSearchError();
+    clearFulltextSearchError();
     if (isLawMode) {
       scheduleLawSearch(query);
       return;
     }
     executeSearch(searchMode, query);
-  }, [executeSearch, isLawMode, isOpen, query, scheduleLawSearch, searchMode]);
+  }, [executeSearch, isLawMode, isOpen, query, scheduleLawSearch, clearLawSearchError, clearDefinitionSearchError, clearFulltextSearchError, searchMode]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -877,10 +737,11 @@ export function SearchBox({
     const nextIdx = (currentIdx + direction + availableModes.length) % availableModes.length;
     setSearchMode(availableModes[nextIdx]);
     setSelectedIndex(-1);
-    setLawSearchError("");
-    setFulltextSearchError(null);
+    clearLawSearchError();
+    clearDefinitionSearchError();
+    clearFulltextSearchError();
     focusModalInput();
-  }, [availableModes, focusModalInput, searchMode]);
+  }, [availableModes, focusModalInput, searchMode, clearLawSearchError, clearDefinitionSearchError, clearFulltextSearchError]);
 
   // Split laws-mode results into a "Best match" group (the synthetic
   // direct-open CELEX result, when present, plus the top backend hit) and an
@@ -920,11 +781,19 @@ export function SearchBox({
     : isMatchesMode
       ? (isBuildingGlobal || isSearchLoading)
       : false;
-  const searchErrorMessage = isFulltextMode && fulltextSearchError
-    ? (fulltextSearchError.status === 503 || fulltextSearchError.code === "fulltext_index_unavailable"
+  const lawSearchError = lawSearch.error
+    ? lawSearch.error?.message || t("search.apiUnavailable")
+    : "";
+  const definitionSearchError = definitionSearch.error
+    ? definitionSearch.error?.message || t("search.definitionApiUnavailable")
+    : "";
+  const searchErrorMessage = isFulltextMode && fulltextSearch.error
+    ? (fulltextSearch.error.status === 503 || fulltextSearch.error.code === "fulltext_index_unavailable"
       ? t("search.fulltextApiUnavailable")
-      : fulltextSearchError.message || t("search.fulltextApiUnavailable"))
-    : lawSearchError;
+      : fulltextSearch.error.message || t("search.fulltextApiUnavailable"))
+    : isDefinitionsMode
+      ? definitionSearchError
+      : lawSearchError;
 
   return (
     <>
@@ -1024,7 +893,7 @@ export function SearchBox({
                         }
                         if (isLawMode && e.key === "Enter" && selectedIndex < 0) {
                           e.preventDefault();
-                          runLawSearch(query);
+                          executeLawSearch(query);
                         }
                       }}
                       placeholder={inputPlaceholder}
@@ -1041,8 +910,7 @@ export function SearchBox({
                           setQuery("");
                           setResults([]);
                           setDefinitionDiscoveryFilter("");
-                          setLastFulltextSearchQuery("");
-                          setFulltextSearchError(null);
+                          resetFulltextSearch();
                           focusModalInput();
                         }}
                         className="absolute right-0 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600"
@@ -1084,8 +952,9 @@ export function SearchBox({
                           onClick={() => {
                             setSearchMode(mode);
                             setSelectedIndex(-1);
-                            setLawSearchError("");
-                            setFulltextSearchError(null);
+                            clearLawSearchError();
+                            clearDefinitionSearchError();
+                            clearFulltextSearchError();
                             focusModalInput();
                           }}
                           className={`rounded-md px-3 py-1 text-xs font-medium transition ${
@@ -1120,13 +989,10 @@ export function SearchBox({
                       aria-pressed={definitionDiscoveryFilter === entry.id}
                       onClick={() => {
                         setQuery("");
-                        if (entry.id) runDefinitionSearch("", entry.id);
+                        if (entry.id) executeDefinitionSearch("", { filter: entry.id });
                         else {
-                          definitionSearchAbortRef.current?.abort();
+                          resetDefinitionSearch();
                           setDefinitionDiscoveryFilter("");
-                          setResults([]);
-                          setLastDefinitionSearchQuery("");
-                          setIsDefinitionSearchLoading(false);
                         }
                         focusModalInput();
                       }}
@@ -1301,7 +1167,7 @@ export function SearchBox({
                 </div>
               ) : (
                 <div className="flex flex-col items-center justify-center py-16 text-gray-400">
-                  {isFulltextMode && lastFulltextSearchQuery.length < 2 ? (
+                  {isFulltextMode && fulltextSearch.lastQuery.length < 2 ? (
                     <>
                       <Search size={48} className="opacity-10 mb-4" />
                       <p className="text-sm text-center max-w-sm">{t("search.typeFulltext")}</p>
@@ -1310,10 +1176,10 @@ export function SearchBox({
                     <>
                       <Search size={48} className="opacity-20 mb-4" />
                       <p className="text-sm text-center max-w-sm">
-                        {t("search.noResultsFulltext", { query: lastFulltextSearchQuery })}
+                        {t("search.noResultsFulltext", { query: fulltextSearch.lastQuery })}
                       </p>
                     </>
-                  ) : isDefinitionsMode && lastDefinitionSearchQuery.length < 2 ? (
+                  ) : isDefinitionsMode && definitionSearch.lastQuery.length < 2 ? (
                     <>
                       <Search size={48} className="opacity-10 mb-4" />
                       <p className="text-sm text-center max-w-sm">{t("search.typeDefinitions")}</p>
@@ -1322,10 +1188,10 @@ export function SearchBox({
                     <>
                       <Search size={48} className="opacity-20 mb-4" />
                       <p className="text-sm text-center max-w-sm">
-                        {t("search.noResultsDefinitions", { query: lastDefinitionSearchQuery })}
+                        {t("search.noResultsDefinitions", { query: definitionSearch.lastQuery })}
                       </p>
                     </>
-                  ) : isLawMode && lastLawSearchQuery.length < 2 ? (
+                  ) : isLawMode && lawSearch.lastQuery.length < 2 ? (
                     <>
                       <Search size={48} className="opacity-10 mb-4" />
                       <p className="text-sm text-center max-w-sm">
@@ -1336,7 +1202,7 @@ export function SearchBox({
                     <>
                       <Search size={48} className="opacity-20 mb-4" />
                       <p className="text-sm text-center max-w-sm">
-                        {t("search.noResultsLaws", { query: lastLawSearchQuery })}
+                        {t("search.noResultsLaws", { query: lawSearch.lastQuery })}
                       </p>
                     </>
                   ) : isCurrentMode && query.length < 2 ? (

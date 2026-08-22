@@ -64,10 +64,13 @@ export function useSearchNavigation(lawKey) {
 
       if (officialReference) {
         // Best-effort bookkeeping: never let a stuck IndexedDB block navigation.
+        // saveLawMeta only persists topics when non-empty, so an item without
+        // them never clobbers previously stored EuroVoc topics.
         saveLawMeta({
           celex: item.celex,
           label: item.title,
           officialReference,
+          topics: item.topics,
         }).catch(() => {});
       }
 

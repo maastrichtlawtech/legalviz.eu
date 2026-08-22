@@ -11,30 +11,9 @@ import { lawLangFromUiLocale, uiLocaleFromLawLang } from "../i18n/localeMeta.js"
 import { resetWholeApp } from "../utils/resetApp.js";
 import { useLandingLibrary } from "../hooks/useLandingLibrary.js";
 import { useLandingSearchIndex } from "../hooks/useLandingSearchIndex.js";
-import { buildImportedLawCandidate, getCanonicalLawRoute } from "../utils/lawRouting.js";
-import { saveLawMeta } from "../utils/library.js";
+import { useSearchNavigation } from "../hooks/useSearchNavigation.js";
 import { fetchDatasetMeta } from "../utils/formexApi.js";
 import { formatMetaDate } from "../utils/formatMetaDate.js";
-
-function inferOfficialReferenceFromCelex(celex) {
-  const match = String(celex || "").match(/^3(\d{4})([RLD])0*(\d{1,4})(?:\(\d+\))?$/);
-  if (!match) return null;
-
-  const actTypeMap = {
-    R: "regulation",
-    L: "directive",
-    D: "decision",
-  };
-
-  const actType = actTypeMap[match[2]] || null;
-  if (!actType) return null;
-
-  return {
-    actType,
-    year: match[1],
-    number: String(Number.parseInt(match[3], 10)),
-  };
-}
 
 export function Landing({ forcedLocale = null }) {
   const navigate = useNavigate();
@@ -86,76 +65,7 @@ export function Landing({ forcedLocale = null }) {
     navigate(localizePath(law.route, locale));
   }, [locale, localizePath, markLawOpened, navigate]);
 
-  const handleSearchNavigate = useCallback(async (item) => {
-    if (item.search_kind === "definition") {
-      const source = item.representativeSource || {};
-      if (!source.celex) return;
-      const sourceArticle = source.article ?? source.sourceArticle;
-      const targetLaw = buildImportedLawCandidate({
-        celex: source.celex,
-        title: source.title || source.law?.title,
-        officialReference: inferOfficialReferenceFromCelex(source.celex),
-      });
-      const route = getCanonicalLawRoute(targetLaw, sourceArticle ? "article" : null, sourceArticle || null, locale);
-      const separator = route.includes("?") ? "&" : "?";
-      const term = item.normalizedTerm || item.term;
-      const params = new URLSearchParams({ definition: term });
-      params.set("definitionSource", `${String(source.celex).toUpperCase()}:${String(sourceArticle ?? "")}${source.sourcePoint ? `:${String(source.sourcePoint)}` : ""}`);
-      navigate(`${route}${separator}${params.toString()}`);
-      return;
-    }
-
-    if (item.search_kind === "fulltext") {
-      const celex = String(item.celex || "").trim();
-      const unitType = String(item.unitType || "").trim().toLowerCase();
-      const number = item.number == null ? "" : String(item.number).trim();
-      if (!celex || !number || (unitType !== "article" && unitType !== "recital")) return;
-
-      const officialReference = inferOfficialReferenceFromCelex(celex);
-      const targetLaw = buildImportedLawCandidate({
-        celex,
-        title: item.title,
-        officialReference,
-      });
-      if (officialReference) {
-        saveLawMeta({
-          celex,
-          label: item.title,
-          officialReference,
-        }).catch(() => {});
-      }
-      navigate(getCanonicalLawRoute(targetLaw, unitType, number, locale));
-      return;
-    }
-
-    if (item.search_kind === "law") {
-      const officialReference = inferOfficialReferenceFromCelex(item.celex);
-      const targetLaw = buildImportedLawCandidate({
-        celex: item.celex,
-        title: item.title,
-        officialReference,
-      });
-
-      if (officialReference) {
-        // Best-effort bookkeeping: never let a stuck IndexedDB block navigation.
-        saveLawMeta({
-          celex: item.celex,
-          label: item.title,
-          officialReference,
-          topics: item.topics,
-        }).catch(() => {});
-      }
-
-      navigate(getCanonicalLawRoute(targetLaw, null, null, locale));
-      return;
-    }
-
-    const safeId = encodeURIComponent(String(item.id));
-    const targetLawSlug = item.law_slug || item.law_key;
-    if (targetLawSlug) {
-      navigate(localizePath(`/${targetLawSlug}/${item.type}/${safeId}`, locale));
-    }
-  }, [locale, localizePath, navigate]);
+  const handleSearchNavigate = useSearchNavigation("");
 
   return (
     <div className="min-h-screen bg-paper dark:bg-paper-dark transition-colors duration-500">

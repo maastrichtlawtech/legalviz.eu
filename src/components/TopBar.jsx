@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
-import { Link, useLocation, useNavigate } from "react-router-dom";
-import { ChevronLeft, Search, X, ExternalLink, Printer, Loader2, PanelLeftClose, PanelLeftOpen, Minus, Plus, MoreVertical, RotateCcw } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
+import { ChevronLeft, Search, X, Loader2 } from "lucide-react";
 import { Button } from "./Button.jsx";
 import { ThemeToggle } from "./ThemeToggle.jsx";
 import { LanguageSelector } from "./LanguageSelector.jsx";
@@ -12,8 +12,10 @@ import {
   searchFulltext as searchFulltextApi,
   searchLaws as searchLawsApi,
 } from "../utils/formexApi.js";
-import { buildImportedLawCandidate, getCanonicalLawRoute, parseCelexQuery } from "../utils/lawRouting.js";
-import { inferOfficialReferenceFromCelex, saveLawMeta } from "../utils/library.js";
+import { parseCelexQuery } from "../utils/lawRouting.js";
+import { inferOfficialReferenceFromCelex } from "../utils/library.js";
+import { useSearchNavigation } from "../hooks/useSearchNavigation.js";
+import { ToolsMenu } from "./ToolsMenu.jsx";
 import { cleanLawTitle, extractShortLawTitle, formatOfficialReference } from "../utils/lawDisplay.js";
 import { lawStatus } from "../utils/lawStatus.js";
 import { DefinitionSearchResult } from "./search/DefinitionSearchResult.jsx";
@@ -1460,85 +1462,9 @@ export function TopBar({
   defaultSearchMode = null,
 }) {
   const navigate = useNavigate();
-  const location = useLocation();
   const { locale, localizePath, t } = useI18n();
 
-  const onNavigate = async (item) => {
-    if (item.search_kind === "definition") {
-      const source = item.representativeSource || {};
-      if (!source.celex) return;
-      const sourceArticle = source.article ?? source.sourceArticle;
-      const targetLaw = buildImportedLawCandidate({
-        celex: source.celex,
-        title: source.title || source.law?.title,
-        officialReference: inferOfficialReferenceFromCelex(source.celex),
-      });
-      const route = getCanonicalLawRoute(
-        targetLaw,
-        sourceArticle ? "article" : null,
-        sourceArticle || null,
-        locale,
-      );
-      const separator = route.includes("?") ? "&" : "?";
-      const term = item.normalizedTerm || item.term;
-      const params = new URLSearchParams({ definition: term });
-      params.set("definitionSource", `${String(source.celex).toUpperCase()}:${String(sourceArticle ?? "")}${source.sourcePoint ? `:${String(source.sourcePoint)}` : ""}`);
-      navigate(`${route}${separator}${params.toString()}`);
-      return;
-    }
-
-    if (item.search_kind === "fulltext") {
-      const celex = String(item.celex || "").trim();
-      const unitType = String(item.unitType || "").trim().toLowerCase();
-      const number = item.number == null ? "" : String(item.number).trim();
-      if (!celex || !number || (unitType !== "article" && unitType !== "recital")) return;
-
-      const officialReference = inferOfficialReferenceFromCelex(celex);
-      const targetLaw = buildImportedLawCandidate({
-        celex,
-        title: item.title,
-        officialReference,
-      });
-      if (officialReference) {
-        saveLawMeta({
-          celex,
-          label: item.title,
-          officialReference,
-        }).catch(() => {});
-      }
-      navigate(getCanonicalLawRoute(targetLaw, unitType, number, locale));
-      return;
-    }
-
-    if (item.search_kind === "law") {
-      const officialReference = inferOfficialReferenceFromCelex(item.celex);
-      const targetLaw = buildImportedLawCandidate({
-        celex: item.celex,
-        title: item.title,
-        officialReference,
-      });
-
-      if (officialReference) {
-        // Best-effort bookkeeping: never let a stuck IndexedDB block navigation.
-        saveLawMeta({
-          celex: item.celex,
-          label: item.title,
-          officialReference,
-        }).catch(() => {});
-      }
-
-      navigate(getCanonicalLawRoute(targetLaw, null, null, locale));
-      return;
-    }
-
-    // Ensure ID is a string before encoding
-    const safeId = encodeURIComponent(String(item.id));
-    const targetLawSlug = item.law_slug || item.law_key || lawKey;
-
-    if (targetLawSlug) {
-      navigate(`${localizePath(`/${targetLawSlug}/${item.type}/${safeId}`, locale)}${location.search}`);
-    }
-  };
+  const onNavigate = useSearchNavigation(lawKey);
 
   return (
     <header className="sticky top-0 z-20 border-b border-gray-100 bg-white/95 backdrop-blur-sm supports-[backdrop-filter]:bg-white/80 dark:bg-gray-900/95 dark:supports-[backdrop-filter]:bg-gray-900/80 dark:border-gray-800">
@@ -1662,145 +1588,5 @@ export function TopBar({
         </div>
       </div>
     </header>
-  );
-}
-
-function ToolsMenu({
-  onPrint,
-  showPrint,
-  onIncreaseFont,
-  onDecreaseFont,
-  fontSize,
-  eurlexUrl,
-  onToggleSidebar,
-  isSidebarOpen,
-  onToggleSecondLanguage,
-  isSideBySide,
-  onResetApp,
-}) {
-  const { t } = useI18n();
-  const [isOpen, setIsOpen] = useState(false);
-  const menuRef = useRef(null);
-
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (menuRef.current && !menuRef.current.contains(event.target)) {
-        setIsOpen(false);
-      }
-    };
-    if (isOpen) {
-      document.addEventListener("mousedown", handleClickOutside);
-    }
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [isOpen]);
-
-  return (
-    <div className="relative" ref={menuRef}>
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className={`p-2 rounded-lg transition-colors ${isOpen ? 'bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-white' : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-white'}`}
-        title={t("topBar.moreTools")}
-      >
-        <MoreVertical size={20} />
-      </button>
-
-      {isOpen && (
-        <div className="absolute right-0 top-full mt-2 w-56 p-2 bg-white rounded-xl shadow-xl ring-1 ring-black/5 dark:bg-gray-900 dark:ring-white/10 flex flex-col gap-1 z-50 animate-in fade-in zoom-in-95 duration-100">
-
-          {onToggleSidebar && (
-            <button
-              onClick={() => { onToggleSidebar(); setIsOpen(false); }}
-              className="hidden md:flex items-center gap-3 w-full px-3 py-2 text-sm text-gray-700 rounded-lg hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-800"
-            >
-              {isSidebarOpen ? <PanelLeftClose size={18} /> : <PanelLeftOpen size={18} />}
-              <span>{isSidebarOpen ? t("topBar.hideSidebar") : t("topBar.showSidebar")}</span>
-            </button>
-          )}
-
-          {showPrint && (
-            <button
-              onClick={() => { onPrint(); setIsOpen(false); }}
-              className="flex items-center gap-3 w-full px-3 py-2 text-sm text-gray-700 rounded-lg hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-800"
-            >
-              <Printer size={18} />
-              <span>{t("topBar.printPdf")}</span>
-            </button>
-          )}
-
-          {onToggleSecondLanguage && (
-            <button
-              type="button"
-              onClick={() => {
-                onToggleSecondLanguage();
-                setIsOpen(false);
-              }}
-              className="flex items-center gap-3 w-full px-3 py-2 text-sm text-gray-700 rounded-lg hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-800"
-            >
-              <PanelLeftOpen size={18} />
-              <span>
-                {isSideBySide
-                  ? t("topBar.closeSideBySide")
-                  : t("topBar.openSideBySide")}
-              </span>
-            </button>
-          )}
-
-          {eurlexUrl && (
-            <a
-              href={eurlexUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={() => setIsOpen(false)}
-              className="flex items-center gap-3 w-full px-3 py-2 text-sm text-gray-700 rounded-lg hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-800"
-            >
-              <ExternalLink size={18} />
-              <span>{t("topBar.viewOnEurlex")}</span>
-            </a>
-          )}
-
-          {onResetApp && (
-            <button
-              type="button"
-              onClick={() => {
-                onResetApp();
-                setIsOpen(false);
-              }}
-              className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-800"
-            >
-              <RotateCcw size={18} />
-              <span className="min-w-0 flex-1 text-left">{t("resetFooter.button")}</span>
-            </button>
-          )}
-
-          <div className="px-3 py-2">
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-gray-700 dark:text-gray-200">{t("common.theme")}</span>
-              <ThemeToggle />
-            </div>
-          </div>
-
-          {/* Font Size */}
-          <div className="px-3 py-2">
-            <div className="flex items-center justify-between">
-              <button
-                type="button"
-                onClick={onDecreaseFont}
-                className="rounded-lg p-1 text-gray-500 transition hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-white"
-              >
-                <Minus size={16} />
-              </button>
-              <span className="text-xs font-medium text-gray-500 dark:text-gray-400">{fontSize}%</span>
-              <button
-                type="button"
-                onClick={onIncreaseFont}
-                className="rounded-lg p-1 text-gray-500 transition hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-white"
-              >
-                <Plus size={16} />
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
   );
 }

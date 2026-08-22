@@ -47,16 +47,16 @@ export function useLawViewerInteractions({
       const { currentList, index } = getCurrentEntryIndex(data, selected);
       if (!currentList.length) return;
 
-      if (event.key === "ArrowLeft" && index > 0) {
-        onPrevNext(selected.kind, index - 1);
-      }
-      if (event.key === "ArrowRight" && index >= 0 && index < currentList.length - 1) {
-        onPrevNext(selected.kind, index + 1);
-      }
-
-      // Vim-style j / k as previous / next, without modifiers (mirrors the
-      // reading-footer hint). Guard against combos so browser shortcuts pass.
+      // Guard against combos so browser shortcuts pass (mirrors the
+      // reading-footer hint). Covers arrows and vim-style j/k alike, so e.g.
+      // Cmd+ArrowLeft (history-back) never flips articles.
       if (!event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey) {
+        if (event.key === "ArrowLeft" && index > 0) {
+          onPrevNext(selected.kind, index - 1);
+        }
+        if (event.key === "ArrowRight" && index >= 0 && index < currentList.length - 1) {
+          onPrevNext(selected.kind, index + 1);
+        }
         if (event.key === "k" && index > 0) {
           onPrevNext(selected.kind, index - 1);
         }
@@ -232,19 +232,27 @@ export function useLawViewerInteractions({
 
   const onTouchStart = useCallback((event) => {
     touchEndRef.current = null;
-    touchStartRef.current = event.targetTouches[0].clientX;
+    const touch = event.targetTouches[0];
+    touchStartRef.current = { x: touch.clientX, y: touch.clientY || 0 };
   }, []);
 
   const onTouchMove = useCallback((event) => {
-    touchEndRef.current = event.targetTouches[0].clientX;
+    const touch = event.targetTouches[0];
+    touchEndRef.current = { x: touch.clientX, y: touch.clientY || 0 };
   }, []);
 
   const onTouchEnd = useCallback(() => {
     if (!touchStartRef.current || !touchEndRef.current) return;
 
-    const distance = touchStartRef.current - touchEndRef.current;
-    const isLeftSwipe = distance > 50;
-    const isRightSwipe = distance < -50;
+    const start = touchStartRef.current;
+    const end = touchEndRef.current;
+    const dx = start.x - end.x;
+    const dy = start.y - end.y;
+    // Only treat a gesture as a horizontal swipe when horizontal movement
+    // dominates vertical drift, so scrolling down a long article with a slight
+    // sideways drift no longer flips articles.
+    const isLeftSwipe = dx > 50 && Math.abs(dx) > Math.abs(dy);
+    const isRightSwipe = dx < -50 && Math.abs(dx) > Math.abs(dy);
     const { currentList, index } = getCurrentEntryIndex(data, selected);
 
     if (isLeftSwipe && index >= 0 && index < currentList.length - 1) {

@@ -115,7 +115,7 @@ describe("useLawViewerInteractions", () => {
       expect(onPrevNext).toHaveBeenLastCalledWith("article", 0);
     });
 
-    it("ignores j/k when a modifier key is held", async () => {
+    it("ignores j/k and arrow keys when a modifier key is held", async () => {
       await render();
 
       for (const init of [
@@ -127,6 +127,14 @@ describe("useLawViewerInteractions", () => {
         { key: "k", ctrlKey: true },
         { key: "k", altKey: true },
         { key: "k", shiftKey: true },
+        { key: "ArrowLeft", metaKey: true },
+        { key: "ArrowLeft", ctrlKey: true },
+        { key: "ArrowLeft", altKey: true },
+        { key: "ArrowLeft", shiftKey: true },
+        { key: "ArrowRight", metaKey: true },
+        { key: "ArrowRight", ctrlKey: true },
+        { key: "ArrowRight", altKey: true },
+        { key: "ArrowRight", shiftKey: true },
       ]) {
         pressKey(init);
       }
@@ -320,12 +328,26 @@ describe("useLawViewerInteractions", () => {
       expect(onPrevNext).not.toHaveBeenCalled();
     });
 
-    it("ignores vertical drift when deciding the swipe", async () => {
+    it("does not navigate when vertical drift dominates the gesture", async () => {
       await render({ selected: { kind: "article", id: "2" } });
 
       act(() => {
         latestValue.onTouchStart({ targetTouches: [{ clientX: 300, clientY: 100 }] });
         latestValue.onTouchMove({ targetTouches: [{ clientX: 200, clientY: 900 }] });
+      });
+      act(() => {
+        latestValue.onTouchEnd();
+      });
+
+      expect(onPrevNext).not.toHaveBeenCalled();
+    });
+
+    it("navigates when horizontal movement dominates a small vertical drift", async () => {
+      await render({ selected: { kind: "article", id: "2" } });
+
+      act(() => {
+        latestValue.onTouchStart({ targetTouches: [{ clientX: 300, clientY: 100 }] });
+        latestValue.onTouchMove({ targetTouches: [{ clientX: 200, clientY: 130 }] });
       });
       act(() => {
         latestValue.onTouchEnd();

@@ -29,7 +29,6 @@ export function SearchBox({
   globalLists = null,
   onNavigate,
   onSearchOpen,
-  hasSearchInitialized = true,
   isSearchLoading,
   activeLanguage = "EN",
   searchableLawCount = 0,
@@ -76,7 +75,6 @@ export function SearchBox({
 
   const containerRef = useRef(null);
   const heroInputRef = useRef(null);
-  const pendingSearchRef = useRef(null);
 
   const handleSearchResults = useCallback((nextResults) => {
     setResults(nextResults);
@@ -246,18 +244,12 @@ export function SearchBox({
     isOpen,
     searchMode,
     isSearchLoading,
-    onSearchOpen,
     globalEntryCount,
-    searchableLawCount,
-    hasSearchInitialized,
     setResults,
-    pendingSearchRef,
   });
   const {
     isBuildingCurrent,
     isBuildingGlobal,
-    runCurrentSearch,
-    runGlobalMatchSearch,
   } = localIndexes;
 
   // Must stay below the useLocalSearchIndexes destructuring: referencing the
@@ -297,79 +289,17 @@ export function SearchBox({
     }
   }, [persistenceKey, query, searchMode]);
 
+  // Only the networked modes dispatch through here: current/matches are run
+  // by useLocalSearchIndexes' own query-change effects.
   const executeSearch = useCallback((mode, nextQuery) => {
     if (mode === "laws") {
-      pendingSearchRef.current = null;
       scheduleLawSearch(nextQuery);
-      return;
-    }
-
-    if (mode === "current") {
-      if (isBuildingCurrent) {
-        pendingSearchRef.current = { mode, query: nextQuery };
-        return;
-      }
-      pendingSearchRef.current = null;
-      runCurrentSearch(nextQuery);
-      return;
-    }
-
-    if (mode === "definitions") {
-      pendingSearchRef.current = null;
+    } else if (mode === "definitions") {
       scheduleDefinitionSearch(nextQuery);
-      return;
-    }
-
-    if (mode === "fulltext") {
-      pendingSearchRef.current = null;
+    } else if (mode === "fulltext") {
       scheduleFulltextSearch(nextQuery);
-      return;
     }
-
-    if (mode === "matches") {
-      if (!hasSearchInitialized && typeof onSearchOpen === "function") {
-        pendingSearchRef.current = { mode, query: nextQuery };
-        Promise.resolve(onSearchOpen())
-          .then((loadedLists) => {
-            const pending = pendingSearchRef.current;
-            if (!pending || pending.mode !== "matches" || pending.query !== nextQuery) return;
-            pendingSearchRef.current = null;
-            runGlobalMatchSearch(pending.query, loadedLists, null);
-          })
-          .catch((error) => {
-            console.error("Failed to initialize within-laws search", error);
-          });
-        return;
-      }
-
-      if (
-        isSearchLoading
-        || isBuildingGlobal
-        || (typeof onSearchOpen === "function" && globalEntryCount === 0 && searchableLawCount > 0)
-      ) {
-        pendingSearchRef.current = { mode, query: nextQuery };
-        if (typeof onSearchOpen === "function") {
-          void onSearchOpen();
-        }
-        return;
-      }
-      pendingSearchRef.current = null;
-      runGlobalMatchSearch(nextQuery);
-    }
-  }, [
-    globalEntryCount,
-    hasSearchInitialized,
-    isBuildingCurrent,
-    isBuildingGlobal,
-    isSearchLoading,
-    onSearchOpen,
-    runCurrentSearch,
-    runGlobalMatchSearch,
-    scheduleLawSearch,
-    scheduleDefinitionSearch,
-    scheduleFulltextSearch,
-    searchableLawCount,
-  ]);
+  }, [scheduleLawSearch, scheduleDefinitionSearch, scheduleFulltextSearch]);
 
   // Trigger search data loading on open
   useEffect(() => {
@@ -626,7 +556,6 @@ export function TopBar({
   onPrint,
   showPrint = true,
   onSearchOpen,
-  hasSearchInitialized = true,
   isSearchLoading,
   onToggleSidebar,
   isSidebarOpen,
@@ -760,7 +689,6 @@ export function TopBar({
               globalLists={globalLists}
               onNavigate={onNavigate}
               onSearchOpen={onSearchOpen}
-              hasSearchInitialized={hasSearchInitialized}
               isSearchLoading={isSearchLoading}
               activeLanguage={formexLang}
               searchableLawCount={searchableLawCount}

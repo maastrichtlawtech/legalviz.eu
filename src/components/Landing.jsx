@@ -55,7 +55,6 @@ export function Landing({ forcedLocale = null }) {
   const {
     allLawsData,
     handleSearchOpen,
-    hasSearchInitialized,
     isSearchLoading,
     searchableLawCount,
   } = useLandingSearchIndex({
@@ -168,7 +167,6 @@ export function Landing({ forcedLocale = null }) {
         eurlexUrl={null}
         showPrint={false}
         onSearchOpen={handleSearchOpen}
-        hasSearchInitialized={hasSearchInitialized}
         isSearchLoading={isSearchLoading}
         formexLang={formexLang}
         searchableLawCount={searchableLawCount}
@@ -202,7 +200,6 @@ export function Landing({ forcedLocale = null }) {
               lists={allLawsData}
               onNavigate={handleSearchNavigate}
               onSearchOpen={handleSearchOpen}
-              hasSearchInitialized={hasSearchInitialized}
               isSearchLoading={isSearchLoading}
               activeLanguage={formexLang}
               searchableLawCount={searchableLawCount}

@@ -155,7 +155,6 @@ export function LawViewer() {
   const {
     allLawsData,
     handleSearchOpen,
-    hasSearchInitialized,
     isSearchLoading,
     searchableLawCount,
   } = useLandingSearchIndex({
@@ -356,7 +355,6 @@ export function LawViewer() {
           onPrint={() => printState.setPrintModalOpen(true)}
           showPrint={!derived.isSideBySide}
           onSearchOpen={handleSearchOpen}
-          hasSearchInitialized={hasSearchInitialized}
           isSearchLoading={isSearchLoading}
           onToggleSidebar={() => preferences.setIsSidebarOpen((current) => !current)}
           isSidebarOpen={preferences.isSidebarOpen}

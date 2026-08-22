@@ -13,12 +13,8 @@ export function useLocalSearchIndexes({
   isOpen,
   searchMode,
   isSearchLoading,
-  onSearchOpen,
   globalEntryCount,
-  searchableLawCount,
-  hasSearchInitialized,
   setResults,
-  pendingSearchRef,
 }) {
   const [currentSearchIndex, setCurrentSearchIndex] = useState(null);
   const [globalSearchIndex, setGlobalSearchIndex] = useState(null);
@@ -40,15 +36,15 @@ export function useLocalSearchIndexes({
     setResults(nextResults);
   }, [currentSearchIndex, lists, setResults]);
 
-  const runGlobalMatchSearch = useCallback((nextQuery, sourceLists = globalLists, sourceIndex = globalSearchIndex) => {
+  const runGlobalMatchSearch = useCallback((nextQuery) => {
     if (nextQuery.length < 2) {
       setResults([]);
       return;
     }
 
-    const nextResults = sourceIndex
-      ? searchWithIndex(nextQuery, sourceIndex)
-      : searchContent(nextQuery, sourceLists || { articles: [], recitals: [], annexes: [] });
+    const nextResults = globalSearchIndex
+      ? searchWithIndex(nextQuery, globalSearchIndex)
+      : searchContent(nextQuery, globalLists || { articles: [], recitals: [], annexes: [] });
     setResults(nextResults);
   }, [globalLists, globalSearchIndex, setResults]);
 
@@ -152,41 +148,6 @@ export function useLocalSearchIndexes({
       runGlobalMatchSearch(query);
     }
   }, [globalEntryCount, isBuildingGlobal, isMatchesMode, isOpen, isSearchLoading, query, runGlobalMatchSearch, setResults]);
-
-  // Resolve a deferred search once the reason it was deferred clears.
-  useEffect(() => {
-    if (!isOpen) return;
-    const pending = pendingSearchRef.current;
-    if (!pending) return;
-
-    if (pending.mode === "current" && !isBuildingCurrent) {
-      pendingSearchRef.current = null;
-      runCurrentSearch(pending.query);
-      return;
-    }
-
-    if (pending.mode === "matches" && !isSearchLoading && !isBuildingGlobal) {
-      if (
-        typeof onSearchOpen === "function" && globalEntryCount === 0 && searchableLawCount > 0
-      ) {
-        return;
-      }
-      pendingSearchRef.current = null;
-      runGlobalMatchSearch(pending.query);
-    }
-  }, [
-    globalEntryCount,
-    hasSearchInitialized,
-    isBuildingCurrent,
-    isBuildingGlobal,
-    isOpen,
-    isSearchLoading,
-    onSearchOpen,
-    runCurrentSearch,
-    runGlobalMatchSearch,
-    searchableLawCount,
-    pendingSearchRef,
-  ]);
 
   return {
     currentSearchIndex,

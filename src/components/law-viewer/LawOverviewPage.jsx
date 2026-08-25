@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { ExternalLink, Loader2, Printer, Scale } from "lucide-react";
+import { ExternalLink, Loader2, Scale } from "lucide-react";
 import { LawSummary } from "../LawSummary.jsx";
 import { MetadataPanel } from "../MetadataPanel.jsx";
 import { CaseLawModal } from "../CaseLawModal.jsx";
@@ -89,7 +89,6 @@ export function LawOverviewPage({
   formexLang,
   onArticleClick,
   onStartReading,
-  onPrint,
   externalLawOverview = [],
   onOpenExternalLaw,
   onOpenCitedLaw,
@@ -193,6 +192,7 @@ export function LawOverviewPage({
         celex={effectiveCelex}
         currentLang={formexLang}
         locale={locale}
+        variant="compact"
         source={data?.source}
         version={version}
         versionUnavailable={versionUnavailable}
@@ -228,16 +228,6 @@ export function LawOverviewPage({
             <ExternalLink size={16} />
             {procedureLabel}
           </a>
-        ) : null}
-        {onPrint ? (
-          <button
-            type="button"
-            onClick={onPrint}
-            className="inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-medium text-gray-500 transition hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800"
-          >
-            <Printer size={16} />
-            {t("lawOverview.print")}
-          </button>
         ) : null}
       </div>
 

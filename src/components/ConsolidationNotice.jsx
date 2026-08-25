@@ -170,6 +170,26 @@ export function ConsolidationNotice({
       </button>
     ) : null;
 
+    if (variant === "compact") {
+      return (
+        <div className="mb-6 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-slate-700 dark:text-slate-300">
+          <History size={15} aria-hidden="true" />
+          <strong className="font-semibold text-slate-900 dark:text-slate-100">
+            {t("consolidation.currentText")}
+          </strong>
+          <span>
+            {t("consolidation.notAmended")}
+            {corrigenda > 0 ? (
+              <> · {corrigenda === 1
+                ? t("consolidation.corrigendumOnceShort")
+                : t("consolidation.corrigendaShort", { count: corrigenda })}</>
+            ) : null}
+          </span>
+          {correctionAction ? <span>{correctionAction}</span> : null}
+        </div>
+      );
+    }
+
     return (
       <div className="mb-6 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-900/40 dark:text-slate-300">
         <div className="flex items-center gap-2 font-medium text-slate-900 dark:text-slate-100">

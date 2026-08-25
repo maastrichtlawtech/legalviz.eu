@@ -409,7 +409,6 @@ export function LawViewer() {
                     else if (primaryDocument.data.recitals?.[0]) selection.selectRecitalIdx(0);
                     else if (primaryDocument.data.annexes?.[0]) selection.selectAnnexIdx(0);
                   }}
-                  onPrint={() => printState.setPrintModalOpen(true)}
                   externalLawOverview={derived.externalLawOverview}
                   onOpenExternalLaw={interactions.handleOpenExternalLaw}
                   onOpenCitedLaw={interactions.handleOpenLawByCelex}

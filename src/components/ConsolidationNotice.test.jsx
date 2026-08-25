@@ -168,6 +168,91 @@ describe("ConsolidationNotice", () => {
     expect(container.querySelector("button")).toBe(null);
   });
 
+  it("renders the compact current state without a corrigendum action", async () => {
+    fetchAmendments.mockResolvedValue({ amendments: [] });
+    fetchConsolidatedVersions.mockResolvedValue({ versions: [] });
+
+    await render({ variant: "compact", onToggleVersion: vi.fn() });
+
+    expect(container.textContent).toContain("Current text");
+    expect(container.textContent).toContain("Not amended");
+    expect(container.textContent).not.toContain("corrigendum");
+    expect(container.querySelector("button")).toBe(null);
+    expect(container.querySelector(".rounded-xl")).toBe(null);
+  });
+
+  it.each([
+    [1, "1 corrigendum"],
+    [2, "2 corrigenda"],
+  ])("renders the compact corrigendum count (%s)", async (count, label) => {
+    fetchAmendments.mockResolvedValue({
+      amendments: Array.from({ length: count }, (_, index) => ({
+        celex: `32016R0679R(0${index + 1})`,
+        date: "2018-05-23",
+        type: "corrigendum",
+      })),
+    });
+    fetchConsolidatedVersions.mockResolvedValue({
+      versions: [{ celex: "02016R0679-20160504", date: "2016-05-04" }],
+    });
+
+    await render({ variant: "compact", onToggleVersion: vi.fn() });
+
+    expect(container.textContent).toContain("Current text");
+    expect(container.textContent).toContain("Not amended");
+    expect(container.textContent).toContain(label);
+  });
+
+  it("keeps the compact correction action pending while EUR-Lex is checked", async () => {
+    fetchAmendments.mockResolvedValue({
+      amendments: [{ celex: "32016R0679R(01)", date: "2018-05-23", type: "corrigendum" }],
+    });
+    fetchConsolidatedVersions.mockReturnValue(new Promise(() => {}));
+
+    await render({ variant: "compact", onToggleVersion: vi.fn() });
+
+    expect(container.textContent).toContain("Current text");
+    expect(container.textContent).toContain("Not amended");
+    expect(container.textContent).toContain("Checking EUR-Lex for the current version");
+    expect(container.textContent).not.toContain("corrections applied");
+  });
+
+  it("toggles the compact correction action when a current version exists", async () => {
+    fetchAmendments.mockResolvedValue({
+      amendments: [{ celex: "32016R0679R(01)", date: "2018-05-23", type: "corrigendum" }],
+    });
+    fetchConsolidatedVersions.mockResolvedValue({
+      versions: [{ celex: "02016R0679-20160504", date: "2016-05-04" }],
+    });
+    const onToggleVersion = vi.fn();
+
+    await render({ variant: "compact", onToggleVersion });
+
+    const toggle = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent.includes("corrections applied")
+    );
+    expect(toggle).toBeTruthy();
+
+    await act(async () => { toggle.click(); });
+    expect(onToggleVersion).toHaveBeenCalledWith("current");
+  });
+
+  it("keeps an amended law as the existing full warning in compact mode", async () => {
+    fetchAmendments.mockResolvedValue({
+      amendments: [{ celex: "32020R0001", date: "2020-01-01", type: "amendment" }],
+    });
+    fetchConsolidatedVersions.mockResolvedValue({
+      versions: [{ celex: "02020R0001-20200101", date: "2020-01-01" }],
+    });
+
+    await render({ variant: "compact", onToggleVersion: vi.fn() });
+
+    expect(container.textContent).toContain("You are reading this law as adopted");
+    expect(container.textContent).toContain("Read this law as amended");
+    expect(container.textContent).not.toContain("Current text");
+    expect(container.querySelector(".rounded-xl")).toBeTruthy();
+  });
+
   it("claims nothing about a never-amended law when the history could not be fetched", async () => {
     // `[]` on failure keeps the warning off, but it must not be read as
     // evidence for the opposite claim.

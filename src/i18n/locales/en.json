@@ -492,6 +492,10 @@
     "correctedOnce": "One corrigendum has been published since. Corrigenda are applied to the consolidated text, not to the act as published here.",
     "corrected": "{count} corrigenda have been published since. Corrigenda are applied to the consolidated text, not to the act as published here.",
     "toggleReadCorrected": "Read this law with the corrections applied",
-    "checkingVersion": "Checking EUR-Lex for the current version…"
+    "checkingVersion": "Checking EUR-Lex for the current version…",
+    "currentText": "Current text",
+    "notAmended": "Not amended",
+    "corrigendumOnceShort": "1 corrigendum",
+    "corrigendaShort": "{count} corrigenda"
   }
 }

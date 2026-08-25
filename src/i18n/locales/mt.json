@@ -310,20 +310,8 @@
   "lawOverview": {
     "tabCites": "Jiċċita",
     "tabImplementing": "Atti ta' implimentazzjoni",
-    "tabNationalMeasures": "Miżuri nazzjonali",
-    "nationalMeasuresEmpty": "In-notifiki tal-Istati Membri jistgħu ma jkunux kompluti.",
-    "nationalMeasuresTruncated": "Qed jintwerew biss l-aħħar 200 miżura.",
-    "nationalMeasureFallback": "Miżura nazzjonali",
     "tabAmendments": "Emendi",
-    "tabProcedure": "Proċedura",
-    "procedureLoading": "Qed titgħabba l-informazzjoni dwar il-proċedura…",
-    "procedureEmpty": "Għal dan l-att ma hemmx informazzjoni disponibbli dwar il-proċedura leġiżlattiva.",
-    "procedureLoadError": "L-informazzjoni dwar il-proċedura ma setgħetx titgħabba bħalissa.",
-    "procedureView": "Ara l-proċedura fuq EUR-Lex",
-    "procedureProposal": "Proposta",
-    "procedureEuropeanParliament": "Parlament Ewropew",
-    "procedureCouncil": "Kunsill",
-    "procedureFinalAct": "Att finali",
+    "procedureView": "Storja leġiżlattiva fuq EUR-Lex",
     "implDelActLabel": "Att ta' implimentazzjoni/delegat",
     "relatedTabsLabel": "Dokumenti relatati"
   }

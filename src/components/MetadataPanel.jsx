@@ -7,24 +7,6 @@ import { MiniCitationGraph } from "./MiniCitationGraph.jsx";
 
 const ROW_DIVIDERS = "divide-y divide-gray-100 dark:divide-gray-800";
 
-const COUNTRY_FLAGS = {
-  AUT: "🇦🇹", BEL: "🇧🇪", BGR: "🇧🇬", HRV: "🇭🇷", CYP: "🇨🇾", CZE: "🇨🇿",
-  DNK: "🇩🇰", EST: "🇪🇪", FIN: "🇫🇮", FRA: "🇫🇷", DEU: "🇩🇪", GRC: "🇬🇷",
-  HUN: "🇭🇺", IRL: "🇮🇪", ITA: "🇮🇹", LVA: "🇱🇻", LTU: "🇱🇹", LUX: "🇱🇺",
-  MLT: "🇲🇹", NLD: "🇳🇱", POL: "🇵🇱", PRT: "🇵🇹", ROU: "🇷🇴", SVK: "🇸🇰",
-  SVN: "🇸🇮", ESP: "🇪🇸", SWE: "🇸🇪", GBR: "🇬🇧",
-};
-
-function safeExternalUrl(value) {
-  if (!value) return null;
-  try {
-    const url = new URL(value);
-    return url.protocol === "http:" || url.protocol === "https:" ? url.href : null;
-  } catch {
-    return null;
-  }
-}
-
 /**
  * The list body of a single tab: the (optionally capped) rows, a "show all" /
  * "show less" toggle and an optional muted footer. Rendered with a `key` tied
@@ -95,83 +77,9 @@ function ActRow({ act, currentLang, locale, label }) {
   );
 }
 
-function NationalMeasureRow({ measure, currentLang, locale, fallbackTitle }) {
-  const href = safeExternalUrl(measure.nationalLink)
-    || safeExternalUrl(measure.eli)
-    || buildEurlexCelexUrl(measure.celex, currentLang);
-  const dateLabel = formatMetaDate(measure.notificationDate, locale);
-  const details = [dateLabel, measure.nationalId].filter(Boolean).join(" · ");
-  const flag = COUNTRY_FLAGS[String(measure.country || "").toUpperCase()] || null;
-
-  return (
-    <a
-      href={href}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="group flex w-full items-center gap-2 py-2 text-xs"
-    >
-      <span className="min-w-0 flex flex-1 items-center gap-2 truncate leading-snug text-gray-700 dark:text-gray-300">
-        {flag ? <span className="shrink-0" aria-label={measure.country}>{flag}</span> : null}
-        <span className="truncate font-medium">{measure.title || fallbackTitle}</span>
-      </span>
-      {details ? (
-        <span className="shrink-0 whitespace-nowrap text-[11px] tabular-nums text-gray-400 dark:text-gray-500">
-          {details}
-        </span>
-      ) : null}
-      <ExternalLink
-        size={11}
-        className="shrink-0 text-gray-300 transition group-hover:text-gray-500 dark:text-gray-600 dark:group-hover:text-gray-400"
-      />
-    </a>
-  );
-}
-
-const PROCEDURE_STAGE_KEYS = {
-  proposal: "lawOverview.procedureProposal",
-  ep: "lawOverview.procedureEuropeanParliament",
-  council: "lawOverview.procedureCouncil",
-  final: "lawOverview.procedureFinalAct",
-};
-
-function ProcedureRow({ document, locale, t }) {
-  const title = document.title || document.celex;
-  const stage = PROCEDURE_STAGE_KEYS[document.stage]
-    ? t(PROCEDURE_STAGE_KEYS[document.stage])
-    : document.stage;
-  const dateLabel = formatMetaDate(document.date, locale);
-  const url = document.url || buildEurlexCelexUrl(document.celex, "EN");
-
-  return (
-    <a
-      href={url}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="group flex w-full items-center gap-2 py-2 text-xs"
-    >
-      <span className="min-w-0 flex-1">
-        <span className="block truncate leading-snug text-gray-700 dark:text-gray-300">{title}</span>
-        <span className="block truncate text-[11px] text-gray-400 dark:text-gray-500">
-          <span className="font-medium">{stage}</span>
-          {document.institution ? ` · ${document.institution}` : ""}
-          {dateLabel ? <span className="ml-2 tabular-nums">{dateLabel}</span> : null}
-        </span>
-      </span>
-      <span className="shrink-0 rounded bg-gray-100 px-1.5 py-0.5 font-mono text-[10px] text-gray-500 dark:bg-gray-800 dark:text-gray-400">
-        {document.celex}
-      </span>
-      <ExternalLink
-        size={11}
-        className="shrink-0 text-gray-300 transition group-hover:text-gray-500 dark:text-gray-600 dark:group-hover:text-gray-400"
-      />
-    </a>
-  );
-}
-
 /**
  * Overview metadata: reverse citations, outgoing citations ("Cites"),
- * implementing/delegated acts, amendment history and legislative procedure,
- * shown as a single
+ * implementing/delegated acts and amendment history, shown as a single
  * full-width tabbed card. Consumes the shared useLawMetadata result (no
  * fetching of its own) plus the crossreference-derived linked-law overview.
  *
@@ -182,10 +90,6 @@ function ProcedureRow({ document, locale, t }) {
 export function MetadataPanel({
   amendments,
   implementing,
-  transposition = null,
-  procedure = null,
-  procedureLoaded = false,
-  procedureError = false,
   externalLawOverview = [],
   citedBy = null,
   centreLabel = "",
@@ -218,40 +122,6 @@ export function MetadataPanel({
       label={t("lawOverview.implDelActLabel")}
     />
   ));
-
-  const nationalMeasureRows = (transposition?.measures || []).map((measure) => (
-    <NationalMeasureRow
-      key={measure.sgId || measure.celex}
-      measure={measure}
-      currentLang={currentLang}
-      locale={locale}
-      fallbackTitle={t("lawOverview.nationalMeasureFallback")}
-    />
-  ));
-
-  const transpositionFooter = transposition?.truncated ? (
-    <div className="mt-2 border-t border-gray-100 pt-2 text-[11px] text-gray-400 dark:border-gray-800 dark:text-gray-500">
-      {t("lawOverview.nationalMeasuresTruncated")}
-    </div>
-  ) : null;
-
-  const procedureDocuments = Array.isArray(procedure?.documents) ? procedure.documents : [];
-  const procedureRows = procedureDocuments.map((document) => (
-    <ProcedureRow key={document.celex} document={document} locale={locale} t={t} />
-  ));
-  const procedureFooter = procedure?.reference && procedure?.procedureUrl ? (
-    <div className="mt-2 border-t border-gray-100 pt-2 text-[11px] dark:border-gray-800">
-      <a
-        href={procedure.procedureUrl}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="inline-flex items-center gap-1 text-eu-blue hover:text-eu-blue-bright dark:text-eu-blue-bright"
-      >
-        <ExternalLink size={11} />
-        {t("lawOverview.procedureView")}: {procedure.reference}
-      </a>
-    </div>
-  ) : null;
 
   const linkedRows = (externalLawOverview || []).map((item) => {
     const pending = typeof isExternalReferencePending === "function"
@@ -311,15 +181,7 @@ export function MetadataPanel({
   }
   tabs.push({ id: "cites", label: t("lawOverview.tabCites"), count: linkedRows.length });
   tabs.push({ id: "implementing", label: t("lawOverview.tabImplementing"), count: implementingRows.length });
-  if (transposition?.applicable) {
-    tabs.push({ id: "nationalMeasures", label: t("lawOverview.tabNationalMeasures"), count: nationalMeasureRows.length });
-  }
   tabs.push({ id: "amendments", label: t("lawOverview.tabAmendments"), count: amendmentRows.length });
-  tabs.push({
-    id: "procedure",
-    label: t("lawOverview.tabProcedure"),
-    count: procedureLoaded ? procedureDocuments.length : "…",
-  });
 
   // Default to "Cited by" when the graph is available, otherwise "Cites".
   // Falling back through `tabs.some(...)` keeps a user's manual choice sticky
@@ -332,21 +194,7 @@ export function MetadataPanel({
     citedBy: { rows: citedByRows, emptyText: t("citedBy.empty"), footer: citedByFooter },
     cites: { rows: linkedRows, emptyText: t("lawOverview.linkedEmpty") },
     implementing: { rows: implementingRows, emptyText: t("lawOverview.implementingEmpty") },
-    nationalMeasures: {
-      rows: nationalMeasureRows,
-      emptyText: t("lawOverview.nationalMeasuresEmpty"),
-      footer: transpositionFooter,
-    },
     amendments: { rows: amendmentRows, emptyText: t("lawOverview.amendmentsEmpty") },
-    procedure: {
-      rows: procedureError ? [] : procedureRows,
-      emptyText: procedureError
-        ? t("lawOverview.procedureLoadError")
-        : procedureLoaded
-          ? t("lawOverview.procedureEmpty")
-          : t("lawOverview.procedureLoading"),
-      footer: procedureError || !procedureLoaded ? null : procedureFooter,
-    },
   };
   const active = sections[effectiveTab] || sections.cites;
 

@@ -310,20 +310,8 @@
   "lawOverview": {
     "tabCites": "Citira",
     "tabImplementing": "Provedbeni akti",
-    "tabNationalMeasures": "Nacionalne mjere",
-    "nationalMeasuresEmpty": "Obavijesti država članica mogu biti nepotpune.",
-    "nationalMeasuresTruncated": "Prikazuje se samo 200 najnovijih mjera.",
-    "nationalMeasureFallback": "Nacionalna mjera",
     "tabAmendments": "Izmjene",
-    "tabProcedure": "Postupak",
-    "procedureLoading": "Učitavanje informacija o postupku…",
-    "procedureEmpty": "Informacije o zakonodavnom postupku za ovaj akt nisu dostupne.",
-    "procedureLoadError": "Informacije o postupku trenutačno se ne mogu učitati.",
-    "procedureView": "Pogledaj postupak na EUR-Lexu",
-    "procedureProposal": "Prijedlog",
-    "procedureEuropeanParliament": "Europski parlament",
-    "procedureCouncil": "Vijeće",
-    "procedureFinalAct": "Završni akt",
+    "procedureView": "Zakonodavna povijest na EUR-Lexu",
     "implDelActLabel": "Provedbeni/delegirani akt",
     "relatedTabsLabel": "Povezani dokumenti"
   }

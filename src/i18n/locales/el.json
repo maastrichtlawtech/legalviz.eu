@@ -310,20 +310,8 @@
   "lawOverview": {
     "tabCites": "Παραπέμπει σε",
     "tabImplementing": "Εκτελεστικές πράξεις",
-    "tabNationalMeasures": "Εθνικά μέτρα",
-    "nationalMeasuresEmpty": "Οι κοινοποιήσεις των κρατών μελών ενδέχεται να είναι ελλιπείς.",
-    "nationalMeasuresTruncated": "Εμφανίζονται μόνο τα 200 πιο πρόσφατα μέτρα.",
-    "nationalMeasureFallback": "Εθνικό μέτρο",
     "tabAmendments": "Τροποποιήσεις",
-    "tabProcedure": "Διαδικασία",
-    "procedureLoading": "Φόρτωση πληροφοριών διαδικασίας…",
-    "procedureEmpty": "Δεν υπάρχουν διαθέσιμες πληροφορίες νομοθετικής διαδικασίας για την πράξη αυτή.",
-    "procedureLoadError": "Οι πληροφορίες διαδικασίας δεν ήταν δυνατό να φορτωθούν τώρα.",
-    "procedureView": "Προβολή της διαδικασίας στο EUR-Lex",
-    "procedureProposal": "Πρόταση",
-    "procedureEuropeanParliament": "Ευρωπαϊκό Κοινοβούλιο",
-    "procedureCouncil": "Συμβούλιο",
-    "procedureFinalAct": "Τελική πράξη",
+    "procedureView": "Νομοθετικό ιστορικό στο EUR-Lex",
     "implDelActLabel": "Εκτελεστική/κατ' εξουσιοδότηση πράξη",
     "relatedTabsLabel": "Σχετικά έγγραφα"
   }

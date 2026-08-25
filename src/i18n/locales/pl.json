@@ -310,20 +310,8 @@
   "lawOverview": {
     "tabCites": "Cytuje",
     "tabImplementing": "Akty wykonawcze",
-    "tabNationalMeasures": "Krajowe środki",
-    "nationalMeasuresEmpty": "Powiadomienia państw członkowskich mogą być niepełne.",
-    "nationalMeasuresTruncated": "Wyświetlanych jest tylko 200 najnowszych środków.",
-    "nationalMeasureFallback": "Krajowy środek",
     "tabAmendments": "Zmiany",
-    "tabProcedure": "Procedura",
-    "procedureLoading": "Ładowanie informacji o procedurze…",
-    "procedureEmpty": "Brak informacji o procedurze ustawodawczej dla tego aktu.",
-    "procedureLoadError": "Nie można teraz załadować informacji o procedurze.",
-    "procedureView": "Zobacz procedurę w EUR-Lex",
-    "procedureProposal": "Wniosek",
-    "procedureEuropeanParliament": "Parlament Europejski",
-    "procedureCouncil": "Rada",
-    "procedureFinalAct": "Akt końcowy",
+    "procedureView": "Historia legislacyjna w EUR-Lex",
     "implDelActLabel": "Akt wykonawczy/delegowany",
     "relatedTabsLabel": "Powiązane dokumenty"
   }

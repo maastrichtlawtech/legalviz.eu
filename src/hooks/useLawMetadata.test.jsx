@@ -6,7 +6,6 @@ const api = vi.hoisted(() => ({
   fetchLawMetadata: vi.fn(),
   fetchAmendments: vi.fn(),
   fetchImplementingActs: vi.fn(),
-  fetchTransposition: vi.fn(),
   fetchLegislativeProcedure: vi.fn(),
   fetchLawCitedBy: vi.fn(),
 }));
@@ -37,7 +36,6 @@ beforeEach(() => {
     celex: null,
     reference: null,
     procedureUrl: null,
-    documents: [],
   });
   api.fetchLawCitedBy.mockResolvedValue(null);
 });
@@ -51,34 +49,29 @@ async function render(celex) {
   await act(async () => {
     root.render(<Probe celex={celex} />);
   });
-  await vi.waitFor(() => expect(latest?.transpositionLoaded).toBe(true));
 }
 
-describe("useLawMetadata transposition", () => {
-  it("fetches directives and preserves a successful empty payload", async () => {
-    const empty = { celex: "32019L0633", applicable: true, measures: [], truncated: false };
-    api.fetchTransposition.mockResolvedValue(empty);
+describe("useLawMetadata procedure link", () => {
+  it("keeps a resolved EUR-Lex procedure link", async () => {
+    const procedure = {
+      celex: "32024R1689",
+      reference: "2021/0106(COD)",
+      procedureUrl: "https://eur-lex.europa.eu/procedure/EN/2021_106",
+    };
+    api.fetchLegislativeProcedure.mockResolvedValue(procedure);
 
-    await render("32019L0633");
-
-    expect(api.fetchTransposition).toHaveBeenCalledOnce();
-    expect(api.fetchTransposition).toHaveBeenCalledWith("32019L0633");
-    expect(latest.transposition).toEqual(empty);
+    await render("32024R1689");
+    await vi.waitFor(() => expect(latest.procedure).toEqual(procedure));
   });
 
-  it("does not fetch non-directives", async () => {
+  it("hides an absent or failed procedure link", async () => {
     await render("32016R0679");
+    await vi.waitFor(() => expect(api.fetchLegislativeProcedure).toHaveBeenCalledOnce());
+    expect(latest.procedure).toBeNull();
 
-    expect(api.fetchTransposition).not.toHaveBeenCalled();
-    expect(latest.transposition).toBeNull();
-  });
-
-  it("keeps a failed directive request unavailable instead of treating it as empty", async () => {
-    api.fetchTransposition.mockRejectedValue(new Error("CELLAR unavailable"));
-
-    await render("32022L2555");
-
-    expect(api.fetchTransposition).toHaveBeenCalledOnce();
-    expect(latest.transposition).toBeNull();
+    api.fetchLegislativeProcedure.mockRejectedValue(new Error("CELLAR unavailable"));
+    await act(async () => root.render(<Probe celex="32022R1925" />));
+    await vi.waitFor(() => expect(api.fetchLegislativeProcedure).toHaveBeenCalledTimes(2));
+    expect(latest.procedure).toBeNull();
   });
 });

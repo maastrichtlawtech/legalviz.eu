@@ -160,59 +160,6 @@ function registerTestRoutes(overrides = {}) {
   return { app, store };
 }
 
-test("GET /api/laws/:celex/transposition returns and caches national measures", async () => {
-  let sparqlCalls = 0;
-  const resolutionCache = new Map();
-  const { app } = registerTestRoutes({
-    resolutionCache,
-    runSparqlQuery: async () => {
-      sparqlCalls += 1;
-      return {
-        results: {
-          bindings: [{
-            measureCelex: { value: "72019L0633POL_202006400" },
-            country: { value: "http://publications.europa.eu/resource/authority/country/POL" },
-            title: { value: "Ustawa o zmianie ustawy" },
-            notificationDate: { value: "2020-08-11" },
-          }],
-        },
-      };
-    },
-  });
-  const handler = app.routes.get("/api/laws/:celex/transposition");
-
-  const first = createResponseRecorder();
-  await handler({ params: { celex: "32019L0633" } }, first);
-  const second = createResponseRecorder();
-  await handler({ params: { celex: "32019L0633" } }, second);
-
-  assert.equal(first.statusCode, 200);
-  assert.equal(first.payload.applicable, true);
-  assert.equal(first.payload.measures[0].country, "POL");
-  assert.deepEqual(second.payload, first.payload);
-  assert.equal(sparqlCalls, 1);
-  assert.deepEqual(resolutionCache.get("transposition:32019L0633")?.value, first.payload);
-});
-
-test("GET /api/laws/:celex/transposition does not query CELLAR for non-directives", async () => {
-  let sparqlCalls = 0;
-  const { app } = registerTestRoutes({
-    runSparqlQuery: async () => {
-      sparqlCalls += 1;
-      return { results: { bindings: [] } };
-    },
-  });
-  const handler = app.routes.get("/api/laws/:celex/transposition");
-  const res = createResponseRecorder();
-
-  await handler({ params: { celex: "32016R0679" } }, res);
-
-  assert.deepEqual(res.payload, {
-    celex: "32016R0679", applicable: false, measures: [], truncated: false,
-  });
-  assert.equal(sparqlCalls, 0);
-});
-
 function createAmbiguousStore() {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "api-routes-ambiguous-"));
   const tempPath = path.join(tempDir, "ambiguous.json");

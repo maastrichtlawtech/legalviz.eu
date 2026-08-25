@@ -310,20 +310,8 @@
   "lawOverview": {
     "tabCites": "Hivatkozik",
     "tabImplementing": "Végrehajtási jogi aktusok",
-    "tabNationalMeasures": "Nemzeti intézkedések",
-    "nationalMeasuresEmpty": "A tagállami értesítések hiányosak lehetnek.",
-    "nationalMeasuresTruncated": "Csak a legutóbbi 200 intézkedés látható.",
-    "nationalMeasureFallback": "Nemzeti intézkedés",
     "tabAmendments": "Módosítások",
-    "tabProcedure": "Eljárás",
-    "procedureLoading": "Az eljárási információk betöltése…",
-    "procedureEmpty": "Ehhez a jogi aktushoz nem áll rendelkezésre jogalkotási eljárási információ.",
-    "procedureLoadError": "Az eljárási információk jelenleg nem tölthetők be.",
-    "procedureView": "Eljárás megtekintése az EUR-Lexen",
-    "procedureProposal": "Javaslat",
-    "procedureEuropeanParliament": "Európai Parlament",
-    "procedureCouncil": "Tanács",
-    "procedureFinalAct": "Végleges jogi aktus",
+    "procedureView": "Jogalkotási előzmények az EUR-Lexen",
     "implDelActLabel": "Végrehajtási/felhatalmazáson alapuló jogi aktus",
     "relatedTabsLabel": "Kapcsolódó dokumentumok"
   }

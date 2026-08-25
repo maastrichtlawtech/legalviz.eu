@@ -310,20 +310,8 @@
   "lawOverview": {
     "tabCites": "Citeert",
     "tabImplementing": "Uitvoeringshandelingen",
-    "tabNationalMeasures": "Nationale maatregelen",
-    "nationalMeasuresEmpty": "Kennisgevingen van lidstaten kunnen onvolledig zijn.",
-    "nationalMeasuresTruncated": "Alleen de 200 meest recente maatregelen worden getoond.",
-    "nationalMeasureFallback": "Nationale maatregel",
     "tabAmendments": "Wijzigingen",
-    "tabProcedure": "Procedure",
-    "procedureLoading": "Procedure-informatie laden…",
-    "procedureEmpty": "Er is geen informatie over de wetgevingsprocedure voor deze handeling beschikbaar.",
-    "procedureLoadError": "Procedure-informatie kon momenteel niet worden geladen.",
-    "procedureView": "Procedure bekijken op EUR-Lex",
-    "procedureProposal": "Voorstel",
-    "procedureEuropeanParliament": "Europees Parlement",
-    "procedureCouncil": "Raad",
-    "procedureFinalAct": "Eindhandeling",
+    "procedureView": "Wetgevingsgeschiedenis op EUR-Lex",
     "implDelActLabel": "Uitvoerings-/gedelegeerde handeling",
     "relatedTabsLabel": "Gerelateerde documenten"
   }

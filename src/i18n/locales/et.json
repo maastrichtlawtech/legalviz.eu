@@ -310,20 +310,8 @@
   "lawOverview": {
     "tabCites": "Viitab",
     "tabImplementing": "Rakendusaktid",
-    "tabNationalMeasures": "Riiklikud meetmed",
-    "nationalMeasuresEmpty": "Liikmesriikide teated võivad olla mittetäielikud.",
-    "nationalMeasuresTruncated": "Kuvatakse ainult 200 uusimat meedet.",
-    "nationalMeasureFallback": "Riiklik meede",
     "tabAmendments": "Muudatused",
-    "tabProcedure": "Menetlus",
-    "procedureLoading": "Menetlusteabe laadimine…",
-    "procedureEmpty": "Selle õigusakti seadusandliku menetluse kohta ei ole teavet.",
-    "procedureLoadError": "Menetlusteavet ei saanud praegu laadida.",
-    "procedureView": "Vaata menetlust EUR-Lexis",
-    "procedureProposal": "Ettepanek",
-    "procedureEuropeanParliament": "Euroopa Parlament",
-    "procedureCouncil": "Nõukogu",
-    "procedureFinalAct": "Lõplik õigusakt",
+    "procedureView": "Õigusloome ajalugu EUR-Lexis",
     "implDelActLabel": "Rakendus-/delegeeritud akt",
     "relatedTabsLabel": "Seotud dokumendid"
   }

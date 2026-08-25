@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { Loader2, Printer, Scale } from "lucide-react";
+import { ExternalLink, Loader2, Printer, Scale } from "lucide-react";
 import { LawSummary } from "../LawSummary.jsx";
 import { MetadataPanel } from "../MetadataPanel.jsx";
 import { CaseLawModal } from "../CaseLawModal.jsx";
@@ -103,6 +103,7 @@ export function LawOverviewPage({
 }) {
   const meta = useLawMetadata(effectiveCelex);
   const { metadata, status } = meta;
+  const procedureLabel = t("lawOverview.procedureView");
 
   const rawTitle = data.title || currentLaw?.label || "";
   // Labels often read "Common name — Regulation (EU) YYYY/N"; the reference
@@ -216,6 +217,18 @@ export function LawOverviewPage({
           <span aria-hidden="true">→</span>
         </button>
         <OverviewCaseLawButton celex={effectiveCelex} currentLang={formexLang} t={t} />
+        {meta.procedure?.procedureUrl ? (
+          <a
+            href={meta.procedure.procedureUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            title={meta.procedure.reference ? `${procedureLabel} · ${meta.procedure.reference}` : procedureLabel}
+            className="inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-medium text-gray-500 transition hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800"
+          >
+            <ExternalLink size={16} />
+            {procedureLabel}
+          </a>
+        ) : null}
         {onPrint ? (
           <button
             type="button"
@@ -233,10 +246,6 @@ export function LawOverviewPage({
       <MetadataPanel
         amendments={meta.amendments}
         implementing={meta.implementing}
-        transposition={meta.transposition}
-        procedure={meta.procedure}
-        procedureLoaded={meta.procedureLoaded}
-        procedureError={meta.procedureError}
         externalLawOverview={externalLawOverview}
         citedBy={meta.citedBy}
         centreLabel={currentLaw?.label || title}

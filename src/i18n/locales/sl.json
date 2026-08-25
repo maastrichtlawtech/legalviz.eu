@@ -310,20 +310,8 @@
   "lawOverview": {
     "tabCites": "Navaja",
     "tabImplementing": "Izvedbeni akti",
-    "tabNationalMeasures": "Nacionalni ukrepi",
-    "nationalMeasuresEmpty": "Uradna obvestila držav članic so lahko nepopolna.",
-    "nationalMeasuresTruncated": "Prikazanih je samo 200 najnovejših ukrepov.",
-    "nationalMeasureFallback": "Nacionalni ukrep",
     "tabAmendments": "Spremembe",
-    "tabProcedure": "Postopek",
-    "procedureLoading": "Nalaganje informacij o postopku…",
-    "procedureEmpty": "Informacije o zakonodajnem postopku za ta akt niso na voljo.",
-    "procedureLoadError": "Informacij o postopku trenutno ni mogoče naložiti.",
-    "procedureView": "Prikaži postopek na EUR-Lexu",
-    "procedureProposal": "Predlog",
-    "procedureEuropeanParliament": "Evropski parlament",
-    "procedureCouncil": "Svet",
-    "procedureFinalAct": "Končni akt",
+    "procedureView": "Zakonodajna zgodovina na EUR-Lexu",
     "implDelActLabel": "Izvedbeni/delegirani akt",
     "relatedTabsLabel": "Povezani dokumenti"
   }

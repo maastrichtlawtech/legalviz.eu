@@ -197,7 +197,7 @@ cat input.xml | parse-fmx > output.json
 | `GET` | `/api/laws/:celex/amendments` | Amendment and corrigendum history |
 | `GET` | `/api/laws/:celex/consolidated` | Consolidated ("as amended") versions EUR-Lex publishes for the act, oldest first. Future-dated versions are included — the caller decides which one is current. |
 | `GET` | `/api/laws/:celex/implementing` | Implementing and delegated acts |
-| `GET` | `/api/laws/:celex/transposition` | Latest national measures notified as transposing a directive; non-directives return `applicable: false` |
+| `GET` | `/api/laws/:celex/procedure` | Official EUR-Lex legislative procedure overview link |
 | `GET` | `/api/laws/:celex/case-law?lang=ENG` | CJEU judgments citing this act, with operative parts and structured `articleRefs` |
 | `GET` | `/api/laws/:celex/recital-titles?lang=ENG` | Cached AI-generated short titles for recitals. Requires `RECITAL_TITLE_OPENROUTER_API_KEY` or `OPENROUTER_API_KEY` on cache miss. |
 | `GET` | `/api/laws/:celex/summary?lang=ENG` | Cached static law overview with article citations. Requires `LAW_SUMMARY_OPENROUTER_API_KEY`, `ARTICLE_QA_OPENROUTER_API_KEY`, or `OPENROUTER_API_KEY` on cache miss. |

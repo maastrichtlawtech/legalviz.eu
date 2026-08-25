@@ -951,14 +951,6 @@ export async function fetchAmendments(celex) {
   }));
 }
 
-export async function fetchTransposition(celex) {
-  return getInFlightRequest(`transposition:${celex}`, () => fetchJsonWithCache({
-    cacheKey: `${celex}_transposition`,
-    url: `${API_BASE}/api/laws/${encodeURIComponent(celex)}/transposition`,
-    errorLabel: "National transposition measures fetch failed",
-  }));
-}
-
 export async function fetchConsolidatedVersions(celex) {
   return getInFlightRequest(`consolidated:${celex}`, () => fetchJsonWithCache({
     cacheKey: `${celex}_consolidated`,

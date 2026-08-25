@@ -310,20 +310,8 @@
   "lawOverview": {
     "tabCites": "Citerer",
     "tabImplementing": "Gennemførelsesretsakter",
-    "tabNationalMeasures": "Nationale foranstaltninger",
-    "nationalMeasuresEmpty": "Medlemsstaternes meddelelser kan være ufuldstændige.",
-    "nationalMeasuresTruncated": "Kun de seneste 200 foranstaltninger vises.",
-    "nationalMeasureFallback": "National foranstaltning",
     "tabAmendments": "Ændringer",
-    "tabProcedure": "Procedure",
-    "procedureLoading": "Indlæser oplysninger om proceduren…",
-    "procedureEmpty": "Der er ingen oplysninger om den lovgivningsmæssige procedure for denne retsakt.",
-    "procedureLoadError": "Procedureoplysningerne kunne ikke indlæses lige nu.",
-    "procedureView": "Se proceduren på EUR-Lex",
-    "procedureProposal": "Forslag",
-    "procedureEuropeanParliament": "Europa-Parlamentet",
-    "procedureCouncil": "Rådet",
-    "procedureFinalAct": "Endelig retsakt",
+    "procedureView": "Lovgivningshistorik på EUR-Lex",
     "implDelActLabel": "Gennemførelses-/delegeret retsakt",
     "relatedTabsLabel": "Relaterede dokumenter"
   }

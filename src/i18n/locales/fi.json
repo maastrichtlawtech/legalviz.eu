@@ -310,20 +310,8 @@
   "lawOverview": {
     "tabCites": "Viittaa",
     "tabImplementing": "Täytäntöönpanosäädökset",
-    "tabNationalMeasures": "Kansalliset toimenpiteet",
-    "nationalMeasuresEmpty": "Jäsenvaltioiden ilmoitukset voivat olla puutteellisia.",
-    "nationalMeasuresTruncated": "Vain 200 uusinta toimenpidettä näytetään.",
-    "nationalMeasureFallback": "Kansallinen toimenpide",
     "tabAmendments": "Muutokset",
-    "tabProcedure": "Menettely",
-    "procedureLoading": "Lainsäädäntömenettelyn tietoja ladataan…",
-    "procedureEmpty": "Tästä säädöksestä ei ole saatavilla lainsäädäntömenettelyä koskevia tietoja.",
-    "procedureLoadError": "Menettelytietoja ei voitu ladata juuri nyt.",
-    "procedureView": "Näytä menettely EUR-Lexissä",
-    "procedureProposal": "Ehdotus",
-    "procedureEuropeanParliament": "Euroopan parlamentti",
-    "procedureCouncil": "Neuvosto",
-    "procedureFinalAct": "Lopullinen säädös",
+    "procedureView": "Lainsäädäntöhistoria EUR-Lexissä",
     "implDelActLabel": "Täytäntöönpano-/delegoitu säädös",
     "relatedTabsLabel": "Liittyvät asiakirjat"
   }

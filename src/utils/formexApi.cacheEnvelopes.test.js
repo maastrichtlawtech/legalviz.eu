@@ -410,24 +410,6 @@ describe("API JSON envelope (API_JSON_CACHE_VERSION)", () => {
     return written.version;
   }
 
-  it("caches and single-flights national transposition requests", async () => {
-    const payload = { celex: CELEX, applicable: true, measures: [], truncated: false };
-    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(payload));
-    vi.stubGlobal("fetch", fetchMock);
-    const { fetchTransposition } = await importFormexApi();
-
-    const [first, second] = await Promise.all([
-      fetchTransposition(CELEX),
-      fetchTransposition(CELEX),
-    ]);
-
-    expect(first).toEqual(payload);
-    expect(second).toEqual(payload);
-    expect(fetchMock).toHaveBeenCalledOnce();
-    expect(fetchMock.mock.calls[0][0]).toContain(`/api/laws/${CELEX}/transposition`);
-    expect((await readCache(`${CELEX}_transposition`)).payload).toEqual(payload);
-  });
-
   it("serves a fresh cached payload without touching the network", async () => {
     const version = await currentApiJsonVersion();
     await seedApiJson({ version });

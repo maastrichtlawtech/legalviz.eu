@@ -13,7 +13,6 @@ const {
   fetchAmendments,
   fetchConsolidatedVersions,
   fetchImplementing,
-  fetchTransposition,
   fetchLegislativeProcedure,
   fetchCaseLaw,
 } = require("../shared/law-queries");
@@ -475,28 +474,6 @@ function registerApiRoutes(app, deps) {
     }
   });
 
-  app.get('/api/laws/:celex/transposition', rateLimitMiddleware, async (req, res) => {
-    try {
-      const { celex } = req.params;
-
-      if (!validateCelex(celex)) {
-        return res.status(400).json({ error: 'Invalid CELEX format' });
-      }
-
-      const cacheKey = `transposition:${celex}`;
-      const cached = cacheGet(resolutionCache, cacheKey);
-      if (cached) {
-        return res.json(cached);
-      }
-
-      const payload = await fetchTransposition(celex, runSparqlQuery);
-      cacheSet(resolutionCache, cacheKey, payload, RESOLUTION_CACHE_MS);
-      res.json(payload);
-    } catch (err) {
-      safeErrorResponse(res, err, 'Failed to fetch national transposition measures');
-    }
-  });
-
   // Short-TTL memo shared by /case-law and the two digest routes. The digest
   // routes need the case-law payload on every request (its hash is part of
   // the digest cache key), which used to mean a live SPARQL round trip even
@@ -850,7 +827,7 @@ function registerApiRoutes(app, deps) {
         'GET /api/laws/:celex?lang=ENG': 'Get raw FMX XML by CELEX (fetches & caches)',
         'GET /api/laws/:celex/parsed?lang=ENG': 'Get parsed law as structured JSON (articles, recitals, definitions, annexes, cross-references)',
         'GET /api/laws/:celex/info': 'Get metadata only',
-        'GET /api/laws/:celex/transposition': 'List national measures notified as transposing a directive',
+        'GET /api/laws/:celex/procedure': 'Resolve the official EUR-Lex legislative procedure overview',
         'GET /api/laws/by-reference?actType=directive&year=2018&number=1972&lang=ENG': 'Resolve an official reference and fetch the matching FMX',
         'GET /api/laws/:celex/case-law': 'List CJEU judgments that interpret this law',
         'GET /api/laws/:celex/cited-by?citingLaws=10': 'Get reverse-citation counts and top citing laws for an act',

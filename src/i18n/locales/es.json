@@ -310,20 +310,8 @@
   "lawOverview": {
     "tabCites": "Cita",
     "tabImplementing": "Actos de ejecución",
-    "tabNationalMeasures": "Medidas nacionales",
-    "nationalMeasuresEmpty": "Las notificaciones de los Estados miembros pueden estar incompletas.",
-    "nationalMeasuresTruncated": "Solo se muestran las 200 medidas más recientes.",
-    "nationalMeasureFallback": "Medida nacional",
     "tabAmendments": "Modificaciones",
-    "tabProcedure": "Procedimiento",
-    "procedureLoading": "Cargando información del procedimiento…",
-    "procedureEmpty": "No hay información disponible sobre el procedimiento legislativo de este acto.",
-    "procedureLoadError": "No se ha podido cargar la información del procedimiento en este momento.",
-    "procedureView": "Ver el procedimiento en EUR-Lex",
-    "procedureProposal": "Propuesta",
-    "procedureEuropeanParliament": "Parlamento Europeo",
-    "procedureCouncil": "Consejo",
-    "procedureFinalAct": "Acto final",
+    "procedureView": "Historial legislativo en EUR-Lex",
     "implDelActLabel": "Acto de ejecución/delegado",
     "relatedTabsLabel": "Documentos relacionados"
   }

@@ -310,20 +310,8 @@
   "lawOverview": {
     "tabCites": "Luann",
     "tabImplementing": "Gníomhartha cur chun feidhme",
-    "tabNationalMeasures": "Bearta náisiúnta",
-    "nationalMeasuresEmpty": "D’fhéadfadh fógraí na mBallstát a bheith neamhiomlán.",
-    "nationalMeasuresTruncated": "Ní thaispeántar ach an 200 beart is déanaí.",
-    "nationalMeasureFallback": "Beart náisiúnta",
     "tabAmendments": "Leasuithe",
-    "tabProcedure": "Nós imeachta",
-    "procedureLoading": "Faisnéis faoin nós imeachta á luchtú…",
-    "procedureEmpty": "Níl aon eolas faoin nós imeachta reachtach ar fáil don acht seo.",
-    "procedureLoadError": "Níorbh fhéidir faisnéis faoin nós imeachta a luchtú faoi láthair.",
-    "procedureView": "Féach ar an nós imeachta ar EUR-Lex",
-    "procedureProposal": "Togra",
-    "procedureEuropeanParliament": "Parlaimint na hEorpa",
-    "procedureCouncil": "An Chomhairle",
-    "procedureFinalAct": "Acht críochnaitheach",
+    "procedureView": "Stair reachtach ar EUR-Lex",
     "implDelActLabel": "Gníomh cur chun feidhme/tarmligthe",
     "relatedTabsLabel": "Doiciméid ghaolmhara"
   }

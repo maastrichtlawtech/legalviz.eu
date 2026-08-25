@@ -310,20 +310,8 @@
   "lawOverview": {
     "tabCites": "Cituoja",
     "tabImplementing": "Įgyvendinimo aktai",
-    "tabNationalMeasures": "Nacionalinės priemonės",
-    "nationalMeasuresEmpty": "Valstybių narių pranešimai gali būti neišsamūs.",
-    "nationalMeasuresTruncated": "Rodoma tik 200 naujausių priemonių.",
-    "nationalMeasureFallback": "Nacionalinė priemonė",
     "tabAmendments": "Pakeitimai",
-    "tabProcedure": "Procedūra",
-    "procedureLoading": "Kraunama procedūros informacija…",
-    "procedureEmpty": "Apie šio akto teisėkūros procedūrą informacijos nėra.",
-    "procedureLoadError": "Procedūros informacijos šiuo metu nepavyko įkelti.",
-    "procedureView": "Peržiūrėti procedūrą EUR-Lex",
-    "procedureProposal": "Pasiūlymas",
-    "procedureEuropeanParliament": "Europos Parlamentas",
-    "procedureCouncil": "Taryba",
-    "procedureFinalAct": "Galutinis aktas",
+    "procedureView": "Teisėkūros istorija EUR-Lex",
     "implDelActLabel": "Įgyvendinimo / deleguotasis aktas",
     "relatedTabsLabel": "Susiję dokumentai"
   }

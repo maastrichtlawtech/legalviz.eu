@@ -310,20 +310,8 @@
   "lawOverview": {
     "tabCites": "Цитира",
     "tabImplementing": "Актове за изпълнение",
-    "tabNationalMeasures": "Национални мерки",
-    "nationalMeasuresEmpty": "Уведомленията на държавите членки може да са непълни.",
-    "nationalMeasuresTruncated": "Показани са само последните 200 мерки.",
-    "nationalMeasureFallback": "Национална мярка",
     "tabAmendments": "Изменения",
-    "tabProcedure": "Процедура",
-    "procedureLoading": "Зареждане на информацията за процедурата…",
-    "procedureEmpty": "Няма налична информация за законодателната процедура за този акт.",
-    "procedureLoadError": "Информацията за процедурата не може да бъде заредена в момента.",
-    "procedureView": "Преглед на процедурата в EUR-Lex",
-    "procedureProposal": "Предложение",
-    "procedureEuropeanParliament": "Европейски парламент",
-    "procedureCouncil": "Съвет",
-    "procedureFinalAct": "Окончателен акт",
+    "procedureView": "Законодателна история в EUR-Lex",
     "implDelActLabel": "Акт за изпълнение/делегиран акт",
     "relatedTabsLabel": "Свързани документи"
   }

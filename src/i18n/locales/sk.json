@@ -310,20 +310,8 @@
   "lawOverview": {
     "tabCites": "Cituje",
     "tabImplementing": "Vykonávacie akty",
-    "tabNationalMeasures": "Vnútroštátne opatrenia",
-    "nationalMeasuresEmpty": "Oznámenia členských štátov nemusia byť úplné.",
-    "nationalMeasuresTruncated": "Zobrazuje sa iba 200 najnovších opatrení.",
-    "nationalMeasureFallback": "Vnútroštátne opatrenie",
     "tabAmendments": "Zmeny",
-    "tabProcedure": "Postup",
-    "procedureLoading": "Načítavajú sa informácie o postupe…",
-    "procedureEmpty": "Informácie o legislatívnom postupe pre tento akt nie sú k dispozícii.",
-    "procedureLoadError": "Informácie o postupe sa teraz nepodarilo načítať.",
-    "procedureView": "Zobraziť postup na EUR-Lexe",
-    "procedureProposal": "Návrh",
-    "procedureEuropeanParliament": "Európsky parlament",
-    "procedureCouncil": "Rada",
-    "procedureFinalAct": "Konečný akt",
+    "procedureView": "Legislatívna história na EUR-Lexe",
     "implDelActLabel": "Vykonávací/delegovaný akt",
     "relatedTabsLabel": "Súvisiace dokumenty"
   }

@@ -310,20 +310,8 @@
   "lawOverview": {
     "tabCites": "Citează",
     "tabImplementing": "Acte de punere în aplicare",
-    "tabNationalMeasures": "Măsuri naționale",
-    "nationalMeasuresEmpty": "Notificările statelor membre pot fi incomplete.",
-    "nationalMeasuresTruncated": "Sunt afișate numai cele mai recente 200 de măsuri.",
-    "nationalMeasureFallback": "Măsură națională",
     "tabAmendments": "Modificări",
-    "tabProcedure": "Procedură",
-    "procedureLoading": "Se încarcă informațiile despre procedură…",
-    "procedureEmpty": "Nu sunt disponibile informații despre procedura legislativă pentru acest act.",
-    "procedureLoadError": "Informațiile despre procedură nu au putut fi încărcate acum.",
-    "procedureView": "Vezi procedura pe EUR-Lex",
-    "procedureProposal": "Propunere",
-    "procedureEuropeanParliament": "Parlamentul European",
-    "procedureCouncil": "Consiliu",
-    "procedureFinalAct": "Act final",
+    "procedureView": "Istoricul legislativ pe EUR-Lex",
     "implDelActLabel": "Act de punere în aplicare/delegat",
     "relatedTabsLabel": "Documente conexe"
   }

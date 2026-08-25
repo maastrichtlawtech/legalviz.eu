@@ -1,6 +1,6 @@
 /**
  * Shared SPARQL-based queries for law metadata, amendments, implementing acts,
- * and national transposition measures.
+ * and legislative procedure links.
  *
  * Used by both the API routes and the CLI to avoid duplicating queries
  * and result-shaping logic.
@@ -204,113 +204,6 @@ LIMIT 100`;
   return { celex, acts };
 }
 
-const DIRECTIVE_CELEX = /^3\d{4}L\d{4}(?:\(\d+\))?$/i;
-const TRANSPOSITION_LIMIT = 200;
-
-/**
- * List the national measures notified as implementing a directive.
- *
- * Sector-7 CELEX ids end in the Commission SG identifier used to identify a
- * notification. CELLAR can expose the same notification through more than one
- * binding (for example where optional metadata is multi-valued), so that
- * suffix is also the stable deduplication key.
- */
-async function fetchTransposition(celex, runSparqlQuery) {
-  if (!DIRECTIVE_CELEX.test(String(celex || ''))) {
-    return { celex, applicable: false, measures: [], truncated: false };
-  }
-
-  const celexUri = `http://publications.europa.eu/resource/celex/${celex}`;
-  const query = `
-PREFIX cdm: <http://publications.europa.eu/ontology/cdm#>
-PREFIX owl: <http://www.w3.org/2002/07/owl#>
-SELECT ?sgId
-  (SAMPLE(?rawMeasureCelex) AS ?measureCelex)
-  (SAMPLE(?rawCountry) AS ?country)
-  (SAMPLE(?rawTitle) AS ?title)
-  (MAX(?rawNotificationDate) AS ?notificationDate)
-  (SAMPLE(?rawNationalId) AS ?nationalId)
-  (SAMPLE(?rawNationalLink) AS ?nationalLink)
-  (SAMPLE(?rawEli) AS ?eli)
-WHERE {
-  ?work owl:sameAs <${celexUri}> .
-  ?measure cdm:measure_national_implementing_implements_resource_legal ?work ;
-           cdm:resource_legal_id_celex ?rawMeasureCelex .
-  FILTER(STRSTARTS(STR(?rawMeasureCelex), "7"))
-  BIND(REPLACE(STR(?rawMeasureCelex), "^.*_", "") AS ?sgId)
-  OPTIONAL { ?measure cdm:measure_national_implementing_implemented_by_country ?rawCountry }
-  OPTIONAL { ?measure cdm:work_title ?rawTitle }
-  OPTIONAL { ?measure cdm:measure_national_implementing_date_notification ?rawNotificationDate }
-  OPTIONAL { ?measure cdm:resource_legal_id_local ?rawNationalId }
-  OPTIONAL { ?measure cdm:measure_national_implementing_national_website_link ?rawNationalLink }
-  OPTIONAL { ?measure cdm:eli ?rawEli }
-}
-GROUP BY ?sgId
-ORDER BY DESC(?notificationDate)
-LIMIT ${TRANSPOSITION_LIMIT + 1}`;
-
-  const data = await runSparqlQuery(query);
-  const seen = new Set();
-  const measures = [];
-
-  for (const binding of data.results?.bindings || []) {
-    const rawCelex = String(binding.measureCelex?.value || '').trim();
-    // EUR-Lex also exposes display-only multi-directive ids such as
-    // `7*EST_202103476`; they still carry the same SG suffix and must not be
-    // discarded merely because the act-specific prefix is replaced by `*`.
-    const match = /^7(?:[A-Z0-9()]+|\*[A-Z]{3})_([A-Z0-9]+)$/i.exec(rawCelex);
-    if (!match) continue;
-
-    const sgId = match[1];
-    const dedupeKey = sgId.toUpperCase();
-    if (seen.has(dedupeKey)) continue;
-    seen.add(dedupeKey);
-
-    const rawCountry = binding.country?.value || null;
-    const country = rawCountry
-      ? decodeURIComponent(String(rawCountry).split('/').pop()).toUpperCase()
-      : null;
-
-    measures.push({
-      celex: rawCelex,
-      sgId,
-      country,
-      title: binding.title?.value || null,
-      notificationDate: binding.notificationDate?.value || null,
-      nationalId: binding.nationalId?.value || null,
-      nationalLink: binding.nationalLink?.value || null,
-      eli: binding.eli?.value || null,
-    });
-  }
-
-  return {
-    celex,
-    applicable: true,
-    measures: measures.slice(0, TRANSPOSITION_LIMIT),
-    truncated: measures.length > TRANSPOSITION_LIMIT,
-  };
-}
-
-const PROCEDURE_STAGE_ORDER = {
-  proposal: 0,
-  ep: 1,
-  council: 2,
-  final: 3,
-};
-
-const PROCEDURE_STAGE_INSTITUTIONS = {
-  proposal: 'European Commission',
-  ep: 'European Parliament',
-  council: 'Council of the European Union',
-  final: 'European Parliament and Council',
-};
-
-const PROCEDURE_AGENT_INSTITUTIONS = {
-  COM: 'European Commission',
-  EP: 'European Parliament',
-  CONSIL: 'Council of the European Union',
-};
-
 function bindingValue(binding, names) {
   for (const name of names) {
     const value = binding?.[name]?.value;
@@ -321,20 +214,12 @@ function bindingValue(binding, names) {
   return null;
 }
 
-function normalizeProcedureCelex(value) {
-  if (!value) return null;
-  const raw = decodeURIComponent(String(value).trim());
-  const uriMatch = raw.match(/\/celex\/([^/?#]+)$/i);
-  const prefixed = uriMatch ? uriMatch[1] : raw.replace(/^CELEX:/i, '');
-  return prefixed ? prefixed.toUpperCase() : null;
-}
-
 function extractCodProcedure(values) {
   for (const value of values) {
     if (!value) continue;
     const text = String(value);
     const match = text.match(/\bCOD\s*[/: -]?\s*(\d{4})\s*\/\s*(\d{1,4})\b/i)
-      || text.match(/\b(\d{4})\s*\/\s*(\d{1,4})\s*\(\s*COD\s*\)/i);
+      || text.match(/\b(\d{4})\s*\/\s*(\d{1,4})\s*(?:\/\s*COD\b|\(\s*COD\s*\))/i);
     if (!match) continue;
     const year = match[1];
     const number = String(match[2]).padStart(4, '0');
@@ -346,74 +231,31 @@ function extractCodProcedure(values) {
   return { reference: null, procedureUrl: null };
 }
 
-function normalizeProcedureInstitution(value, stage) {
-  if (PROCEDURE_STAGE_INSTITUTIONS[stage]) return PROCEDURE_STAGE_INSTITUTIONS[stage];
-  if (!value) return null;
-  const raw = decodeURIComponent(String(value).trim());
-  if (!/^https?:\/\//i.test(raw)) return raw;
-  const lastSegment = raw.split('/').filter(Boolean).pop();
-  return PROCEDURE_AGENT_INSTITUTIONS[lastSegment]
-    || PROCEDURE_STAGE_INSTITUTIONS[stage]
-    || (lastSegment ? lastSegment.replace(/[_-]+/g, ' ') : raw);
-}
-
-function chooseProcedureValue(left, right) {
-  if (!left) return right || null;
-  if (!right) return left;
-  return String(left).localeCompare(String(right)) <= 0 ? left : right;
-}
-
 /**
- * Fetch the legislative procedure documents attached to an adopted act.
- *
- * The relation set is deliberately narrow: generic citation relations are
- * not procedure evidence and would pull in unrelated documents.
+ * Resolve an adopted act to the official EUR-Lex procedure overview.
+ * Modern Cellar records keep the structured reference on the proposal's
+ * dossier; the miscellaneous proposal field is retained as a legacy fallback.
  */
 async function fetchLegislativeProcedure(celex, runSparqlQuery) {
   const celexUri = `http://publications.europa.eu/resource/celex/${celex}`;
   const query = `
 PREFIX cdm: <http://publications.europa.eu/ontology/cdm#>
 PREFIX owl: <http://www.w3.org/2002/07/owl#>
-SELECT DISTINCT
-  ?documentWork ?documentCelex ?documentSameAs ?stage ?documentDate
-  ?documentTitle ?agent ?procedureReference
+SELECT DISTINCT ?procedureReference
 WHERE {
   ?finalWork owl:sameAs <${celexUri}> .
   ?finalWork cdm:resource_legal_adopts_resource_legal ?proposalWork .
-  OPTIONAL {
+  {
+    { ?proposalWork cdm:work_part_of_dossier ?dossier }
+    UNION
+    { ?dossier cdm:dossier_contains_work ?proposalWork }
+    ?dossier cdm:procedure_code_interinstitutional_reference_procedure ?procedureReference .
+  }
+  UNION {
     ?proposalWork cdm:resource_legal_information_miscellaneous ?procedureReference
   }
-  {
-    ?finalWork cdm:resource_legal_adopts_resource_legal ?documentWork .
-    BIND("proposal" AS ?stage)
-  }
-  UNION {
-    ?documentWork owl:sameAs <${celexUri}> .
-    BIND("final" AS ?stage)
-  }
-  UNION {
-    ?documentWork cdm:resource_legal_contains_ep_opinion_on_resource_legal ?proposalWork .
-    BIND("ep" AS ?stage)
-  }
-  UNION {
-    ?documentWork cdm:resource_legal_influences_resource_legal ?proposalWork .
-    ?documentWork cdm:work_created_by_agent <http://publications.europa.eu/resource/authority/corporate-body/CONSIL> .
-    BIND("council" AS ?stage)
-  }
-  OPTIONAL { ?documentWork cdm:resource_legal_id_celex ?documentCelex }
-  OPTIONAL {
-    ?documentWork owl:sameAs ?documentSameAs
-    FILTER(STRSTARTS(STR(?documentSameAs), "http://publications.europa.eu/resource/celex/"))
-  }
-  OPTIONAL { ?documentWork cdm:work_date_document ?documentDate }
-  OPTIONAL {
-    ?expression cdm:expression_belongs_to_work ?documentWork ;
-      cdm:expression_uses_language <http://publications.europa.eu/resource/authority/language/ENG> ;
-      cdm:expression_title ?documentTitle .
-  }
-  OPTIONAL { ?documentWork cdm:work_created_by_agent ?agent }
 }
-LIMIT 1000`;
+LIMIT 20`;
 
   const data = await runSparqlQuery(query);
   const bindings = data.results?.bindings || [];
@@ -424,69 +266,7 @@ LIMIT 1000`;
     'reference',
   ])));
 
-  if (!procedure.reference) {
-    return { celex, reference: null, procedureUrl: null, documents: [] };
-  }
-
-  const documentsByCelex = new Map();
-  for (const binding of bindings) {
-    const stage = bindingValue(binding, ['stage', 'kind']) || 'proposal';
-    const documentCelex = normalizeProcedureCelex(bindingValue(binding, [
-      'documentCelex',
-      'docCelex',
-      'celex',
-      'documentSameAs',
-      'documentWork',
-    ])) || (stage === 'final' ? normalizeProcedureCelex(celex) : null);
-    if (!documentCelex) continue;
-
-    const candidate = {
-      celex: documentCelex,
-      stage,
-      institution: normalizeProcedureInstitution(bindingValue(binding, [
-        'institution',
-        'institutionLabel',
-        'agent',
-      ]), stage),
-      date: bindingValue(binding, ['documentDate', 'date']),
-      title: bindingValue(binding, ['documentTitle', 'title']) || documentCelex,
-      url: `https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:${documentCelex}`,
-    };
-
-    const existing = documentsByCelex.get(documentCelex);
-    if (!existing) {
-      documentsByCelex.set(documentCelex, candidate);
-      continue;
-    }
-
-    const existingRank = PROCEDURE_STAGE_ORDER[existing.stage] ?? Number.MAX_SAFE_INTEGER;
-    const candidateRank = PROCEDURE_STAGE_ORDER[candidate.stage] ?? Number.MAX_SAFE_INTEGER;
-    const preferredStage = candidateRank < existingRank
-      || (candidateRank === existingRank && candidate.stage.localeCompare(existing.stage) < 0)
-      ? candidate.stage
-      : existing.stage;
-    documentsByCelex.set(documentCelex, {
-      ...existing,
-      stage: preferredStage,
-      institution: chooseProcedureValue(existing.institution, candidate.institution),
-      date: chooseProcedureValue(existing.date, candidate.date),
-      title: chooseProcedureValue(existing.title === documentCelex ? null : existing.title, candidate.title) || documentCelex,
-    });
-  }
-
-  const documents = [...documentsByCelex.values()].sort((left, right) => {
-    if (left.date && right.date) {
-      const dateOrder = left.date.localeCompare(right.date);
-      if (dateOrder !== 0) return dateOrder;
-    } else if (left.date) {
-      return -1;
-    } else if (right.date) {
-      return 1;
-    }
-    return left.celex.localeCompare(right.celex);
-  });
-
-  return { celex, ...procedure, documents };
+  return { celex, ...procedure };
 }
 
 async function fetchCaseLaw(celex, runSparqlQuery, {
@@ -996,7 +776,6 @@ module.exports = {
   fetchAmendments,
   fetchConsolidatedVersions,
   fetchImplementing,
-  fetchTransposition,
   fetchLegislativeProcedure,
   fetchCaseLaw,
   parseCitationsToRefs,

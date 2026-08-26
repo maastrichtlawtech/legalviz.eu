@@ -115,6 +115,7 @@ function registerApiRoutes(app, deps) {
     citationGraphStore,
     findDownloadUrls,
     findFmx4Uri,
+    fetchConsolidatedVersionsMemo: injectedConsolidatedVersionsMemo,
     parseReferenceText,
     parseStructuredReference,
     prepareLawPayload,
@@ -137,6 +138,20 @@ function registerApiRoutes(app, deps) {
     validateCelex,
     validateLang
   } = deps;
+
+  // Consolidated-version lookups are shared with parsed-law resolution — the
+  // parsed route needs the same list to decide whether to serve the "as
+  // amended" text — so the memo is created once in server.js and injected into
+  // both. This fallback keeps the route self-sufficient when it isn't (unit
+  // tests wire their own deps), with the same key and TTL.
+  const fetchConsolidatedVersionsMemo = injectedConsolidatedVersionsMemo || (async (celex) => {
+    const cacheKey = `consolidated:${celex}`;
+    const cached = cacheGet(resolutionCache, cacheKey);
+    if (cached) return cached;
+    const payload = await fetchConsolidatedVersions(celex, runSparqlQuery);
+    cacheSet(resolutionCache, cacheKey, payload, RESOLUTION_CACHE_MS);
+    return payload;
+  });
 
   app.get('/health', (req, res) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
@@ -438,15 +453,7 @@ function registerApiRoutes(app, deps) {
         return res.status(400).json({ error: 'Invalid CELEX format' });
       }
 
-      const cacheKey = `consolidated:${celex}`;
-      const cached = cacheGet(resolutionCache, cacheKey);
-      if (cached) {
-        return res.json(cached);
-      }
-
-      const payload = await fetchConsolidatedVersions(celex, runSparqlQuery);
-      cacheSet(resolutionCache, cacheKey, payload, RESOLUTION_CACHE_MS);
-      res.json(payload);
+      res.json(await fetchConsolidatedVersionsMemo(celex));
     } catch (err) {
       safeErrorResponse(res, err, 'Failed to fetch consolidated versions');
     }

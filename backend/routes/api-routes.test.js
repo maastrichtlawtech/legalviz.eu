@@ -152,6 +152,9 @@ function registerTestRoutes(overrides = {}) {
       prepareLawPayload: deps.prepareLawPayload,
       fetchAndParseHtmlLaw: deps.fetchAndParseHtmlLaw,
       CELEX_NAMES: deps.CELEX_NAMES,
+      fetchConsolidatedVersions: deps.fetchConsolidatedVersions,
+      fetchConsolidatedVersionsMemo: deps.fetchConsolidatedVersionsMemo,
+      runSparqlQuery: deps.runSparqlQuery,
     });
   }
 
@@ -492,6 +495,48 @@ test("GET /api/laws/:celex/parsed accepts ?version=current and forwards it to re
   assert.equal(res.statusCode, 200);
   assert.equal(res.payload.version, "current");
   assert.deepEqual(calls, [{ celex: "32013R0575", lang: "ENG", options: { skipFmxProbe: false, version: "current" } }]);
+});
+
+test("parsed and consolidated routes share the consolidated-version memo", async () => {
+  const celex = "32013R0575";
+  const resolutionCache = new Map();
+  let upstreamCalls = 0;
+  const fetchConsolidatedVersions = async (requestedCelex) => {
+    upstreamCalls += 1;
+    return {
+      celex: requestedCelex,
+      base: "02013R0575",
+      versions: [{ celex: "02013R0575-20260626", date: "2026-06-26" }],
+    };
+  };
+  const fetchConsolidatedVersionsMemo = async (requestedCelex) => {
+    const cacheKey = `consolidated:${requestedCelex}`;
+    const cached = cacheGet(resolutionCache, cacheKey);
+    if (cached) return cached;
+    const payload = await fetchConsolidatedVersions(requestedCelex);
+    cacheSet(resolutionCache, cacheKey, payload, 60_000);
+    return payload;
+  };
+
+  const { app } = registerTestRoutes({
+    resolutionCache,
+    fetchConsolidatedVersionsMemo,
+    prepareLawPayload: async () => ({ servePath: gdprFmxPath }),
+  });
+
+  const consolidatedHandler = app.routes.get("/api/laws/:celex/consolidated");
+  const consolidatedResponse = createResponseRecorder();
+  await consolidatedHandler({ params: { celex }, query: {} }, consolidatedResponse);
+
+  const parsedHandler = app.routes.get("/api/laws/:celex/parsed");
+  const parsedResponse = createResponseRecorder();
+  await parsedHandler({ params: { celex }, query: { lang: "ENG", version: "current" } }, parsedResponse);
+
+  assert.equal(consolidatedResponse.statusCode, 200);
+  assert.equal(parsedResponse.statusCode, 200);
+  assert.equal(parsedResponse.payload.source, "fmx-consolidated");
+  assert.equal(upstreamCalls, 1, "the parsed route should reuse the consolidated route's cached lookup");
+  assert.ok(resolutionCache.has(`consolidated:${celex}`));
 });
 
 test("GET /api/laws/:celex/case-law uses a short cache ttl", async () => {

@@ -175,7 +175,6 @@ export function LawOverviewPage({
           <span>{t("lawOverview.appliesFrom")} <b className="font-semibold text-gray-800 dark:text-gray-200">{appliesFrom}</b></span>
         ) : null}
         {countParts.length ? <span>{countParts.join(" · ")}</span> : null}
-        {metadata?.eea ? <span>{t("metadata.eea")}</span> : null}
         {eliShort ? (
           <a
             href={metadata.eli}

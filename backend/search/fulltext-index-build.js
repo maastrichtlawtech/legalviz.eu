@@ -7,17 +7,15 @@
 //
 // Structurally this clones definition-index-build.js (DI'd shard function,
 // worker pool with a heap cap, batch-bisect on worker death, CLI flags,
-// invoked as an npm script rather than through the `eurlex` CLI). The pool
-// itself follows the Phase-0 probe's `runPool` (scratchpad ft-build.js):
-// persistent per-worker processes that receive many batches over their
-// lifetime, rather than one worker per batch — a worker crash (OOM on a
-// giant act) splits the in-flight batch and respawns a replacement.
+// invoked as an npm script rather than through the `eurlex` CLI). Its pool is
+// the shared worker-pool implementation: persistent per-worker processes that
+// receive many batches over their lifetime, rather than one worker per batch —
+// a worker crash (OOM on a giant act) splits the in-flight batch and respawns a
+// replacement.
 const fs = require("fs");
 const path = require("path");
 const zlib = require("zlib");
 const { promisify } = require("util");
-const { Worker } = require("worker_threads");
-
 const {
   celexForCorpusFile,
   filterCorpusFiles,
@@ -31,6 +29,7 @@ const { readJsonAsset, sha256File } = require("./build-sqlite-data");
 const { DEFAULT_SEARCH_CACHE_PATH } = require("./search-index");
 const { stripXmlTags, wrapForParsing } = require("./search-build");
 const { normalizeParserStamp } = require("./parser-stamp");
+const { WorkerLossError, runPool: runWorkerPool } = require("../shared/worker-pool");
 
 const gunzip = promisify(zlib.gunzip);
 
@@ -217,122 +216,56 @@ function walSizeMb(outputPath) {
   }
 }
 
-function spawnWorker(workerHeapMb) {
-  return new Worker(path.join(__dirname, "fulltext-index-worker.js"), {
-    resourceLimits: { maxOldGenerationSizeMb: workerHeapMb },
-  });
-}
-
-// Resilient pool over a queue of batches: N persistent workers pull batches
-// until the queue drains. A worker `error` (typically OOM on a giant act)
-// splits the in-flight batch in half and re-queues both halves; a size-1
-// batch that still dies is recorded as a failure instead of retried forever.
-// The dead worker is replaced. Idle workers are terminated as the queue
-// drains so the pool doesn't hold heap it no longer needs.
+// Keep the builder's exported runPool contract (including its progress
+// totals) as a thin adapter over the shared queue/lifecycle implementation.
+// The build supplies its own accounting below so schema-specific stats stay
+// here, while callers that used runPool directly retain the old defaults.
 function runPool(initialBatches, onResult, options = {}) {
   const poolSize = options.poolSize || DEFAULT_POOL_SIZE;
   const workerHeapMb = options.workerHeapMb || DEFAULT_WORKER_HEAP_MB;
-  const onProgress = options.onProgress || (() => {});
-  return new Promise((resolve) => {
-    const queue = initialBatches.slice();
-    const totals = {
+  const defaults = {
+    initialTotals: {
       parsed: 0, htmlLaws: 0, oversized: 0, files: 0, failures: 0, filesDone: 0, batchesDone: 0,
-      // Heap of the worker that returned the most recent shard, and the peak
-      // seen across the run. A build that decays as it runs shows up here as
-      // a climb toward workerHeapMb; a flat trace rules the workers out.
       workerHeapMb: 0, peakWorkerHeapMb: 0,
-      // Where the wall clock goes. parseMs is summed across workers so it
-      // exceeds elapsed time by roughly the pool size; insertMs is the
-      // parent's own, and is strictly serialized — runPool hands a worker its
-      // next batch only after onResult returns, so every worker idles through
-      // it. insertMs approaching elapsed time therefore means the build is
-      // bounded by the single-threaded insert, not by parsing. The lastParseMs
-      // / lastInsertMs pair gives the instantaneous cost of one batch, which
-      // is what shows a trend; the cumulative totals hide it.
       parseMs: 0, insertMs: 0, lastParseMs: 0, lastInsertMs: 0, bytes: 0, lastBytes: 0,
-    };
-    let resolved = false;
-    const inflight = new Map(); // worker -> batch
-
-    function maybeDone() {
-      if (!resolved && queue.length === 0 && inflight.size === 0) { resolved = true; resolve(totals); }
-    }
-    function assign(worker) {
-      if (queue.length === 0) {
-        inflight.delete(worker);
-        worker.terminate().catch(() => {});
-          maybeDone();
-        return;
+    },
+    accumulate: (running, shard, { callbackMs }) => {
+      running.lastInsertMs = callbackMs;
+      running.insertMs += callbackMs;
+      if (shard.parseMs != null) {
+        running.lastParseMs = shard.parseMs;
+        running.parseMs += shard.parseMs;
       }
-      const batch = queue.shift();
-      inflight.set(worker, batch);
-      worker.postMessage(batch);
-    }
-    function attach(worker) {
-      worker.on("message", (shard) => {
-        inflight.delete(worker);
-        const insertStartedAt = process.hrtime.bigint();
-        onResult(shard);
-        totals.lastInsertMs = Number((process.hrtime.bigint() - insertStartedAt) / 1000000n);
-        totals.insertMs += totals.lastInsertMs;
-        if (shard.parseMs != null) {
-          totals.lastParseMs = shard.parseMs;
-          totals.parseMs += shard.parseMs;
-        }
-        totals.lastBytes = shard.stats?.bytes || 0;
-        for (const key of ["parsed", "htmlLaws", "oversized", "files", "bytes"]) totals[key] += shard.stats?.[key] || 0;
-        totals.failures += shard.failures?.length || 0;
-        totals.filesDone += shard.stats?.files || 0;
-        totals.batchesDone += 1;
-        if (shard.heapUsedMb != null) {
-          totals.workerHeapMb = shard.heapUsedMb;
-          totals.peakWorkerHeapMb = Math.max(totals.peakWorkerHeapMb, shard.heapUsedMb);
-        }
-        onProgress(totals);
-        assign(worker);
-      });
-      worker.on("error", (error) => {
-        const batch = inflight.get(worker) || [];
-        inflight.delete(worker);
-          handleWorkerLoss(batch, error);
-      });
-      worker.on("exit", (code) => {
-        if (code !== 0 && inflight.has(worker)) {
-          const batch = inflight.get(worker) || [];
-          inflight.delete(worker);
-              handleWorkerLoss(batch, new Error(`worker exited with code ${code}`));
-        }
-      });
-    }
-    // A worker crash (typically OOM on a giant act) loses whatever batch was
-    // in flight. Split it and re-queue both halves; a size-1 batch that still
-    // dies is recorded as a failure rather than retried forever. Either way a
-    // replacement worker is spawned so the pool stays at full strength.
-    function handleWorkerLoss(batch, error) {
-      if (batch.length > 1) {
-        const mid = Math.floor(batch.length / 2);
-        queue.unshift(batch.slice(mid), batch.slice(0, mid));
-      } else if (batch.length === 1) {
-        onResult({
-          units: [],
-          failures: [{ celex: celexForCorpusFile(batch[0]), type: "worker_failure", error: String(error?.message || error) }],
-          stats: { parsed: 0, htmlLaws: 0, oversized: 1, files: 1 },
-        });
-        totals.failures += 1;
-        totals.filesDone += 1;
-        totals.batchesDone += 1;
+      running.lastBytes = shard.stats?.bytes || 0;
+      for (const key of ["parsed", "htmlLaws", "oversized", "files", "bytes"]) running[key] += shard.stats?.[key] || 0;
+      running.failures += shard.failures?.length || 0;
+      running.filesDone += shard.stats?.files || 0;
+      running.batchesDone += 1;
+      if (shard.heapUsedMb != null) {
+        running.workerHeapMb = shard.heapUsedMb;
+        running.peakWorkerHeapMb = Math.max(running.peakWorkerHeapMb, shard.heapUsedMb);
       }
-      const replacement = spawnWorker(workerHeapMb);
-      attach(replacement);
-      assign(replacement);
-      maybeDone();
-    }
-    if (initialBatches.length === 0) { resolve(totals); return; }
-    for (let i = 0; i < poolSize; i += 1) {
-      const worker = spawnWorker(workerHeapMb);
-      attach(worker);
-      assign(worker);
-    }
+    },
+    onWorkerFailure: (running, batch, error) => {
+      if (!(error instanceof WorkerLossError)) throw error;
+      onResult({
+        units: [],
+        failures: [{ celex: celexForCorpusFile(batch[0]), type: "worker_failure", error: String(error?.message || error) }],
+        stats: { parsed: 0, htmlLaws: 0, oversized: 1, files: 1 },
+      });
+      running.failures += 1;
+      running.filesDone += 1;
+      running.batchesDone += 1;
+    },
+  };
+  return runWorkerPool(initialBatches, onResult, {
+    ...defaults,
+    ...options,
+    // The old adapter treated zero as "use the default"; retain that
+    // behavior even though the shared runner accepts explicit sizes.
+    poolSize,
+    workerHeapMb,
+    workerPath: options.workerPath || path.join(__dirname, "fulltext-index-worker.js"),
   });
 }
 

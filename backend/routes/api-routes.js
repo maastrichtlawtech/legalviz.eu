@@ -91,6 +91,27 @@ function sendChatError(res, err, context) {
   return res.status(mapped.status).json({ code: mapped.code, message: mapped.message });
 }
 
+// The parser pool normally converts these into ClientError before they reach
+// a route. Keep the API boundary defensive for injected/custom resolvers too:
+// worker loss and queue overload are transient service failures, not 500s.
+function mapParserPoolError(err) {
+  if (err?.code === "worker_lost" || err?.code === "parser_worker_unavailable") {
+    return err instanceof ClientError ? err : new ClientError(
+      "Parser worker was lost; please retry shortly",
+      503,
+      "parser_worker_unavailable",
+    );
+  }
+  if (err?.code === "worker_pool_overloaded" || err?.code === "parser_pool_overloaded") {
+    return err instanceof ClientError ? err : new ClientError(
+      "Parser workers are busy; please retry shortly",
+      503,
+      "parser_pool_overloaded",
+    );
+  }
+  return err;
+}
+
 const CASE_LAW_ROUTE_CACHE_MS = 5 * 60 * 1000;
 const CELLAR_NO_END_OF_VALIDITY = '9999-12-31';
 const STORE_METADATA_FIELDS = ['inForce', 'endOfValidity', 'entryIntoForce', 'eli'];
@@ -185,6 +206,7 @@ function registerApiRoutes(app, deps) {
     parseReferenceText,
     parseStructuredReference,
     prepareLawPayload,
+    parseFmxXml: parseFmxXmlImpl = parseFmxXml,
     rateLimitMiddleware,
     // Guards applied *only* to the four routes that can trigger a billed model
     // call, on top of the generic limiter: a tight per-IP generation budget
@@ -412,7 +434,7 @@ function registerApiRoutes(app, deps) {
       res.json(parsed);
     } catch (err) {
       if (!res.headersSent) {
-        safeErrorResponse(res, err, 'Failed to fetch and parse law');
+        safeErrorResponse(res, mapParserPoolError(err), 'Failed to fetch and parse law');
       }
     }
   });
@@ -628,7 +650,7 @@ function registerApiRoutes(app, deps) {
       if (err instanceof ChatProviderError) {
         return sendChatError(res, err, 'Failed to generate recital titles');
       }
-      safeErrorResponse(res, err, 'Failed to generate recital titles');
+      safeErrorResponse(res, mapParserPoolError(err), 'Failed to generate recital titles');
     }
   });
 
@@ -683,7 +705,7 @@ function registerApiRoutes(app, deps) {
               name: CELEX_NAMES[celex] || null,
               format: 'combined-v1',
               source: 'fmx',
-              ...(await parseFmxXml(rawText)),
+              ...(await parseFmxXmlImpl(rawText)),
             };
           }
           return resolveParsedLaw(celex, lang, { skipFmxProbe: true });
@@ -709,7 +731,7 @@ function registerApiRoutes(app, deps) {
       if (err instanceof ChatProviderError) {
         return sendChatError(res, err, 'Failed to generate law summary');
       }
-      safeErrorResponse(res, err, 'Failed to generate law summary');
+      safeErrorResponse(res, mapParserPoolError(err), 'Failed to generate law summary');
     }
   });
 
@@ -770,7 +792,7 @@ function registerApiRoutes(app, deps) {
       if (/Article .+ not found/.test(err?.message || '')) {
         return res.status(404).json({ error: err.message, code: 'article_not_found' });
       }
-      safeErrorResponse(res, err, 'Failed to generate article case-law digest');
+      safeErrorResponse(res, mapParserPoolError(err), 'Failed to generate article case-law digest');
     }
   });
 
@@ -822,7 +844,7 @@ function registerApiRoutes(app, deps) {
       if (err instanceof ChatProviderError) {
         return sendChatError(res, err, 'Failed to generate case-law digest');
       }
-      safeErrorResponse(res, err, 'Failed to generate case-law digest');
+      safeErrorResponse(res, mapParserPoolError(err), 'Failed to generate case-law digest');
     }
   });
 

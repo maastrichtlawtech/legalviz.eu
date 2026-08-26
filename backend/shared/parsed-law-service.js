@@ -29,6 +29,7 @@ function createParsedLawResolver({
   fetchConsolidatedVersions,
   fetchConsolidatedVersionsMemo,
   runSparqlQuery,
+  parseFmxXml: parseFmxXmlImpl = parseFmxXml,
 }) {
   const parsedCache = new Map(); // `${celex}:${lang}:${skipFmxProbe}:${version}` -> parsed law
 
@@ -63,7 +64,7 @@ function createParsedLawResolver({
 
     const { servePath } = await prepareLawPayload(current.celex, lang);
     const xmlText = fs.readFileSync(servePath, 'utf8');
-    const consolidatedParsed = await parseFmxXml(xmlText);
+    const consolidatedParsed = await parseFmxXmlImpl(xmlText);
     if (!hasParsedLawContent(consolidatedParsed)) return null;
 
     return { parsed: consolidatedParsed, version: { celex: current.celex, date: current.date } };
@@ -81,7 +82,7 @@ function createParsedLawResolver({
       try {
         const { servePath } = await prepareLawPayload(celex, lang);
         const xmlText = fs.readFileSync(servePath, 'utf8');
-        parsed = await parseFmxXml(xmlText);
+        parsed = await parseFmxXmlImpl(xmlText);
       } catch (err) {
         if (!(err instanceof ClientError) || err.statusCode !== 404 || typeof fetchAndParseHtmlLaw !== 'function') {
           throw err;
@@ -95,7 +96,7 @@ function createParsedLawResolver({
     } else {
       const { servePath } = await prepareLawPayload(celex, lang);
       const xmlText = fs.readFileSync(servePath, 'utf8');
-      parsed = await parseFmxXml(xmlText);
+      parsed = await parseFmxXmlImpl(xmlText);
     }
 
     // Keep a handle on the as-adopted parse before anything below may

@@ -9,7 +9,8 @@ const { registerMcpEndpoint } = require('./mcp/mcp-http');
 const { createParsedLawResolver, hasParsedLawContent } = require('./shared/parsed-law-service');
 const { fetchConsolidatedVersions } = require('./shared/law-queries');
 const { createFmxService } = require('./shared/fmx-service');
-const { fetchEurlexHtmlLaw, parseEurlexHtmlToCombined, closeSharedPlaywrightBrowser } = require('./shared/eurlex-html-parser');
+const { fetchEurlexHtmlLaw, closeSharedPlaywrightBrowser } = require('./shared/eurlex-html-parser');
+const { createParserPool } = require('./shared/parser-worker-pool');
 const { createHtmlCacheService } = require('./shared/html-cache-service');
 const { createPersistentCache } = require('./shared/resolution-cache-store');
 const { createGenerationLimitMiddleware, createRateLimitMiddleware } = require('./shared/rate-limit');
@@ -106,6 +107,7 @@ const htmlCache = createHtmlCacheService({
   CACHE_DIR,
   STORAGE_LIMIT_MB: HTML_CACHE_LIMIT_MB,
 });
+const parserPool = createParserPool();
 
 const { resolveEurlexUrl, resolveReference, resolveReferenceViaCellar, runSparqlQuery } = createReferenceResolver({
   EURLEX_BASE,
@@ -223,13 +225,13 @@ async function loadHtmlLaw(celex, lang) {
 
   let parsed;
   try {
-    parsed = await parseEurlexHtmlToCombined(rawHtml, servedLang);
+    parsed = await parserPool.parseEurlexHtmlToCombined(rawHtml, servedLang);
   } catch (err) {
     if (fromCache && err?.code === 'law_not_found') {
       htmlCache.remove(celex, servedLang);
       rawHtml = await fetchFreshHtml();
       fromCache = false;
-      parsed = await parseEurlexHtmlToCombined(rawHtml, servedLang);
+      parsed = await parserPool.parseEurlexHtmlToCombined(rawHtml, servedLang);
     } else {
       throw err;
     }
@@ -290,6 +292,7 @@ const resolveParsedLaw = createParsedLawResolver({
   fetchAndParseHtmlLaw: fetchAndParseHtmlLawCached,
   CELEX_NAMES,
   fetchConsolidatedVersions,
+  parseFmxXml: parserPool.parseFmxXml,
   fetchConsolidatedVersionsMemo,
   runSparqlQuery,
 });
@@ -312,6 +315,7 @@ registerApiRoutes(app, {
   parseReferenceText,
   parseStructuredReference,
   prepareLawPayload,
+  parseFmxXml: parserPool.parseFmxXml,
   rateLimitMiddleware,
   generationLimitMiddleware,
   generationOriginMiddleware,
@@ -402,6 +406,7 @@ async function gracefulShutdown(signal) {
   try {
     await new Promise((resolve) => server.close(resolve));
     analytics.shutdown();
+    await parserPool.close();
     resolutionCache.persistentStore?.close();
     legalCacheStore.close();
     await closeSharedPlaywrightBrowser();

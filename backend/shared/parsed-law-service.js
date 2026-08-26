@@ -27,9 +27,21 @@ function createParsedLawResolver({
   fetchAndParseHtmlLaw,
   CELEX_NAMES = {},
   fetchConsolidatedVersions,
+  fetchConsolidatedVersionsMemo,
   runSparqlQuery,
+  parseFmxXml: parseFmxXmlImpl = parseFmxXml,
 }) {
   const parsedCache = new Map(); // `${celex}:${lang}:${skipFmxProbe}:${version}` -> parsed law
+
+  // Prefer the memo the server shares with the /consolidated route: both paths
+  // want the same SPARQL answer for the same CELEX, and without it a cold law
+  // view ran the query twice. Falling back to the raw query keeps the resolver
+  // usable on its own (the CLI and unit tests inject it without a memo), and
+  // leaving both out disables consolidation rather than erroring.
+  const loadConsolidatedVersions = fetchConsolidatedVersionsMemo
+    || (typeof fetchConsolidatedVersions === 'function' && typeof runSparqlQuery === 'function'
+      ? (celex) => fetchConsolidatedVersions(celex, runSparqlQuery)
+      : null);
 
   /**
    * Fetches and parses the current consolidated ("as amended") EUR-Lex
@@ -45,16 +57,14 @@ function createParsedLawResolver({
    * document exists, not what to do when it can't tell.
    */
   async function loadConsolidatedLaw(celex, lang) {
-    if (typeof fetchConsolidatedVersions !== 'function' || typeof runSparqlQuery !== 'function') {
-      return null;
-    }
-    const { versions } = await fetchConsolidatedVersions(celex, runSparqlQuery);
+    if (!loadConsolidatedVersions) return null;
+    const { versions } = await loadConsolidatedVersions(celex);
     const { current } = selectConsolidatedVersions(versions);
     if (!current) return null;
 
     const { servePath } = await prepareLawPayload(current.celex, lang);
     const xmlText = fs.readFileSync(servePath, 'utf8');
-    const consolidatedParsed = await parseFmxXml(xmlText);
+    const consolidatedParsed = await parseFmxXmlImpl(xmlText);
     if (!hasParsedLawContent(consolidatedParsed)) return null;
 
     return { parsed: consolidatedParsed, version: { celex: current.celex, date: current.date } };
@@ -72,7 +82,7 @@ function createParsedLawResolver({
       try {
         const { servePath } = await prepareLawPayload(celex, lang);
         const xmlText = fs.readFileSync(servePath, 'utf8');
-        parsed = await parseFmxXml(xmlText);
+        parsed = await parseFmxXmlImpl(xmlText);
       } catch (err) {
         if (!(err instanceof ClientError) || err.statusCode !== 404 || typeof fetchAndParseHtmlLaw !== 'function') {
           throw err;
@@ -86,7 +96,7 @@ function createParsedLawResolver({
     } else {
       const { servePath } = await prepareLawPayload(celex, lang);
       const xmlText = fs.readFileSync(servePath, 'utf8');
-      parsed = await parseFmxXml(xmlText);
+      parsed = await parseFmxXmlImpl(xmlText);
     }
 
     // Keep a handle on the as-adopted parse before anything below may

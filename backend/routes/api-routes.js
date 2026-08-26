@@ -91,7 +91,94 @@ function sendChatError(res, err, context) {
   return res.status(mapped.status).json({ code: mapped.code, message: mapped.message });
 }
 
+// The parser pool normally converts these into ClientError before they reach
+// a route. Keep the API boundary defensive for injected/custom resolvers too:
+// worker loss and queue overload are transient service failures, not 500s.
+function mapParserPoolError(err) {
+  if (err?.code === "worker_lost" || err?.code === "parser_worker_unavailable") {
+    return err instanceof ClientError ? err : new ClientError(
+      "Parser worker was lost; please retry shortly",
+      503,
+      "parser_worker_unavailable",
+    );
+  }
+  if (err?.code === "worker_pool_overloaded" || err?.code === "parser_pool_overloaded") {
+    return err instanceof ClientError ? err : new ClientError(
+      "Parser workers are busy; please retry shortly",
+      503,
+      "parser_pool_overloaded",
+    );
+  }
+  return err;
+}
+
 const CASE_LAW_ROUTE_CACHE_MS = 5 * 60 * 1000;
+const CELLAR_NO_END_OF_VALIDITY = '9999-12-31';
+const STORE_METADATA_FIELDS = ['inForce', 'endOfValidity', 'entryIntoForce', 'eli'];
+
+// Presence, not key presence. `compactSqliteRecord` builds its whitelist as an
+// object literal, so a record predating a field still carries the key with an
+// explicit `undefined` — `hasOwnProperty` says yes and the gate below would
+// open on a record that has no answer, quietly turning "we don't know" into an
+// empty entry-into-force list. `null` is a real answer from Cellar ("no
+// value") and must keep passing.
+function hasValue(object, key) {
+  return object[key] !== undefined;
+}
+
+function normalizeMetadataDate(value) {
+  const text = String(value ?? '').trim();
+  return text && !text.startsWith(CELLAR_NO_END_OF_VALIDITY) ? value : null;
+}
+
+function normalizeMetadataEntryDates(value) {
+  const values = Array.isArray(value) ? value : value == null ? [] : [value];
+  return [...new Set(values
+    .map((entry) => String(entry ?? '').trim())
+    .filter((entry) => entry && !entry.startsWith(CELLAR_NO_END_OF_VALIDITY)))]
+    .sort();
+}
+
+// Keep the API contract at the wire boundary. The SPARQL helper intentionally
+// remains unchanged for the CLI, while cache records store only the earliest
+// entry date as a scalar. The route exposes an array on both paths and removes
+// Cellar's open-ended-validity sentinel before it can reach a client.
+function normalizeMetadataPayload(payload, celex) {
+  return {
+    celex: payload?.celex || celex,
+    entryIntoForce: normalizeMetadataEntryDates(payload?.entryIntoForce),
+    endOfValidity: normalizeMetadataDate(payload?.endOfValidity),
+    inForce: payload?.inForce === true ? true : payload?.inForce === false ? false : null,
+    eli: payload?.eli || null,
+    dateSignature: payload?.dateSignature || null,
+    dateDocument: payload?.dateDocument || null,
+  };
+}
+
+function metadataFromLegalCache(celex, legalCacheStore) {
+  let record;
+  try {
+    record = legalCacheStore?.getByCelex?.(celex);
+  } catch {
+    // The precomputed artifact is optional. A failed lookup must not take down
+    // the metadata endpoint; the live path remains the source of truth.
+    return null;
+  }
+
+  // Records released before an enrichment field existed fall through to the
+  // complete SPARQL response instead of answering with a hole.
+  if (!record || !STORE_METADATA_FIELDS.every((field) => hasValue(record, field))) return null;
+
+  return normalizeMetadataPayload({
+    celex,
+    entryIntoForce: record.entryIntoForce,
+    endOfValidity: record.endOfValidity,
+    inForce: record.inForce,
+    eli: record.eli,
+    dateSignature: null,
+    dateDocument: null,
+  }, celex);
+}
 
 function parsePaginationValue(value, name, { defaultValue, min, max = Infinity }) {
   if (value === undefined || value === null || value === '') return defaultValue;
@@ -115,9 +202,11 @@ function registerApiRoutes(app, deps) {
     citationGraphStore,
     findDownloadUrls,
     findFmx4Uri,
+    fetchConsolidatedVersionsMemo: injectedConsolidatedVersionsMemo,
     parseReferenceText,
     parseStructuredReference,
     prepareLawPayload,
+    parseFmxXml: parseFmxXmlImpl = parseFmxXml,
     rateLimitMiddleware,
     // Guards applied *only* to the four routes that can trigger a billed model
     // call, on top of the generic limiter: a tight per-IP generation budget
@@ -137,6 +226,20 @@ function registerApiRoutes(app, deps) {
     validateCelex,
     validateLang
   } = deps;
+
+  // Consolidated-version lookups are shared with parsed-law resolution — the
+  // parsed route needs the same list to decide whether to serve the "as
+  // amended" text — so the memo is created once in server.js and injected into
+  // both. This fallback keeps the route self-sufficient when it isn't (unit
+  // tests wire their own deps), with the same key and TTL.
+  const fetchConsolidatedVersionsMemo = injectedConsolidatedVersionsMemo || (async (celex) => {
+    const cacheKey = `consolidated:${celex}`;
+    const cached = cacheGet(resolutionCache, cacheKey);
+    if (cached) return cached;
+    const payload = await fetchConsolidatedVersions(celex, runSparqlQuery);
+    cacheSet(resolutionCache, cacheKey, payload, RESOLUTION_CACHE_MS);
+    return payload;
+  });
 
   app.get('/health', (req, res) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
@@ -331,7 +434,7 @@ function registerApiRoutes(app, deps) {
       res.json(parsed);
     } catch (err) {
       if (!res.headersSent) {
-        safeErrorResponse(res, err, 'Failed to fetch and parse law');
+        safeErrorResponse(res, mapParserPoolError(err), 'Failed to fetch and parse law');
       }
     }
   });
@@ -372,13 +475,21 @@ function registerApiRoutes(app, deps) {
         return res.status(400).json({ error: 'Invalid CELEX format' });
       }
 
+      const storePayload = metadataFromLegalCache(celex, legalCacheStore);
+      if (storePayload) {
+        return res.json(storePayload);
+      }
+
       const cacheKey = `metadata:${celex}`;
       const cached = cacheGet(resolutionCache, cacheKey);
       if (cached) {
-        return res.json(cached);
+        return res.json(normalizeMetadataPayload(cached, celex));
       }
 
-      const payload = await fetchMetadata(celex, runSparqlQuery);
+      const payload = normalizeMetadataPayload(
+        await fetchMetadata(celex, runSparqlQuery),
+        celex,
+      );
       cacheSet(resolutionCache, cacheKey, payload, RESOLUTION_CACHE_MS);
       res.json(payload);
     } catch (err) {
@@ -438,15 +549,7 @@ function registerApiRoutes(app, deps) {
         return res.status(400).json({ error: 'Invalid CELEX format' });
       }
 
-      const cacheKey = `consolidated:${celex}`;
-      const cached = cacheGet(resolutionCache, cacheKey);
-      if (cached) {
-        return res.json(cached);
-      }
-
-      const payload = await fetchConsolidatedVersions(celex, runSparqlQuery);
-      cacheSet(resolutionCache, cacheKey, payload, RESOLUTION_CACHE_MS);
-      res.json(payload);
+      res.json(await fetchConsolidatedVersionsMemo(celex));
     } catch (err) {
       safeErrorResponse(res, err, 'Failed to fetch consolidated versions');
     }
@@ -547,7 +650,7 @@ function registerApiRoutes(app, deps) {
       if (err instanceof ChatProviderError) {
         return sendChatError(res, err, 'Failed to generate recital titles');
       }
-      safeErrorResponse(res, err, 'Failed to generate recital titles');
+      safeErrorResponse(res, mapParserPoolError(err), 'Failed to generate recital titles');
     }
   });
 
@@ -602,7 +705,7 @@ function registerApiRoutes(app, deps) {
               name: CELEX_NAMES[celex] || null,
               format: 'combined-v1',
               source: 'fmx',
-              ...(await parseFmxXml(rawText)),
+              ...(await parseFmxXmlImpl(rawText)),
             };
           }
           return resolveParsedLaw(celex, lang, { skipFmxProbe: true });
@@ -628,7 +731,7 @@ function registerApiRoutes(app, deps) {
       if (err instanceof ChatProviderError) {
         return sendChatError(res, err, 'Failed to generate law summary');
       }
-      safeErrorResponse(res, err, 'Failed to generate law summary');
+      safeErrorResponse(res, mapParserPoolError(err), 'Failed to generate law summary');
     }
   });
 
@@ -689,7 +792,7 @@ function registerApiRoutes(app, deps) {
       if (/Article .+ not found/.test(err?.message || '')) {
         return res.status(404).json({ error: err.message, code: 'article_not_found' });
       }
-      safeErrorResponse(res, err, 'Failed to generate article case-law digest');
+      safeErrorResponse(res, mapParserPoolError(err), 'Failed to generate article case-law digest');
     }
   });
 
@@ -741,7 +844,7 @@ function registerApiRoutes(app, deps) {
       if (err instanceof ChatProviderError) {
         return sendChatError(res, err, 'Failed to generate case-law digest');
       }
-      safeErrorResponse(res, err, 'Failed to generate case-law digest');
+      safeErrorResponse(res, mapParserPoolError(err), 'Failed to generate case-law digest');
     }
   });
 

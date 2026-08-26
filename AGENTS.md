@@ -67,6 +67,7 @@ Nearly every expensive operation — Formex parsing, TF‑IDF recital mapping, C
 | Article-digest JSON schema / prompt | `articleDigest.schemaVersion` / `promptVersion` | `backend/shared/digest-cache-version.json` (shared by backend and frontend) |
 | Whole-law digest JSON schema / prompt | `caseLawDigest.schemaVersion` / `promptVersion` | `backend/shared/digest-cache-version.json` (shared by backend and frontend) |
 | Persisted analytics shape (`analytics.json` fields) | `ANALYTICS_SCHEMA_VERSION` | `backend/shared/analytics.js` |
+| Cellar resolution cache SQLite table/value shape | `RESOLUTION_CACHE_SCHEMA_VERSION` | `backend/shared/resolution-cache-store.js` (independent of `SQLITE_SCHEMA_VERSION`; mismatches reset only this cache table) |
 | Runtime SQLite tables/indexes | `SQLITE_SCHEMA_VERSION` | `backend/search/legal-cache-store.js`, `backend/search/build-sqlite-data.js`, and `backend/search/citation-graph-store.js` (three copies, kept in lock-step) |
 | Full-text `units` schema / builder output shape | `FULLTEXT_SCHEMA_VERSION` | `backend/search/fulltext-index-build.js`, with a lock-step copy in `backend/search/legal-cache-store.js` |
 | Precomputed data republished as a new GitHub Release | `DATA_RELEASE_TAG` → `data-YYYY-MM-DD.NN` | `backend/Dockerfile` |

@@ -13,7 +13,13 @@
  *  3. Textual:    Recital reference patterns in each language
  */
 
-import { getLangConfig, buildMeansRegex, buildFallbackDefRegex, buildUnquotedMeansRegex } from "./languages.mjs";
+import {
+  getLangConfig,
+  buildMeansRegex,
+  buildFallbackDefRegex,
+  buildUnquotedMeansRegex,
+  buildInlineDefRegex,
+} from "./languages.mjs";
 import { buildEurlexSearchUrl } from "./url.mjs";
 import {
   ACT_CELEX_MAP,
@@ -33,7 +39,8 @@ import {
  * Bump this whenever the parser output changes (new fields, bug fixes, etc.)
  * so that cached parsed results are automatically re-parsed from raw XML.
  */
-export const PARSER_VERSION = 23;
+export const PARSER_VERSION = 24;
+export const MAX_DEFINITION_CONTINUATION_PARAGRAPHS = 8;
 
 // ---------------------------------------------------------------------------
 // FMX → HTML conversion helpers
@@ -386,10 +393,10 @@ function appendFootnotes(html, ctx) {
   return `${html}<section class="fmx-footnotes"><ol>${footnotesHtml}</ol></section>`;
 }
 
-function escapeHtml(s) {
+export function escapeHtml(s) {
   // Quotes must be escaped too: output lands inside double-quoted attributes
   // (data-marker, data-oj-*), where a bare " breaks out of the attribute.
-  return s
+  return String(s || "")
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
@@ -443,6 +450,12 @@ function buildRecitalRefRe(lang) {
     "g"
   );
 }
+
+// A malformed source reference must not turn into an unbounded allocation.
+// Legal acts can cite long ranges, but no real recital range is anywhere near
+// this size; keeping the first thousand entries preserves useful navigation
+// while bounding a corrupted endpoint such as "1 to 999999999".
+const MAX_RECITAL_RANGE = 1000;
 
 /**
  * Cross-law reference patterns (language-independent — these abbreviations appear
@@ -1096,7 +1109,8 @@ export function extractCrossRefsFromText(text, lang) {
   while ((m = recRe.exec(text)) !== null) {
     const from = parseInt(m[1], 10);
     const to = m[2] ? parseInt(m[2], 10) : from;
-    for (let i = from; i <= to; i++) {
+    const boundedTo = Math.min(to, from + MAX_RECITAL_RANGE - 1);
+    for (let i = from; i <= boundedTo; i++) {
       recitalRefs.push({ type: "recital", target: String(i), raw: m[0] });
     }
   }
@@ -1516,6 +1530,7 @@ export function parseFmxToCombined(xmlText) {
   const lang = getLangConfig(langCode);
   const meansRegex = buildMeansRegex(lang);
   const fallbackDefRegex = buildFallbackDefRegex(lang);
+  const inlineDefRegex = buildInlineDefRegex(lang);
   // Last-resort, unquoted-but-verb-anchored pattern (REACH, 32006R1907,
   // Article 3: "substance: means a chemical element …" — no quote marks
   // anywhere). Null for verb-first languages (FR, IT, ES, PT), whose
@@ -1888,8 +1903,6 @@ export function parseFmxToCombined(xmlText) {
   // to ordinary prose. Mirrors eurlex-html-parser.js's
   // MAX_DEFINITION_CONTINUATION_PARAGRAPHS for the same reason: unbounded
   // absorption would eventually swallow the rest of the article.
-  const MAX_DEFINITION_CONTINUATION_PARAGRAPHS = 8;
-
   function definitionsInArticle(artEl, artNum) {
     const found = [];
     // The most recently matched entry within the current continuation group
@@ -1988,6 +2001,18 @@ export function parseFmxToCombined(xmlText) {
           // actual trailing definition text.
           if (term && (definition || quoted)) {
             matched = makeDefinition(term, definition, quoted);
+          }
+        } else {
+          // A definitions article may introduce its first term in prose
+          // ("For the purposes of this Regulation 'term' means …") instead
+          // of putting the quoted term at the start of the paragraph. The
+          // unanchored grammar is still quote- and verb-dependent, so it does
+          // not turn an incidental occurrence of "means" into a definition.
+          inlineDefRegex.lastIndex = 0;
+          const inlineMatch = inlineDefRegex.exec(text);
+          if (inlineMatch?.[1]) {
+            const definition = text.slice(inlineMatch.index + inlineMatch[0].length).trim();
+            if (definition) matched = makeDefinition(inlineMatch[1].trim(), definition, true);
           }
         }
       }

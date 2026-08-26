@@ -1802,6 +1802,20 @@ describe("definition extraction beyond the titled definitions article", () => {
     ]);
   });
 
+  it("does not treat separator-free means prose as definitions", () => {
+    const result = parseFmxToCombined(actWithArticles(`
+      <ARTICLE IDENTIFIER="003">
+        <TI.ART>Article 3</TI.ART>
+        <STI.ART>Definitions</STI.ART>
+        <ALINEA>
+          <P>technical means shall ensure compliance;</P>
+          <P>The purposes and means of processing shall be determined.</P>
+        </ALINEA>
+      </ARTICLE>`));
+
+    expect(result.definitions).toEqual([]);
+  });
+
   it("does not treat quoted amendment targets as definitions", () => {
     const result = parseFmxToCombined(actWithArticles(`
       <ARTICLE IDENTIFIER="002">

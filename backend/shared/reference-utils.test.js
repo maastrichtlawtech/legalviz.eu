@@ -54,11 +54,19 @@ test('parseReferenceText resolves "No <number>/<year>" for implementing/delegate
 test('parseReferenceText keeps post-2015 precedence when both numbering eras appear', () => {
   // The year-first pattern must still win for the leading post-2015 reference
   // even though a pre-2015 "No <number>/<year>" reference follows it in the
-  // same text -- the negative lookbehind only suppresses the "No " match, it
-  // does not reorder which pattern is tried first.
+  // same text -- candidates are compared by their position in the text, so
+  // the later number-first match does not override the earlier one.
   const parsed = parseReferenceText('Regulation (EU) 2016/679 amending Regulation No 45/2001');
   assert.equal(parsed.year, '2016');
   assert.equal(parsed.number, '679');
+});
+
+test('parseReferenceText rejects a three-digit first component without No', () => {
+  // Without an explicit "No", this is not a number-first reference, and its
+  // three-digit first component is not a valid year-first year.
+  const parsed = parseReferenceText('Council Decision 243/2012/EU');
+  assert.equal(parsed.year, null);
+  assert.equal(parsed.number, null);
 });
 
 test('parseReferenceText resolves a 2-digit year-first reference with an act suffix', () => {
@@ -80,6 +88,14 @@ test('parseReferenceText uses No to disambiguate a number-first 2-digit referenc
   assert.equal(parsed.year, '2013');
   assert.equal(parsed.number, '93');
   assert.equal(parsed.suffix, 'EEC');
+});
+
+test('parseReferenceText selects the earliest reference across numbering grammars', () => {
+  const parsed = parseReferenceText('Decision No 243/2012/EU amending Directive 95/46/EC');
+  assert.equal(parsed.actType, 'decision');
+  assert.equal(parsed.year, '2012');
+  assert.equal(parsed.number, '243');
+  assert.equal(parsed.suffix, 'EU');
 });
 
 test('parseReferenceText treats a bare 2-digit reference as year-first', () => {

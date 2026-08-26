@@ -897,20 +897,21 @@ export function buildFallbackDefRegex(lang) {
  * never produce an unquoted "term: verb" shape, so this returns null for
  * them rather than emitting a pattern that can never match.
  *
- * Capture group 1 = the term text; the trailing meansVerb (and an optional
- * colon/comma before the definition continues under a nested list, the same
- * empty-group-2 shape buildMeansRegex documents as expected) is consumed.
+ * Capture group 1 = the term text; the trailing meansVerb and an optional
+ * colon/comma before the definition continues under a nested list (the same
+ * empty-group-2 shape buildMeansRegex documents as expected) are consumed.
  */
 export function buildUnquotedMeansRegex(lang) {
   if (lang.definitionFormat === "verb_first") return null;
   const verb = `(?:${lang.meansVerb})`;
   // Term sanity mirrors buildColonDefRegex: no sentence punctuation inside
   // the term, and a length cap so a stray verb deep in a long sentence that
-  // happens to contain the meansVerb can't retroactively become a "term". The
-  // colon is optional because older English acts sometimes put the verb directly
-  // after the bare term ("Depreciation shall be understood as …").
+  // happens to contain the meansVerb can't retroactively become a "term". A
+  // colon is required before means/shall mean; older English acts sometimes
+  // omit it only in the specific "shall be understood as" construction.
+  const separator = `(?::\\s*${verb}|shall\\s+be\\s+understood\\s+as)`;
   return new RegExp(
-    `^([^:;.,\\u2013\\u2014]{2,60}?)\\s*(?::\\s*)?${verb}\\s*[:,]?(?:\\s+|$)`,
+    `^([^:;.,\\u2013\\u2014]{2,60}?)\\s*${separator}\\s*[:,]?(?:\\s+|$)`,
     "i"
   );
 }

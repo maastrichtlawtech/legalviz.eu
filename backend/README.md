@@ -63,6 +63,51 @@ npm run build:definition-index
 npm run build:sqlite-data
 ```
 
+### Repairing a duplicated corpus
+
+Corpora harvested before the `findDownloadUrls` dedupe (issue #219) hold each
+act two or three times over in one file: Cellar lists the same physical
+`.fmx4.<lang>.xml` under several manifestation URIs, the build copy of
+`findDownloadUrls` returned all of them, and `fetchCombinedFmxXml` fetched and
+concatenated each. 24,132 of the 28,009 files in `corpus-2026-08-21.01` are
+affected, and the duplicates flow into every corpus-derived artifact that does
+not key its units by number — the shipped full-text index carried 331,421
+excess rows (26.5%).
+
+Fixing the harvest does not fix the corpus, because enrichment is corpus-first
+and never refetches a file it already has. Sweep it instead:
+
+```bash
+npm run repair:corpus -- --dry-run        # report only, writes nothing
+npm run repair:corpus                     # split each file on its top-level
+                                          # block boundaries, keep unique blocks
+npm run repair:corpus -- --limit 5000     # in slices; resumable via the journal
+```
+
+The sweep is idempotent, journals progress to
+`search/data/corpus-dedupe-progress.json` so it resumes after an interrupt
+(`--no-resume` ignores the journal), writes atomically, and leaves any file it
+cannot split with certainty untouched. It makes no assumption about the root
+element — 61 files are legitimately rooted at `GENERAL` or `ANNEX`, and block
+order is not guaranteed.
+
+Exact-block dedupe is a **floor** in principle, not a proof: Cellar can list
+the same act under manifestations that differ in incidental markup, which no
+whole-block comparison catches — `32016D0298` keeps two ACT blocks (8,412 and
+8,157 bytes) and its recitals still parse twice. That one is not a repair
+shortfall, though: the serving path deduplicates on the same key, so production
+`/api/laws/32016D0298/parsed` shows the same doubled recitals. Over a 250-act
+spread the repair cut recitals from 4,775 to 1,684 and annexes from 822 to 303,
+and left **one** act with a repeated recital where 209 of the 250 had one
+before; on 22 acts spot-checked against production `/parsed`, the repaired
+corpus matched recital, article, definition and annex counts exactly. Only a
+re-harvest through the fixed `findDownloadUrls` verifies against Cellar itself.
+
+Rebuild the search cache, definition index, citation graph and full-text index
+against the repaired corpus afterwards — none of them re-derive themselves —
+then publish the new artifacts and bump `DATA_RELEASE_TAG` /
+`FULLTEXT_RELEASE_TAG` in `backend/Dockerfile` as usual.
+
 ## CLI
 
 The `eurlex` command exposes the same functionality as the API server so you can work with EU legislation locally without running the server.

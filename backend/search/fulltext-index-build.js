@@ -29,7 +29,7 @@ const { readJsonAsset, sha256File } = require("./build-sqlite-data");
 const { DEFAULT_SEARCH_CACHE_PATH } = require("./search-index");
 const { stripXmlTags, wrapForParsing } = require("./search-build");
 const { normalizeParserStamp } = require("./parser-stamp");
-const { runPool: runWorkerPool } = require("../shared/worker-pool");
+const { WorkerLossError, runPool: runWorkerPool } = require("../shared/worker-pool");
 
 const gunzip = promisify(zlib.gunzip);
 
@@ -247,6 +247,7 @@ function runPool(initialBatches, onResult, options = {}) {
       }
     },
     onWorkerFailure: (running, batch, error) => {
+      if (!(error instanceof WorkerLossError)) throw error;
       onResult({
         units: [],
         failures: [{ celex: celexForCorpusFile(batch[0]), type: "worker_failure", error: String(error?.message || error) }],

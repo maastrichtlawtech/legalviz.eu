@@ -43,6 +43,8 @@ const LANG_3_TO_2 = {
 
 let helperPromise = null;
 const requireFromHere = createRequire(__filename);
+let escapeHtml;
+let maxDefinitionContinuationParagraphs;
 const DEFAULT_PLAYWRIGHT_RETRIES = 3;
 const DEFAULT_BROWSER_IDLE_MS = 30_000; // close browser after 30s idle to save RAM
 let sharedPlaywrightBrowser = null;
@@ -55,15 +57,6 @@ function normalizeText(text) {
     .replace(/\u00a0/g, " ")
     .replace(/\s+/g, " ")
     .trim();
-}
-
-function escapeHtml(text) {
-  return String(text || "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
 }
 
 function stripLeadingMarker(text, markerRegex) {
@@ -258,8 +251,6 @@ function extractInlineDefinitions(text, matchers, sourceArticle) {
 
 // How many paragraphs an open "'term' means:" may absorb before we assume the
 // definition ended and we are just eating the rest of the article.
-const MAX_DEFINITION_CONTINUATION_PARAGRAPHS = 8;
-
 function parseDefinitionParagraphs(paragraphs, sourceArticle, matchers) {
   const items = [];
   let pendingPoint = null;
@@ -311,7 +302,7 @@ function parseDefinitionParagraphs(paragraphs, sourceArticle, matchers) {
       continue;
     }
 
-    if (open && open.body.length < MAX_DEFINITION_CONTINUATION_PARAGRAPHS) {
+    if (open && open.body.length < maxDefinitionContinuationParagraphs) {
       const line = item.sourcePoint ? `(${item.sourcePoint}) ${item.text}` : item.text;
       // Some renderings emit each sub-point twice (tabulated, then flattened).
       if (line !== open.body[open.body.length - 1]) open.body.push(line);
@@ -1283,6 +1274,8 @@ async function loadHelpers() {
         injectCrossRefLinks: parserMod.injectCrossRefLinks,
         extractCrossRefsFromText: parserMod.extractCrossRefsFromText,
         repairCorroboratedTruncatedInstrumentIdentifiers: parserMod.repairCorroboratedTruncatedInstrumentIdentifiers,
+        escapeHtml: parserMod.escapeHtml,
+        maxDefinitionContinuationParagraphs: parserMod.MAX_DEFINITION_CONTINUATION_PARAGRAPHS,
         // This parser reads a different document format, but its cross-references come
         // from the Formex parser's grammar above — so PARSER_VERSION versions this
         // output too, and is taken from there rather than declared a second time.
@@ -1303,7 +1296,11 @@ async function parseEurlexHtmlToCombined(htmlText, lang = "ENG") {
     extractCrossRefsFromText,
     repairCorroboratedTruncatedInstrumentIdentifiers,
     PARSER_VERSION,
+    escapeHtml: parserEscapeHtml,
+    maxDefinitionContinuationParagraphs: parserMaxDefinitionContinuationParagraphs,
   } = await loadHelpers();
+  escapeHtml = parserEscapeHtml;
+  maxDefinitionContinuationParagraphs = parserMaxDefinitionContinuationParagraphs;
   const langConfig = getLangConfig(langCode);
 
   // Populate the crossReferences map (empty as built by each branch) so the

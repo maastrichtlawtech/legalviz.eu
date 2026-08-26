@@ -17,6 +17,7 @@ const { execFileSync } = require("child_process");
 
 const { parseFmxXml } = require("../shared/fmx-parser-node.js");
 const { parseEurlexHtmlToCombined } = require("../shared/eurlex-html-parser.js");
+const { getLangConfig } = require("../shared/formex-parser/languages.mjs");
 const { DEFAULT_PROGRESS_FILE, recordAudit } = require("./corpus-audit-progress.js");
 const { listCorpusFiles: listCorpusEntries } = require("./corpus-files");
 
@@ -81,12 +82,64 @@ function emptyStats() {
     invalidInternalAnchors: 0,
     explicitUnresolved: 0,
     missingResolvedTargets: 0,
+    definitions: 0,
+    definitionArticles: 0,
+    definitionArticlesWithoutDefinitions: 0,
+    malformedDefinitionTerms: 0,
     samples: [],
+    definitionSignalSamples: [],
   };
 }
 
 function addSample(stats, text) {
   if (stats.samples.length < 12) stats.samples.push(text);
+}
+
+function addDefinitionSignalSample(stats, text) {
+  if (stats.definitionSignalSamples.length < 10) stats.definitionSignalSamples.push(text);
+}
+
+// Keep this deliberately structural. A malformed term is prose-shaped when it
+// starts with a point marker, bullet, or a finite-verb clause; a word-count
+// cutoff would flag legitimate long multilingual terms.
+const DEFINITION_POINT_SHAPE = /^\(?\s*(?:[a-z]{1,2}|\d{1,3})\s*[).]\s+/i;
+const DEFINITION_DASH_SHAPE = /^[-\u2010-\u2015]\s*/;
+const DEFINITION_VERB_SHAPE = /^(?:\S+\s+){1,}\b(?:is|are|was|were|be|been|being|has|have|had|do|does|did|can|could|shall|should|may|might|must|will|would|means?|includes?|consists?|concerns?|applies?|defines?|refers?|provides?|requires?|states?|ensures?|establishes?|determines?|represents?|covers?|specifies?|indicates?|allows?|prohibits?|permits?|entails?|follows?)\b/i;
+
+function isMalformedDefinitionTerm(term) {
+  const value = String(term || "").trim();
+  return DEFINITION_POINT_SHAPE.test(value)
+    || DEFINITION_DASH_SHAPE.test(value)
+    || DEFINITION_VERB_SHAPE.test(value);
+}
+
+function inspectDefinitionHealth(parsed, file, stats) {
+  const lang = getLangConfig(parsed.langCode || "EN");
+  const definitionsByArticle = new Map();
+  for (const definition of parsed.definitions || []) {
+    const key = String(definition.sourceArticle);
+    definitionsByArticle.set(key, (definitionsByArticle.get(key) || 0) + 1);
+    stats.definitions += 1;
+    if (isMalformedDefinitionTerm(definition.term)) {
+      stats.malformedDefinitionTerms += 1;
+      addDefinitionSignalSample(
+        stats,
+        `${path.basename(file)} Article ${key}: malformed term ${JSON.stringify(definition.term)}`,
+      );
+    }
+  }
+
+  for (const article of parsed.articles || []) {
+    if (!lang.definition?.test(article.article_title || "")) continue;
+    stats.definitionArticles += 1;
+    if (!definitionsByArticle.has(String(article.article_number))) {
+      stats.definitionArticlesWithoutDefinitions += 1;
+      addDefinitionSignalSample(
+        stats,
+        `${path.basename(file)} Article ${article.article_number}: title declares definitions but none were extracted`,
+      );
+    }
+  }
 }
 
 function inspectParsedLaw(parsed, file, stats, knownCelex) {
@@ -130,6 +183,8 @@ function inspectParsedLaw(parsed, file, stats, knownCelex) {
       }
     }
   }
+
+  inspectDefinitionHealth(parsed, file, stats);
 }
 
 async function auditFiles(kind, files, knownCelex = new Set()) {
@@ -156,10 +211,11 @@ async function auditFiles(kind, files, knownCelex = new Set()) {
 }
 
 function mergeStats(target, source) {
-  for (const key of ["scanned", "empty", "oversized", "errors", "refs", "externalInstitutional", "externalNational", "externalCaseLaw", "invalidInternalRefs", "invalidInternalAnchors", "explicitUnresolved", "missingResolvedTargets"]) {
+  for (const key of ["scanned", "empty", "oversized", "errors", "refs", "externalInstitutional", "externalNational", "externalCaseLaw", "invalidInternalRefs", "invalidInternalAnchors", "explicitUnresolved", "missingResolvedTargets", "definitions", "definitionArticles", "definitionArticlesWithoutDefinitions", "malformedDefinitionTerms"]) {
     target[key] += source[key] || 0;
   }
   for (const sample of source.samples || []) addSample(target, sample);
+  for (const sample of source.definitionSignalSamples || []) addDefinitionSignalSample(target, sample);
   return target;
 }
 

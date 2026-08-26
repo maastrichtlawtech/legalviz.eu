@@ -36,7 +36,7 @@ const EN = {
   // Pre-2000 drafting says "'term' shall mean \u2026" where modern acts say
   // "'term' means \u2026" \u2014 both spellings appear across the corpus, so the verb
   // has to cover them or every older directive's definitions article is lost.
-  meansVerb: "shall\\s+mean|means",
+  meansVerb: "shall\\s+mean|means|shall\\s+be\\s+understood\\s+as",
   definitionFormat: "term_first",
   titleSplit: /\s+of\s+/i,
   parliamentSplit: /\s+of the European Parliament\b/i,
@@ -832,6 +832,14 @@ export function buildInlineDefRegex(lang) {
  */
 export function buildFallbackDefRegex(lang) {
   const q = quoteCharClass(lang);
+  // A quoted amendment sentence can look exactly like a fallback definition
+  // when the source wraps the text being replaced in QUOT.START/QUOT.END:
+  // "In such cases, one of the following entries shall be added ...". A
+  // finite-verb clause is prose, not a noun-phrase term, so reject it before
+  // the broad fallback body can consume it. This is deliberately a shape
+  // guard, not a word-count cutoff: legitimate multilingual terms can be long.
+  const proseVerb = "(?:is|are|was|were|be|been|being|has|have|had|do|does|did|can|could|shall|should|may|might|must|will|would)";
+  const proseClause = `${termBody(q)}*\\b${proseVerb}\\b`;
 
   // For LT and SV the term is NOT wrapped in QUOT markers.  Detect them by
   // code so we don't need to add per-language flags.
@@ -846,8 +854,11 @@ export function buildFallbackDefRegex(lang) {
 
   // All other languages: term is surrounded by quote characters from quoteChars.
   // After the closing quote there may be: colon, en-dash (–), comma, or nothing.
+  // A quoted point label such as "14. DENMARK — FRANCE" is an amendment target,
+  // not a defined term. Reject those labels here so a run of quoted amendments
+  // cannot satisfy the untitled-article corroboration rule by itself.
   return new RegExp(
-    `^[${q}](${termBody(q)}+)[${q}]\\s*[:\\u2013\\u2014,]?\\s*`,
+    `^[${q}](?![-\\u2010-\\u2015]|\\(?\\s*(?:[a-z]{1,2}|\\d{1,3})\\s*[).]\\s+|${proseClause})(${termBody(q)}+)[${q}]\\s*[:\\u2013\\u2014,]?\\s*`,
     "iu"
   );
 }
@@ -859,6 +870,7 @@ export function buildFallbackDefRegex(lang) {
  *
  *   substance: means a chemical element and its compounds in the natural
  *   state or obtained by any manufacturing process, …
+ *   Depreciation shall be understood as the accounting estimate …
  *   article: means an object which during production is given a special
  *   shape, surface or design which determines its function …
  *
@@ -885,18 +897,21 @@ export function buildFallbackDefRegex(lang) {
  * never produce an unquoted "term: verb" shape, so this returns null for
  * them rather than emitting a pattern that can never match.
  *
- * Capture group 1 = the term text; the trailing meansVerb (and an optional
- * colon/comma before the definition continues under a nested list, the same
- * empty-group-2 shape buildMeansRegex documents as expected) is consumed.
+ * Capture group 1 = the term text; the trailing meansVerb and an optional
+ * colon/comma before the definition continues under a nested list (the same
+ * empty-group-2 shape buildMeansRegex documents as expected) are consumed.
  */
 export function buildUnquotedMeansRegex(lang) {
   if (lang.definitionFormat === "verb_first") return null;
   const verb = `(?:${lang.meansVerb})`;
   // Term sanity mirrors buildColonDefRegex: no sentence punctuation inside
-  // the term, and a length cap so a stray colon deep in a long sentence that
-  // happens to contain the meansVerb can't retroactively become a "term".
+  // the term, and a length cap so a stray verb deep in a long sentence that
+  // happens to contain the meansVerb can't retroactively become a "term". A
+  // colon is required before means/shall mean; older English acts sometimes
+  // omit it only in the specific "shall be understood as" construction.
+  const separator = `(?::\\s*${verb}|shall\\s+be\\s+understood\\s+as)`;
   return new RegExp(
-    `^([^:;.,\\u2013\\u2014]{2,60}?)\\s*:\\s*${verb}\\s*[:,]?(?:\\s+|$)`,
+    `^([^:;.,\\u2013\\u2014]{2,60}?)\\s*${separator}\\s*[:,]?(?:\\s+|$)`,
     "i"
   );
 }

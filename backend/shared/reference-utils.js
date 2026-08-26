@@ -11,36 +11,57 @@ function parseReferenceText(text = '') {
   const typeMatch = lower.match(/\b(regulation|directive|decision)\b/);
   const actType = typeMatch ? typeMatch[1] : null;
 
+  const expandYear = (value) => {
+    const year = String(value);
+    if (!/^(?:\d{2}|\d{4})$/.test(year)) return null;
+    if (year.length === 4) return year;
+    // Two-digit years occur in the old OJ reference form (89/552/EEC), but
+    // the same form was still used for early-2000s acts (01/83/EC). Use the
+    // conventional 50-year pivot while the explicit "No" grammar below
+    // continues to identify number-first references unambiguously.
+    const numeric = Number.parseInt(year, 10);
+    return String(numeric >= 50 ? 1900 + numeric : 2000 + numeric);
+  };
+
   // EU numbering has two eras: post-2015 acts are "year/number" (e.g. "(EU)
   // 2016/679"), pre-2015 acts are "No number/year" (e.g. "(EC) No 1924/2006").
-  // Both shapes look like "\d+/\d+", so the year-first pattern below would
-  // otherwise match a pre-2015 reference too and invert year/number. We keep
-  // this pattern first (not reordered after the "No " pattern) because text
-  // can contain both forms and the first pattern must keep winning for the
-  // post-2015 act (see the "mixed text" regression test) -- instead the
-  // negative lookbehind refuses the match when the digit run is immediately
-  // preceded by "No " (or "No." -- older OJ renderings abbreviate with a
-  // period), leaving that text for the second pattern to catch.
+  // Both shapes look like "\d+/\d+", so either grammar can find a candidate
+  // in the same text. Consider both matches together so the reference
+  // occurring first in the text wins; the grammar that matched determines
+  // whether its fields are year-first or number-first.
   const numberPatterns = [
-    /\b(?:\((?:eu|ec|eec|euratom)\)\s*)?(?<!\bno\.?\s)(\d{4})\/(\d{1,4})\b/i,
-    /\bno\.?\s+(\d{1,4})\/(\d{4})\b/i,
+    {
+      pattern: /\b(?:\((?:eu|ec|eec|euratom)\)\s*)?((?:\d{2}|\d{4}))\/(\d{1,4})(?:\/([a-z]+))?\b/i,
+      order: 'year-first',
+    },
+    {
+      pattern: /\bno\.?\s+(\d{1,4})\/((?:\d{2}|\d{4}))(?:\/([a-z]+))?\b/i,
+      order: 'number-first',
+    },
   ];
 
   let year = null;
   let number = null;
+  let suffix = null;
 
-  for (const pattern of numberPatterns) {
-    const match = normalized.match(pattern);
-    if (!match) continue;
+  const candidate = numberPatterns
+    .map(({ pattern, order }) => {
+      const match = normalized.match(pattern);
+      return match ? { match, order } : null;
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.match.index - b.match.index)[0];
 
-    if (pattern === numberPatterns[0]) {
-      year = match[1];
+  if (candidate) {
+    const { match, order } = candidate;
+    if (order === 'year-first') {
+      year = expandYear(match[1]);
       number = match[2];
     } else {
-      year = match[2];
+      year = expandYear(match[2]);
       number = match[1];
     }
-    break;
+    suffix = match[3] ? match[3].toUpperCase() : null;
   }
 
   const types = actType ? [actType] : ['regulation', 'directive', 'decision'];
@@ -52,6 +73,7 @@ function parseReferenceText(text = '') {
     types,
     year,
     number,
+    suffix,
   };
 }
 

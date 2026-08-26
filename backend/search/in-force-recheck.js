@@ -7,8 +7,8 @@
 // carries it, so no act's status is ever re-asked after its first harvest — a
 // repealed act keeps reading `inForce: true` forever.
 //
-// This tool clears `inForce`, `endOfValidity`, `entryIntoForce` and `eea` and
-// asks Cellar again, for every act in the cache.
+// This tool clears `inForce`, `endOfValidity` and `entryIntoForce` and asks
+// Cellar again, for every act in the cache.
 //
 // It deliberately does NOT skip acts already reading `inForce: false`, however
 // tempting that is: they are ~63% of the corpus (50,397 of 80,535 in data-v12),
@@ -60,15 +60,14 @@ function classifyFlip(before, after) {
   return null;
 }
 
-// Any difference in any of the four fields, not just a true<->false flip: a
-// status going to or from `null`, an end-of-validity date being corrected, an
-// entry-into-force date appearing or moving, or EEA changing, is a real change
-// to the published data and must be written.
+// Any difference in any of the three fields, not just a true<->false flip: a
+// status going to or from `null`, an end-of-validity date being corrected, or
+// an entry-into-force date appearing or moving, is a real change to the
+// published data and must be written.
 function hasChanged(before, after) {
   return before.inForce !== after.inForce
     || before.endOfValidity !== after.endOfValidity
-    || before.entryIntoForce !== after.entryIntoForce
-    || before.eea !== after.eea;
+    || before.entryIntoForce !== after.entryIntoForce;
 }
 
 // A record that had a decided status and came back without one. Counted apart
@@ -97,15 +96,13 @@ async function runRecheck(records, options = {}) {
     inForce: record.inForce,
     endOfValidity: record.endOfValidity,
     entryIntoForce: record.entryIntoForce,
-    eea: record.eea,
   }]));
-  // Defeats the enrichment's "already knows this one" skip. All four go, or
+  // Defeats the enrichment's "already knows this one" skip. All three go, or
   // the skip fires on whichever one survives and the record is never re-asked.
   for (const record of targets) {
     delete record.inForce;
     delete record.endOfValidity;
     delete record.entryIntoForce;
-    delete record.eea;
   }
   log(`re-checking ${targets.length} records`);
 
@@ -206,7 +203,7 @@ function writeCache(store, { gz = true } = {}) {
 }
 
 // Same regression guard as fetch-in-force.js: this tool only ever touches
-// inForce/endOfValidity/entryIntoForce/eea, so date/eurovoc coverage must never
+// inForce/endOfValidity/entryIntoForce, so date/eurovoc coverage must never
 // move. A drop means this ran against the wrong cache.
 function assertEnrichmentIntact(records, before) {
   const dated = records.filter((r) => r.date).length;

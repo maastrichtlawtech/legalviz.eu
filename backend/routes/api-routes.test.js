@@ -531,10 +531,9 @@ const METADATA_KEYS = [
   "eli",
   "dateSignature",
   "dateDocument",
-  "eea",
 ];
 
-function metadataBindings({ inForce = "1", endOfValidity = "9999-12-31", entryDates = ["2016-05-24"], eea = "true", includeExtended = true } = {}) {
+function metadataBindings({ inForce = "1", endOfValidity = "9999-12-31", entryDates = ["2016-05-24"], includeExtended = true } = {}) {
   return entryDates.map((entryDate, index) => ({
     dateEntryIntoForce: { value: entryDate },
     dateEndOfValidity: index === 0 ? { value: endOfValidity } : undefined,
@@ -542,7 +541,6 @@ function metadataBindings({ inForce = "1", endOfValidity = "9999-12-31", entryDa
     eli: index === 0 ? { value: "http://data.europa.eu/eli/reg/2016/679/oj" } : undefined,
     dateSignature: index === 0 && includeExtended ? { value: "2016-04-27" } : undefined,
     dateDocument: index === 0 && includeExtended ? { value: "2016-04-27" } : undefined,
-    eea: index === 0 ? { value: eea } : undefined,
   }));
 }
 
@@ -564,7 +562,6 @@ test("GET /api/laws/:celex/metadata serves a complete store record with the SPAR
         inForce: true,
         endOfValidity: "9999-12-31",
         entryIntoForce: "2016-05-24",
-        eea: true,
       }),
     },
     runSparqlQuery: async () => {
@@ -585,7 +582,6 @@ test("GET /api/laws/:celex/metadata serves a complete store record with the SPAR
     eli: "http://data.europa.eu/eli/reg/2016/679/oj",
     dateSignature: null,
     dateDocument: null,
-    eea: true,
   });
   assert.equal(sparqlCalls, 0);
 });
@@ -614,7 +610,6 @@ test("GET /api/laws/:celex/metadata falls back to SPARQL on a store miss and mem
     eli: "http://data.europa.eu/eli/reg/2016/679/oj",
     dateSignature: "2016-04-27",
     dateDocument: "2016-04-27",
-    eea: true,
   });
   assert.deepEqual(second.payload, first.payload);
   assert.equal(sparqlCalls, 1);
@@ -651,9 +646,8 @@ test("GET /api/laws/:celex/metadata falls back when the store record lacks enric
 test("GET /api/laws/:celex/metadata falls back when the store record carries the field as undefined", async () => {
   // The shape production actually serves: compactSqliteRecord builds its
   // whitelist as an object literal, so a record predating a field still has the
-  // key, holding `undefined`. A key-presence gate opens on that and turns "we
-  // don't know" into `eea: false` — a silently missing EEA badge on every
-  // already-released record.
+  // key, holding `undefined`. A key-presence gate opens on that and answers
+  // with a hole — an empty entryIntoForce — instead of asking Cellar.
   const celex = "32016R0679";
   let sparqlCalls = 0;
   const { app } = registerTestRoutes({
@@ -663,8 +657,7 @@ test("GET /api/laws/:celex/metadata falls back when the store record carries the
         eli: "http://data.europa.eu/eli/reg/2016/679/oj",
         inForce: true,
         endOfValidity: null,
-        entryIntoForce: "2016-05-24",
-        eea: undefined,
+        entryIntoForce: undefined,
       }),
     },
     runSparqlQuery: async () => {
@@ -677,7 +670,7 @@ test("GET /api/laws/:celex/metadata falls back when the store record carries the
 
   assert.equal(res.statusCode, 200);
   assert.equal(sparqlCalls, 1, "an undefined field must not satisfy the store gate");
-  assert.equal(res.payload.eea, true);
+  assert.deepEqual(res.payload.entryIntoForce, ["2016-05-24"]);
 });
 
 test("GET /api/laws/:celex/metadata keeps tri-state status and sentinel handling identical on both paths", async () => {
@@ -695,8 +688,7 @@ test("GET /api/laws/:celex/metadata keeps tri-state status and sentinel handling
           inForce,
           endOfValidity: "9999-12-31",
           entryIntoForce: "9999-12-31",
-          eea: true,
-        }),
+              }),
       },
       runSparqlQuery: async () => ({ results: { bindings: [] } }),
     });

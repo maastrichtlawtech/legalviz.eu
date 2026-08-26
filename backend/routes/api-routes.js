@@ -93,14 +93,14 @@ function sendChatError(res, err, context) {
 
 const CASE_LAW_ROUTE_CACHE_MS = 5 * 60 * 1000;
 const CELLAR_NO_END_OF_VALIDITY = '9999-12-31';
-const STORE_METADATA_FIELDS = ['inForce', 'endOfValidity', 'entryIntoForce', 'eli', 'eea'];
+const STORE_METADATA_FIELDS = ['inForce', 'endOfValidity', 'entryIntoForce', 'eli'];
 
 // Presence, not key presence. `compactSqliteRecord` builds its whitelist as an
 // object literal, so a record predating a field still carries the key with an
 // explicit `undefined` — `hasOwnProperty` says yes and the gate below would
-// open on a record that has no answer, quietly turning "we don't know" into a
-// dropped EEA badge and an empty entry-into-force list. `null` is a real answer
-// from Cellar ("no value") and must keep passing.
+// open on a record that has no answer, quietly turning "we don't know" into an
+// empty entry-into-force list. `null` is a real answer from Cellar ("no
+// value") and must keep passing.
 function hasValue(object, key) {
   return object[key] !== undefined;
 }
@@ -131,7 +131,6 @@ function normalizeMetadataPayload(payload, celex) {
     eli: payload?.eli || null,
     dateSignature: payload?.dateSignature || null,
     dateDocument: payload?.dateDocument || null,
-    eea: payload?.eea === true,
   };
 }
 
@@ -145,9 +144,8 @@ function metadataFromLegalCache(celex, legalCacheStore) {
     return null;
   }
 
-  // EEA is rendered by the law overview, so omitting it would be a visible
-  // degradation. Records released before the enrichment carried it fall through
-  // to the complete SPARQL response instead.
+  // Records released before an enrichment field existed fall through to the
+  // complete SPARQL response instead of answering with a hole.
   if (!record || !STORE_METADATA_FIELDS.every((field) => hasValue(record, field))) return null;
 
   return normalizeMetadataPayload({
@@ -158,7 +156,6 @@ function metadataFromLegalCache(celex, legalCacheStore) {
     eli: record.eli,
     dateSignature: null,
     dateDocument: null,
-    eea: record.eea,
   }, celex);
 }
 

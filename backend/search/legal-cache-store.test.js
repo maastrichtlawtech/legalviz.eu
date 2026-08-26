@@ -67,7 +67,6 @@ function publicRecord(record) {
     inForce: record?.inForce,
     endOfValidity: record?.endOfValidity,
     entryIntoForce: record?.entryIntoForce,
-    eea: record?.eea,
     celexYear: record?.celexYear,
     celexNumber: record?.celexNumber,
     aliases: record?.aliases,
@@ -586,8 +585,8 @@ test("legal cache store keeps a false in-force status distinct from unknown", ()
 
 // The SQLite path is production. compactSqliteRecord is a hand-maintained
 // whitelist, so a field can pass every JSON-backed test and still never reach
-// the client — silently. Pin the round trip, including false status and EEA.
-test("SQLite round trip carries in-force status and EEA", () => {
+// the client — silently. Pin the round trip, including the false case.
+test("SQLite round trip carries in-force status, including false", () => {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "legal-cache-store-in-force-sqlite-"));
   const cachePath = path.join(tempDir, "cache.json");
   const caseLawPath = path.join(tempDir, "case-law.json");
@@ -603,7 +602,6 @@ test("SQLite round trip carries in-force status and EEA", () => {
         eli: "http://data.europa.eu/eli/reg/2016/679/oj",
         inForce: true,
         endOfValidity: null,
-        eea: true,
       },
       {
         celex: "31995L0046",
@@ -613,7 +611,6 @@ test("SQLite round trip carries in-force status and EEA", () => {
         eli: "http://data.europa.eu/eli/dir/1995/46/oj",
         inForce: false,
         endOfValidity: "2018-05-24",
-        eea: false,
       },
     ],
   }), "utf8");
@@ -624,9 +621,7 @@ test("SQLite round trip carries in-force status and EEA", () => {
   assert.equal(store.source, "sqlite");
 
   assert.equal(store.getByCelex("32016R0679")?.inForce, true);
-  assert.equal(store.getByCelex("32016R0679")?.eea, true);
   assert.equal(store.getByCelex("31995L0046")?.inForce, false);
-  assert.equal(store.getByCelex("31995L0046")?.eea, false);
   assert.equal(store.getByCelex("31995L0046")?.endOfValidity, "2018-05-24");
 
   const [repealed] = store.searchLaws("31995L0046", { limit: 1 });
@@ -1359,7 +1354,6 @@ test("entryIntoForce survives the SQLite whitelist and reaches search results", 
     inForce: false,
     endOfValidity: null,
     entryIntoForce: future,
-    eea: true,
   };
   fs.writeFileSync(cachePath, JSON.stringify({ count: 1, records: [record] }), "utf8");
   fs.writeFileSync(caseLawPath, "{}", "utf8");
@@ -1377,7 +1371,6 @@ test("entryIntoForce survives the SQLite whitelist and reaches search results", 
     assert.ok(hit, `expected a hit from the ${store.source} backend`);
     assert.equal(hit.inForce, false);
     assert.equal(hit.entryIntoForce, future, `entryIntoForce lost by the ${store.source} backend`);
-    assert.equal(hit.eea, true, `eea lost by the ${store.source} backend`);
     store.close?.();
   }
 });

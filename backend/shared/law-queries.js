@@ -18,9 +18,8 @@ const {
   parseCitationsToRefs,
 } = require('./case-law-parser');
 
-// Cellar exposes boolean literals as "1"/"0". A shape change upstream must
-// surface as "unknown", never as a default. The in-force enrichment reuses this
-// helper so metadata and precomputed records cannot drift.
+// Kept in step with parseInForce() in search/in-force-enrich.js: a shape change
+// upstream must surface as "unknown", never as a default.
 function parseInForceLiteral(value) {
   if (value === '1' || value === 'true') return true;
   if (value === '0' || value === 'false') return false;
@@ -35,7 +34,7 @@ PREFIX owl: <http://www.w3.org/2002/07/owl#>
 PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
 SELECT DISTINCT
   ?dateEntryIntoForce ?dateEndOfValidity ?inForce
-  ?eli ?dateSignature ?dateDocument ?eea
+  ?eli ?dateSignature ?dateDocument
 WHERE {
   ?work owl:sameAs <${celexUri}> .
   OPTIONAL { ?work cdm:resource_legal_date_entry-into-force ?dateEntryIntoForce }
@@ -44,7 +43,6 @@ WHERE {
   OPTIONAL { ?work cdm:resource_legal_eli ?eli }
   OPTIONAL { ?work cdm:resource_legal_date_signature ?dateSignature }
   OPTIONAL { ?work cdm:work_date_document ?dateDocument }
-  OPTIONAL { ?work cdm:resource_legal_eea ?eea }
 }
 LIMIT 10`;
 
@@ -65,9 +63,6 @@ LIMIT 10`;
     eli: first.eli?.value || null,
     dateSignature: first.dateSignature?.value || null,
     dateDocument: first.dateDocument?.value || null,
-    // EEA is a badge-only boolean: unknown and absent Cellar values are false
-    // on the wire, while the shared parser still distinguishes them internally.
-    eea: parseInForceLiteral(first.eea?.value) === true,
   };
 }
 
@@ -776,7 +771,6 @@ function parseCaseDetailsFromHtml(html) {
 module.exports = {
   ACT_CELEX_MAP,
   fetchMetadata,
-  parseInForceLiteral,
   fetchAmendments,
   fetchConsolidatedVersions,
   fetchImplementing,

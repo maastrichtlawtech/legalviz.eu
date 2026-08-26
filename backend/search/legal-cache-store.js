@@ -322,7 +322,6 @@ function compactSqliteRecord(record) {
     inForce: enriched.inForce,
     endOfValidity: enriched.endOfValidity,
     entryIntoForce: enriched.entryIntoForce,
-    eea: enriched.eea,
     celexYear: enriched.celexYear,
     celexNumber: enriched.celexNumber,
     aliases: enriched.aliases,
@@ -1551,9 +1550,6 @@ class JsonLegalCacheStore {
         // both read `inForce: false`. Absent on records predating the field,
         // and the client falls back to the weaker label when it is missing.
         entryIntoForce: law.entryIntoForce || null,
-        // EEA is a badge-only boolean; legacy records and unknown values are
-        // deliberately false at the wire boundary.
-        eea: law.eea === true,
       }));
   }
 

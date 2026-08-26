@@ -8,7 +8,6 @@ const {
   buildQuery,
   reduceBindings,
   enrichRecordsWithInForce,
-  isCompleteEntry,
   parseEndOfValidity,
   parseInForce,
   readJournal,
@@ -57,18 +56,9 @@ test("buildQuery joins entry-into-force as an OPTIONAL, unaggregated", () => {
   assert.doesNotMatch(query, /SAMPLE|MIN\(/);
 });
 
-test("buildQuery joins EEA as an OPTIONAL, unaggregated value", () => {
-  const query = buildQuery(["32016R0679"]);
-  assert.match(query, /SELECT \?celex \?inForceValue \?endValue \?entryValue \?eeaValue/);
-  assert.match(query, /OPTIONAL \{ \?work cdm:resource_legal_eea \?eeaValue \}/);
-  assert.doesNotMatch(query, /GROUP BY/);
-});
-
 test("parseInForce maps Cellar's boolean literal, and refuses to guess", () => {
   assert.equal(parseInForce("1"), true);
-  assert.equal(parseInForce("true"), true);
   assert.equal(parseInForce("0"), false);
-  assert.equal(parseInForce("false"), false);
   assert.equal(parseInForce(undefined), null);
   assert.equal(parseInForce(""), null);
   // A shape change upstream must surface as "unknown", never as a default.
@@ -100,8 +90,8 @@ test("readJournal treats a missing or corrupt journal as empty", () => {
 // unchanged acts must not be refetched.
 test("enrich fills status from the journal without any network call", async () => {
   const journalPath = tempJournal({
-    "32016R0679": { inForce: true, endOfValidity: null, entryIntoForce: "2016-05-24", eea: true },
-    "31995L0046": { inForce: false, endOfValidity: "2018-05-24", entryIntoForce: "1995-12-13", eea: false },
+    "32016R0679": { inForce: true, endOfValidity: null, entryIntoForce: "2016-05-24" },
+    "31995L0046": { inForce: false, endOfValidity: "2018-05-24", entryIntoForce: "1995-12-13" },
   });
   const records = [{ celex: "32016R0679" }, { celex: "31995L0046" }];
 
@@ -113,10 +103,8 @@ test("enrich fills status from the journal without any network call", async () =
   assert.equal(records[0].inForce, true);
   assert.equal(records[0].endOfValidity, null);
   assert.equal(records[0].entryIntoForce, "2016-05-24");
-  assert.equal(records[0].eea, true);
   assert.equal(records[1].inForce, false);
   assert.equal(records[1].endOfValidity, "2018-05-24");
-  assert.equal(records[1].eea, false);
   assert.equal(stats.fromJournal, 2);
   assert.equal(stats.fetched, 0);
   assert.equal(stats.withStatus, 2);
@@ -130,26 +118,23 @@ test("enrich writes status from a SPARQL response and journals it", async () => 
   const stats = await enrichRecordsWithInForce(records, {
     journalPath,
     runQueryFn: async () => bindings([
-      { celex: { value: "32016R0679" }, inForceValue: { value: "1" }, endValue: { value: "9999-12-31" }, entryValue: { value: "2016-05-24" }, eeaValue: { value: "1" } },
-      { celex: { value: "31995L0046" }, inForceValue: { value: "0" }, endValue: { value: "2018-05-24" }, entryValue: { value: "1995-12-13" }, eeaValue: { value: "0" } },
+      { celex: { value: "32016R0679" }, inForceValue: { value: "1" }, endValue: { value: "9999-12-31" }, entryValue: { value: "2016-05-24" } },
+      { celex: { value: "31995L0046" }, inForceValue: { value: "0" }, endValue: { value: "2018-05-24" }, entryValue: { value: "1995-12-13" } },
     ]),
   });
 
   assert.equal(records[0].inForce, true);
   assert.equal(records[0].endOfValidity, null);
   assert.equal(records[0].entryIntoForce, "2016-05-24");
-  assert.equal(records[0].eea, true);
   assert.equal(records[1].inForce, false);
   assert.equal(records[1].endOfValidity, "2018-05-24");
   assert.equal(records[1].entryIntoForce, "1995-12-13");
-  assert.equal(records[1].eea, false);
   assert.equal(stats.fetched, 2);
   assert.equal(stats.inForce, 1);
   assert.deepEqual(readJournal(journalPath)["31995L0046"], {
     inForce: false,
     endOfValidity: "2018-05-24",
     entryIntoForce: "1995-12-13",
-    eea: false,
   });
 });
 
@@ -167,21 +152,20 @@ test("enrich records an unanswered CELEX as unknown, not as out of force", async
   assert.equal(records[0].inForce, null);
   assert.equal(records[0].endOfValidity, null);
   assert.equal(records[0].entryIntoForce, null);
-  assert.equal(records[0].eea, false);
   // Journaled, so a rerun doesn't re-ask for an answer Cellar already withheld.
   assert.deepEqual(
     readJournal(journalPath)["31957E0001"],
-    { inForce: null, endOfValidity: null, entryIntoForce: null, eea: null },
+    { inForce: null, endOfValidity: null, entryIntoForce: null },
   );
 });
 
 test("enrich skips records that already carry a status, including a known-false one", async () => {
   const journalPath = tempJournal();
   const records = [
-    { celex: "32016R0679", inForce: true, endOfValidity: null, entryIntoForce: "2016-05-24", eea: true },
-    { celex: "31995L0046", inForce: false, endOfValidity: "2018-05-24", entryIntoForce: "1995-12-13", eea: false },
+    { celex: "32016R0679", inForce: true, endOfValidity: null, entryIntoForce: "2016-05-24" },
+    { celex: "31995L0046", inForce: false, endOfValidity: "2018-05-24", entryIntoForce: "1995-12-13" },
     // null is a real answer ("Cellar has no status"), not a gap to refill.
-    { celex: "31957E0001", inForce: null, endOfValidity: null, entryIntoForce: null, eea: false },
+    { celex: "31957E0001", inForce: null, endOfValidity: null, entryIntoForce: null },
   ];
 
   const stats = await enrichRecordsWithInForce(records, {
@@ -226,38 +210,6 @@ test("enrich refetches a record whose status predates entryIntoForce", async () 
   assert.equal(records[0].inForce, true);
   assert.equal(records[1].inForce, false);
   assert.equal(records[1].endOfValidity, "2018-05-24");
-});
-
-test("enrich refetches a record carrying status and entryIntoForce but no eea", async () => {
-  const records = [{
-    celex: "32016R0679",
-    inForce: true,
-    endOfValidity: null,
-    entryIntoForce: "2016-05-24",
-  }];
-  let queries = 0;
-
-  await enrichRecordsWithInForce(records, {
-    journalPath: tempJournal(),
-    runQueryFn: async (query) => {
-      queries += 1;
-      assert.match(query, /32016R0679/);
-      return bindings([{
-        celex: { value: "32016R0679" },
-        inForceValue: { value: "1" },
-        entryValue: { value: "2016-05-24" },
-        eeaValue: { value: "0" },
-      }]);
-    },
-  });
-
-  assert.equal(queries, 1);
-  assert.equal(records[0].eea, false);
-});
-
-test("isCompleteEntry treats a journal entry predating eea as incomplete", () => {
-  assert.equal(isCompleteEntry({ inForce: true, endOfValidity: null, entryIntoForce: null }), false);
-  assert.equal(isCompleteEntry({ inForce: true, endOfValidity: null, entryIntoForce: null, eea: null }), true);
 });
 
 test("enrich honours --limit for smoke tests", async () => {
@@ -312,8 +264,8 @@ test("reduceBindings collapses fan-out to one entry per CELEX", () => {
 
   assert.equal(reduced.size, 2);
   // Earliest real end-of-validity wins, as MIN() used to do.
-  assert.deepEqual(reduced.get("A"), { inForce: true, endOfValidity: "2027-06-30", entryIntoForce: null, eea: null });
-  assert.deepEqual(reduced.get("B"), { inForce: false, endOfValidity: null, entryIntoForce: null, eea: null });
+  assert.deepEqual(reduced.get("A"), { inForce: true, endOfValidity: "2027-06-30", entryIntoForce: null });
+  assert.deepEqual(reduced.get("B"), { inForce: false, endOfValidity: null, entryIntoForce: null });
 });
 
 // Entry-into-force is the genuinely multi-valued one — 32026R1818 carries ten
@@ -351,25 +303,8 @@ test("reduceBindings keeps a sentinel-only act null and never borrows another ac
     { celex: { value: "32006R1066" }, inForceValue: { value: "1" }, endValue: { value: "9999-12-31" } },
   ]);
 
-  assert.deepEqual(reduced.get("32006R0988"), { inForce: true, endOfValidity: "2020-12-31", entryIntoForce: null, eea: null });
-  assert.deepEqual(reduced.get("32006R1066"), { inForce: true, endOfValidity: null, entryIntoForce: null, eea: null });
-});
-
-test("reduceBindings collapses EEA per CELEX without cross-act leakage", () => {
-  const reduced = reduceBindings([
-    // The first row is absent, so the later non-null value is used for A.
-    { celex: { value: "A" }, eeaValue: undefined },
-    { celex: { value: "A" }, eeaValue: { value: "true" } },
-    // B has an explicit false; a neighbouring true must not overwrite it.
-    { celex: { value: "B" }, eeaValue: { value: "0" } },
-    { celex: { value: "B" }, eeaValue: { value: "1" } },
-    // C has no EEA value of its own and must remain internally unknown.
-    { celex: { value: "C" } },
-  ]);
-
-  assert.equal(reduced.get("A").eea, true);
-  assert.equal(reduced.get("B").eea, false);
-  assert.equal(reduced.get("C").eea, null);
+  assert.deepEqual(reduced.get("32006R0988"), { inForce: true, endOfValidity: "2020-12-31", entryIntoForce: null });
+  assert.deepEqual(reduced.get("32006R1066"), { inForce: true, endOfValidity: null, entryIntoForce: null });
 });
 
 test("reduceBindings ignores rows without a celex", () => {

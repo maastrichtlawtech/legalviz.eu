@@ -19,6 +19,11 @@ function makeCacheDir() {
   return dir;
 }
 
+function ageFile(filePath, ageMs = 2 * 60 * 60 * 1000) {
+  const old = new Date(Date.now() - ageMs);
+  fs.utimesSync(filePath, old, old);
+}
+
 function makeService(dir = makeCacheDir(), storageLimitMB = 100) {
   return createFmxService({
     CELLAR_BASE,
@@ -207,6 +212,7 @@ test('orphaned temporary cache files are cleaned when the service starts', () =>
   const dir = makeCacheDir();
   const tempPath = path.join(dir, 'L_202401689.ENG.fmx4.1.xml.12345.tmp');
   fs.writeFileSync(tempPath, 'partial write');
+  ageFile(tempPath);
 
   makeService(dir);
 
@@ -218,6 +224,7 @@ test('orphaned temporary cache files are cleaned before an eviction pass', async
   const service = makeService(dir);
   const tempPath = path.join(dir, 'L_202401689.ENG.fmx4.1.xml.12345.tmp');
   fs.writeFileSync(tempPath, 'partial write');
+  ageFile(tempPath);
 
   const fmx4Uri = `${CELLAR_BASE}/oj/L_202401689.ENG.fmx4`;
   const downloadUri = `${CELLAR_BASE}/oj/L_202401689.ENG.fmx4.1.xml`;
@@ -232,6 +239,20 @@ test('orphaned temporary cache files are cleaned before an eviction pass', async
   await withMockFetch(fetchImpl, () => service.prepareLawPayload('32024R1689', 'ENG'));
 
   assert.equal(fs.existsSync(tempPath), false);
+});
+
+test('fresh temporary cache files survive cleanup while old ones are removed', () => {
+  const dir = makeCacheDir();
+  const freshPath = path.join(dir, 'fresh.fmx4.1.xml.12345.tmp');
+  const oldPath = path.join(dir, 'old.fmx4.1.xml.12345.tmp');
+  fs.writeFileSync(freshPath, 'live write');
+  fs.writeFileSync(oldPath, 'leaked write');
+  ageFile(oldPath);
+
+  makeService(dir);
+
+  assert.equal(fs.existsSync(freshPath), true);
+  assert.equal(fs.existsSync(oldPath), false);
 });
 
 test('a persisted serve-path memo avoids Cellar probes after restart', async () => {
@@ -257,6 +278,79 @@ test('a persisted serve-path memo avoids Cellar probes after restart', async () 
     const second = await secondService.prepareLawPayload('32024R1689', 'ENG');
     assert.equal(second.servePath, first.servePath);
   });
+});
+
+test('an expired serve-path memo re-probes Cellar and refreshes a changed manifestation', async () => {
+  const dir = makeCacheDir();
+  const firstFmx4Uri = `${CELLAR_BASE}/oj/L_202401689.ENG.fmx4`;
+  const firstDownloadUri = `${CELLAR_BASE}/oj/L_202401689.ENG.fmx4.1.xml`;
+  const firstFetch = prepareFetch({
+    fmx4Uri: firstFmx4Uri,
+    downloadUrls: [firstDownloadUri],
+    xml: '<?xml version="1.0"?><FMX><ARTICLE>old</ARTICLE></FMX>',
+  });
+  const firstService = makeService(dir);
+  await withMockFetch(firstFetch.fetchImpl, () => (
+    firstService.prepareLawPayload('32024R1689', 'ENG')
+  ));
+
+  const memoPath = path.join(dir, 'fmx-paths-v1.json');
+  const memo = JSON.parse(fs.readFileSync(memoPath, 'utf8'));
+  memo.entries['32024R1689\u0000ENG'].writtenAt = Date.now() - (7 * 60 * 60 * 1000);
+  fs.writeFileSync(memoPath, JSON.stringify(memo));
+
+  const refreshedFmx4Uri = `${CELLAR_BASE}/oj/L_202608260.ENG.fmx4`;
+  const refreshedDownloadUri = `${CELLAR_BASE}/oj/L_202608260.ENG.fmx4.1.xml`;
+  const secondFetch = prepareFetch({
+    fmx4Uri: refreshedFmx4Uri,
+    downloadUrls: [refreshedDownloadUri],
+    xml: '<?xml version="1.0"?><FMX><ARTICLE>current</ARTICLE></FMX>',
+  });
+  const secondService = makeService(dir);
+  const result = await withMockFetch(secondFetch.fetchImpl, () => (
+    secondService.prepareLawPayload('32024R1689', 'ENG')
+  ));
+
+  assert.deepEqual(secondFetch.calls.map((call) => call.method), ['GET', 'GET', 'HEAD', 'GET']);
+  assert.match(fs.readFileSync(result.servePath, 'utf8'), /current/);
+  assert.equal(fs.existsSync(path.join(dir, path.basename(firstDownloadUri))), true);
+
+  const refreshedMemo = JSON.parse(fs.readFileSync(memoPath, 'utf8'));
+  assert.equal(refreshedMemo.entries['32024R1689\u0000ENG'].fmx4Uri, refreshedFmx4Uri);
+  assert.equal(Number.isFinite(refreshedMemo.entries['32024R1689\u0000ENG'].writtenAt), true);
+});
+
+test('a legacy serve-path memo without manifestation URI or timestamp is not accepted', async () => {
+  const dir = makeCacheDir();
+  const fmx4Uri = `${CELLAR_BASE}/oj/L_202401689.ENG.fmx4`;
+  const downloadUri = `${CELLAR_BASE}/oj/L_202401689.ENG.fmx4.1.xml`;
+  const firstFetch = prepareFetch({
+    fmx4Uri,
+    downloadUrls: [downloadUri],
+    xml: '<?xml version="1.0"?><FMX><ARTICLE>1</ARTICLE></FMX>',
+  });
+  const firstService = makeService(dir);
+  await withMockFetch(firstFetch.fetchImpl, () => (
+    firstService.prepareLawPayload('32024R1689', 'ENG')
+  ));
+
+  const memoPath = path.join(dir, 'fmx-paths-v1.json');
+  const memo = JSON.parse(fs.readFileSync(memoPath, 'utf8'));
+  delete memo.entries['32024R1689\u0000ENG'].fmx4Uri;
+  delete memo.entries['32024R1689\u0000ENG'].writtenAt;
+  fs.writeFileSync(memoPath, JSON.stringify(memo));
+
+  const secondFetch = prepareFetch({
+    fmx4Uri,
+    downloadUrls: [downloadUri],
+    xml: '<?xml version="1.0"?><FMX><ARTICLE>2</ARTICLE></FMX>',
+  });
+  const secondService = makeService(dir);
+  await withMockFetch(secondFetch.fetchImpl, () => (
+    secondService.prepareLawPayload('32024R1689', 'ENG')
+  ));
+
+  assert.deepEqual(secondFetch.calls.map((call) => call.method), ['GET', 'GET']);
 });
 
 test('the serve-path memo keeps languages separate', async () => {

@@ -8,6 +8,13 @@ const { ClientError } = require('./api-utils');
 const FMX4_ANY_LANG = /\.[A-Z]{3}\.fmx4$/;
 const FMX_PATH_MEMO_FILE = 'fmx-paths-v1.json';
 const CACHE_PROBE_BYTES = 64 * 1024;
+// Re-probe twice a day: normal traffic stays off Cellar for hours, while a
+// newly published corrigendum is picked up without leaving stale legal text
+// pinned for the life of the cache directory.
+const FMX_PATH_MEMO_TTL_MS = 6 * 60 * 60 * 1000;
+// Writers normally finish in seconds; an hour leaves ample room for a slow
+// download while still cleaning up temp files left by crashed processes.
+const FMX_TEMP_FILE_MAX_AGE_MS = 60 * 60 * 1000;
 
 function writeFileAtomically(filePath, data, encoding) {
   const tempPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
@@ -51,11 +58,14 @@ function createFmxService({
 
   function cleanupTempFiles() {
     try {
+      const cutoff = Date.now() - FMX_TEMP_FILE_MAX_AGE_MS;
       for (const filename of fs.readdirSync(FMX_DIR).filter(isFmxTempFile)) {
         try {
-          fs.unlinkSync(path.join(FMX_DIR, filename));
+          const tempPath = path.join(FMX_DIR, filename);
+          if (fs.statSync(tempPath).mtimeMs >= cutoff) continue;
+          fs.unlinkSync(tempPath);
         } catch {
-          // A concurrent writer may have already renamed or removed it.
+          // A concurrent writer may have already renamed, removed, or replaced it.
         }
       }
     } catch {
@@ -165,16 +175,25 @@ function createFmxService({
   function getMemoizedPayload(celex, lang) {
     const key = memoKey(celex, lang);
     const entry = servePathMemo[key];
+    const now = Date.now();
+    const isMemoEntry = Boolean(entry) && typeof entry === 'object' && !Array.isArray(entry);
+    const hasFreshMetadata = isMemoEntry
+      && typeof entry.fmx4Uri === 'string'
+      && entry.fmx4Uri.length > 0
+      && Number.isFinite(entry.writtenAt)
+      && entry.writtenAt <= now
+      && now - entry.writtenAt <= FMX_PATH_MEMO_TTL_MS;
     const relativePath = typeof entry === 'string' ? entry : entry?.path;
     const servePath = resolveMemoPath(relativePath);
-    const hasWrongIdentity = entry && typeof entry === 'object'
+    const hasWrongIdentity = isMemoEntry
       && (entry.celex !== celex || entry.lang !== lang);
     const edges = servePath && readFileEdges(servePath);
-    if (hasWrongIdentity
+    if (!hasFreshMetadata
+      || hasWrongIdentity
       || !servePath
       || !edges
       || !isValidCachedFile(servePath, edges)
-      || (entry && typeof entry === 'object' && entry.size !== undefined && entry.size !== edges.stat.size)) {
+      || (isMemoEntry && entry.size !== edges.stat.size)) {
       if (Object.prototype.hasOwnProperty.call(servePathMemo, key)) {
         delete servePathMemo[key];
         persistServePathMemo();
@@ -189,7 +208,7 @@ function createFmxService({
     };
   }
 
-  function rememberServePath(celex, lang, type, servePath) {
+  function rememberServePath(celex, lang, type, servePath, fmx4Uri) {
     const relativePath = path.relative(cacheRoot, path.resolve(servePath));
     if (!relativePath || relativePath.startsWith('..') || path.isAbsolute(relativePath)) return;
     servePathMemo[memoKey(celex, lang)] = {
@@ -198,6 +217,8 @@ function createFmxService({
       path: relativePath,
       type,
       size: fs.statSync(servePath).size,
+      fmx4Uri,
+      writtenAt: Date.now(),
     };
     persistServePathMemo();
   }
@@ -518,7 +539,7 @@ function createFmxService({
         console.log(`[Cache] Post-download eviction removed ${postWriteEvicted} file(s), freed ${postWriteFreedMB} MB`);
       }
 
-      return { type, files: downloaded };
+      return { fmx4Uri, type, files: downloaded };
     })().finally(() => {
       inFlightDownloads.delete(lockKey);
     });
@@ -533,7 +554,7 @@ function createFmxService({
     if (memoized) return memoized;
 
     console.log(`[API] Fetching ${celex} (lang: ${requestedLang})...`);
-    const { type, files } = await downloadFmx(celex, requestedLang);
+    const { fmx4Uri, type, files } = await downloadFmx(celex, requestedLang);
 
     if (files.length === 0) {
       throw new ClientError(`No FMX files found for ${celex}`, 404, 'fmx_not_found', { celex, lang: requestedLang });
@@ -568,7 +589,7 @@ function createFmxService({
     }
 
     const result = { type, files, servePath };
-    rememberServePath(celex, requestedLang, type, servePath);
+    rememberServePath(celex, requestedLang, type, servePath, fmx4Uri);
     return result;
   }
 

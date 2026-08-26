@@ -648,6 +648,38 @@ test("GET /api/laws/:celex/metadata falls back when the store record lacks enric
   assert.equal(sparqlCalls, 1);
 });
 
+test("GET /api/laws/:celex/metadata falls back when the store record carries the field as undefined", async () => {
+  // The shape production actually serves: compactSqliteRecord builds its
+  // whitelist as an object literal, so a record predating a field still has the
+  // key, holding `undefined`. A key-presence gate opens on that and turns "we
+  // don't know" into `eea: false` — a silently missing EEA badge on every
+  // already-released record.
+  const celex = "32016R0679";
+  let sparqlCalls = 0;
+  const { app } = registerTestRoutes({
+    legalCacheStore: {
+      getByCelex: () => ({
+        celex,
+        eli: "http://data.europa.eu/eli/reg/2016/679/oj",
+        inForce: true,
+        endOfValidity: null,
+        entryIntoForce: "2016-05-24",
+        eea: undefined,
+      }),
+    },
+    runSparqlQuery: async () => {
+      sparqlCalls += 1;
+      return { results: { bindings: metadataBindings() } };
+    },
+  });
+
+  const res = await getMetadata(app.routes.get("/api/laws/:celex/metadata"), celex);
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(sparqlCalls, 1, "an undefined field must not satisfy the store gate");
+  assert.equal(res.payload.eea, true);
+});
+
 test("GET /api/laws/:celex/metadata keeps tri-state status and sentinel handling identical on both paths", async () => {
   const celex = "32016R0679";
   for (const [label, inForce, literal] of [

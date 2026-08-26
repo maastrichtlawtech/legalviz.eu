@@ -1,9 +1,10 @@
 "use strict";
 
-// In-force status enrichment: fetches cdm:resource_legal_in-force and
-// cdm:resource_legal_date_end-of-validity for records that don't already carry
-// them, and writes them onto the records as `inForce` / `endOfValidity`, which
-// is where the server reads them from (legal-cache-store.js).
+// In-force status enrichment: fetches cdm:resource_legal_in-force,
+// cdm:resource_legal_date_end-of-validity, and cdm:resource_legal_eea for records
+// that don't already carry them, and writes them onto the records as `inForce` /
+// `endOfValidity` / `eea`, which is where the server reads them from
+// (legal-cache-store.js).
 //
 // Runs as the last step of *both* cache builders, alongside the EuroVoc pass and
 // for the same reason: status is CELEX-keyed, so a sidecar generated against one
@@ -42,6 +43,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const { parseInForceLiteral } = require("../shared/law-queries");
 
 const SPARQL_ENDPOINT = "https://publications.europa.eu/webapi/rdf/sparql";
 const USER_AGENT = "LegalViz API in-force fetcher/0.1";
@@ -115,13 +117,14 @@ function buildQuery(celexBatch) {
   return `
 PREFIX cdm: <http://publications.europa.eu/ontology/cdm#>
 PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
-SELECT ?celex ?inForceValue ?endValue ?entryValue
+SELECT ?celex ?inForceValue ?endValue ?entryValue ?eeaValue
 WHERE {
   VALUES ?celex { ${values} }
   ?work cdm:resource_legal_id_celex ?celex .
   OPTIONAL { ?work cdm:resource_legal_in-force ?inForceValue }
   OPTIONAL { ?work cdm:resource_legal_date_end-of-validity ?endValue }
   OPTIONAL { ?work cdm:resource_legal_date_entry-into-force ?entryValue }
+  OPTIONAL { ?work cdm:resource_legal_eea ?eeaValue }
 }
 `.trim();
 }
@@ -141,6 +144,10 @@ WHERE {
 // the one that answers "has this act entered into force yet". Later dates stage
 // individual provisions — 32026R1818 carries ten, out to 2036 — and describe
 // parts of the act rather than the act.
+//
+// `eea` is single-valued in practice, but is reduced the same way as `inForce`:
+// the first non-null parsed value wins. Its internal null means Cellar returned
+// no value; applyEntry converts that to the plain false boolean on the record.
 function reduceBindings(bindings) {
   const byCelex = new Map();
   for (const binding of bindings || []) {
@@ -149,12 +156,12 @@ function reduceBindings(bindings) {
 
     let entry = byCelex.get(celex);
     if (!entry) {
-      entry = { inForce: null, endOfValidity: null, entryIntoForce: null };
+      entry = { inForce: null, endOfValidity: null, entryIntoForce: null, eea: null };
       byCelex.set(celex, entry);
     }
 
     if (entry.inForce === null) {
-      entry.inForce = parseInForce(binding.inForceValue?.value);
+      entry.inForce = parseInForceLiteral(binding.inForceValue?.value);
     }
     const end = parseEndOfValidity(binding.endValue?.value);
     if (end !== null && (entry.endOfValidity === null || end < entry.endOfValidity)) {
@@ -163,6 +170,10 @@ function reduceBindings(bindings) {
     const start = parseEntryIntoForce(binding.entryValue?.value);
     if (start !== null && (entry.entryIntoForce === null || start < entry.entryIntoForce)) {
       entry.entryIntoForce = start;
+    }
+    const eea = parseInForceLiteral(binding.eeaValue?.value);
+    if (entry.eea === null && eea !== null) {
+      entry.eea = eea;
     }
   }
   return byCelex;
@@ -200,14 +211,6 @@ async function runQuery(query, log, attempt = 1) {
   return response.json();
 }
 
-// Cellar returns the boolean as the literal "1"/"0". Anything else is a shape
-// change upstream, and guessing would be worse than admitting we don't know.
-function parseInForce(value) {
-  if (value === "1" || value === "true") return true;
-  if (value === "0" || value === "false") return false;
-  return null;
-}
-
 function parseEndOfValidity(value) {
   const text = String(value ?? "").trim();
   if (!text || text.startsWith(NO_END_OF_VALIDITY)) return null;
@@ -223,22 +226,24 @@ function parseEntryIntoForce(value) {
   return text >= EARLIEST_PLAUSIBLE_ENTRY ? text : null;
 }
 
-// Mutates `records` in place, setting `inForce` and `endOfValidity` on every
-// record that doesn't already have them. Records whose status is already known
-// (from the journal, or carried over from a previous cache) cost nothing.
+// Mutates `records` in place, setting `inForce`, `endOfValidity`, `entryIntoForce`,
+// and `eea` on every record that doesn't already have them. Records whose status
+// is already known (from the journal, or carried over from a previous cache) cost
+// nothing.
 //
 // Callers are builders, so failure policy mirrors eurovoc-enrich: the journal is
 // flushed on the way out even when a batch throws, and the caller decides
 // whether a SPARQL outage should fail the whole build or just ship without
 // status.
-// A journal entry from before entryIntoForce existed is not wrong, just short,
-// and re-fetching is the only way to fill it. Key presence rather than a null
-// check: null is a real answer ("Cellar has no entry date") and must not be
+// A journal entry from before entryIntoForce or eea existed is not wrong, just
+// short, and re-fetching is the only way to fill it. Key presence rather than a
+// null check: null is a real answer ("Cellar has no value") and must not be
 // re-asked on every run.
 function isCompleteEntry(journaled) {
   return Boolean(journaled)
     && typeof journaled === "object"
-    && Object.prototype.hasOwnProperty.call(journaled, "entryIntoForce");
+    && Object.prototype.hasOwnProperty.call(journaled, "entryIntoForce")
+    && Object.prototype.hasOwnProperty.call(journaled, "eea");
 }
 
 async function enrichRecordsWithInForce(records, options = {}) {
@@ -268,6 +273,7 @@ async function enrichRecordsWithInForce(records, options = {}) {
     record.inForce = entry.inForce ?? null;
     record.endOfValidity = entry.endOfValidity ?? null;
     record.entryIntoForce = entry.entryIntoForce ?? null;
+    record.eea = entry.eea === true;
     if (record.inForce !== null) {
       stats.withStatus += 1;
       if (record.inForce) stats.inForce += 1;
@@ -276,11 +282,13 @@ async function enrichRecordsWithInForce(records, options = {}) {
 
   const needsStatus = [];
   for (const record of records) {
-    // Both fields, not just `inForce`: a record or journal entry written before
-    // entryIntoForce existed carries a status but no entry date, and treating
-    // that as "already known" would leave it permanently unfilled — the field
-    // would only ever reach acts harvested after this change.
-    if (record.inForce !== undefined && record.entryIntoForce !== undefined) {
+    // All four fields, not just `inForce`: a record or journal entry written
+    // before entryIntoForce or eea existed carries a partial answer, and
+    // treating that as "already known" would leave the new field permanently
+    // unfilled — it would only ever reach acts harvested after this change.
+    if (record.inForce !== undefined
+      && record.entryIntoForce !== undefined
+      && record.eea !== undefined) {
       stats.alreadyPresent += 1;
       continue;
     }
@@ -321,7 +329,7 @@ async function enrichRecordsWithInForce(records, options = {}) {
       // An act Cellar has no status for is journaled as unknown so a rerun skips
       // it rather than re-asking for an answer it already gave. `null` is an
       // honest "we don't know", and the UI renders no badge for it.
-      const unknown = { inForce: null, endOfValidity: null, entryIntoForce: null };
+      const unknown = { inForce: null, endOfValidity: null, entryIntoForce: null, eea: null };
       for (const celex of batch) {
         if (found.has(celex)) continue;
         journal[celex] = unknown;
@@ -353,7 +361,7 @@ module.exports = {
   isCompleteEntry,
   parseEndOfValidity,
   parseEntryIntoForce,
-  parseInForce,
+  parseInForce: parseInForceLiteral,
   readJournal,
   reduceBindings,
 };

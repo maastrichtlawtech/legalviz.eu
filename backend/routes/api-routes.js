@@ -95,8 +95,14 @@ const CASE_LAW_ROUTE_CACHE_MS = 5 * 60 * 1000;
 const CELLAR_NO_END_OF_VALIDITY = '9999-12-31';
 const STORE_METADATA_FIELDS = ['inForce', 'endOfValidity', 'entryIntoForce', 'eli', 'eea'];
 
-function hasOwn(object, key) {
-  return Object.prototype.hasOwnProperty.call(object, key);
+// Presence, not key presence. `compactSqliteRecord` builds its whitelist as an
+// object literal, so a record predating a field still carries the key with an
+// explicit `undefined` — `hasOwnProperty` says yes and the gate below would
+// open on a record that has no answer, quietly turning "we don't know" into a
+// dropped EEA badge and an empty entry-into-force list. `null` is a real answer
+// from Cellar ("no value") and must keep passing.
+function hasValue(object, key) {
+  return object[key] !== undefined;
 }
 
 function normalizeMetadataDate(value) {
@@ -140,9 +146,9 @@ function metadataFromLegalCache(celex, legalCacheStore) {
   }
 
   // EEA is rendered by the law overview, so omitting it would be a visible
-  // degradation. It is not currently part of released records; require it
-  // here so those records fall through to the complete SPARQL response.
-  if (!record || !STORE_METADATA_FIELDS.every((field) => hasOwn(record, field))) return null;
+  // degradation. Records released before the enrichment carried it fall through
+  // to the complete SPARQL response instead.
+  if (!record || !STORE_METADATA_FIELDS.every((field) => hasValue(record, field))) return null;
 
   return normalizeMetadataPayload({
     celex,

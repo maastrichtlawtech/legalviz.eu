@@ -27,6 +27,10 @@ test("hasChanged catches null transitions and end-of-validity corrections a flip
     { inForce: true, endOfValidity: null },
     { inForce: true, endOfValidity: "2027-01-01" },
   ), true);
+  assert.equal(hasChanged(
+    { inForce: true, endOfValidity: null, entryIntoForce: null, eea: true },
+    { inForce: true, endOfValidity: null, entryIntoForce: null, eea: false },
+  ), true);
 });
 
 // An act is harvested when published, normally before it enters into force, so
@@ -56,16 +60,16 @@ test("runRecheck re-checks out-of-force acts too, so one entering into force is 
 
 test("runRecheck counts actual flips and changes, not the number re-queried", async () => {
   const records = [
-    { celex: "REPEALED", inForce: true, endOfValidity: "2020-01-01", entryIntoForce: "2000-01-01" }, // flips to false
-    { celex: "STILL_TRUE", inForce: true, endOfValidity: "2020-01-01", entryIntoForce: "2000-01-01" }, // unchanged
-    { celex: "GAINED", inForce: null, endOfValidity: null, entryIntoForce: null }, // changes, but is not a flip
+    { celex: "REPEALED", inForce: true, endOfValidity: "2020-01-01", entryIntoForce: "2000-01-01", eea: false }, // flips to false
+    { celex: "STILL_TRUE", inForce: true, endOfValidity: "2020-01-01", entryIntoForce: "2000-01-01", eea: false }, // unchanged
+    { celex: "GAINED", inForce: null, endOfValidity: null, entryIntoForce: null, eea: false }, // changes, but is not a flip
   ];
 
   const result = await runRecheck(records, {
     runQueryFn: async () => bindings([
-      { celex: { value: "REPEALED" }, inForceValue: { value: "0" }, entryValue: { value: "2000-01-01" } },
-      { celex: { value: "STILL_TRUE" }, inForceValue: { value: "1" }, endValue: { value: "2020-01-01" }, entryValue: { value: "2000-01-01" } },
-      { celex: { value: "GAINED" }, inForceValue: { value: "1" } },
+      { celex: { value: "REPEALED" }, inForceValue: { value: "0" }, entryValue: { value: "2000-01-01" }, eeaValue: { value: "0" } },
+      { celex: { value: "STILL_TRUE" }, inForceValue: { value: "1" }, endValue: { value: "2020-01-01" }, entryValue: { value: "2000-01-01" }, eeaValue: { value: "0" } },
+      { celex: { value: "GAINED" }, inForceValue: { value: "1" }, eeaValue: { value: "0" } },
     ]),
   });
 
@@ -77,17 +81,39 @@ test("runRecheck counts actual flips and changes, not the number re-queried", as
 });
 
 test("runRecheck reports no change when every status is confirmed as-is", async () => {
-  const records = [{ celex: "A", inForce: true, endOfValidity: null, entryIntoForce: "2016-05-24" }];
+  const records = [{ celex: "A", inForce: true, endOfValidity: null, entryIntoForce: "2016-05-24", eea: true }];
 
   const result = await runRecheck(records, {
     runQueryFn: async () => bindings([
-      { celex: { value: "A" }, inForceValue: { value: "1" }, entryValue: { value: "2016-05-24" } },
+      { celex: { value: "A" }, inForceValue: { value: "1" }, entryValue: { value: "2016-05-24" }, eeaValue: { value: "1" } },
     ]),
   });
 
   assert.equal(result.changed, 0);
   assert.equal(records[0].inForce, true);
   assert.equal(records[0].endOfValidity, null);
+});
+
+test("runRecheck refreshes and reports an EEA change", async () => {
+  const records = [{
+    celex: "A",
+    inForce: true,
+    endOfValidity: null,
+    entryIntoForce: "2016-05-24",
+    eea: true,
+  }];
+
+  const result = await runRecheck(records, {
+    runQueryFn: async () => bindings([{
+      celex: { value: "A" },
+      inForceValue: { value: "1" },
+      entryValue: { value: "2016-05-24" },
+      eeaValue: { value: "0" },
+    }]),
+  });
+
+  assert.equal(records[0].eea, false);
+  assert.equal(result.changed, 1);
 });
 
 // A record cleared but never refilled would serialise with no `inForce` key at

@@ -44,8 +44,8 @@ function parseArgs(argv) {
 // store.payload.records are the untouched parsed records — enrichSearchRecord
 // spreads into new objects for store.records — so writing the payload back keeps
 // the on-disk shape exactly as the builder wrote it, plus `inForce` /
-// `endOfValidity`. Every other field, `date` and `eurovoc` included, is carried
-// through byte-for-byte rather than recomputed.
+// `endOfValidity` / `eea`. Every other field, `date` and `eurovoc` included, is
+// carried through byte-for-byte rather than recomputed.
 function writeCache(store) {
   const json = `${JSON.stringify(store.payload)}\n`;
   const cachePath = store.cachePath;

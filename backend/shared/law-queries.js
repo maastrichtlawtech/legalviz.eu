@@ -18,8 +18,9 @@ const {
   parseCitationsToRefs,
 } = require('./case-law-parser');
 
-// Kept in step with parseInForce() in search/in-force-enrich.js: a shape change
-// upstream must surface as "unknown", never as a default.
+// Cellar exposes boolean literals as "1"/"0". A shape change upstream must
+// surface as "unknown", never as a default. The in-force enrichment reuses this
+// helper so metadata and precomputed records cannot drift.
 function parseInForceLiteral(value) {
   if (value === '1' || value === 'true') return true;
   if (value === '0' || value === 'false') return false;
@@ -64,7 +65,9 @@ LIMIT 10`;
     eli: first.eli?.value || null,
     dateSignature: first.dateSignature?.value || null,
     dateDocument: first.dateDocument?.value || null,
-    eea: first.eea?.value === 'true',
+    // EEA is a badge-only boolean: unknown and absent Cellar values are false
+    // on the wire, while the shared parser still distinguishes them internally.
+    eea: parseInForceLiteral(first.eea?.value) === true,
   };
 }
 
@@ -773,6 +776,7 @@ function parseCaseDetailsFromHtml(html) {
 module.exports = {
   ACT_CELEX_MAP,
   fetchMetadata,
+  parseInForceLiteral,
   fetchAmendments,
   fetchConsolidatedVersions,
   fetchImplementing,

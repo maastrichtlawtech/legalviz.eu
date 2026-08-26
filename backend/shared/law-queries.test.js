@@ -8,8 +8,28 @@ const {
   fetchCaseLaw,
   fetchConsolidatedVersions,
   fetchLegislativeProcedure,
+  fetchMetadata,
+  parseInForceLiteral,
   parseCitationsToRefs,
 } = require("./law-queries");
+
+test("parseInForceLiteral accepts Cellar boolean spellings and preserves unknown", () => {
+  assert.equal(parseInForceLiteral("1"), true);
+  assert.equal(parseInForceLiteral("true"), true);
+  assert.equal(parseInForceLiteral("0"), false);
+  assert.equal(parseInForceLiteral("false"), false);
+  assert.equal(parseInForceLiteral(undefined), null);
+});
+
+test("fetchMetadata exposes EEA as a plain boolean for Cellar literals", async () => {
+  for (const [literal, expected] of [["1", true], ["0", false], ["yes", false], [undefined, false]]) {
+    const payload = await fetchMetadata("32016R0679", async () => ({
+      results: { bindings: [{ eea: literal === undefined ? undefined : { value: literal } }] },
+    }));
+    assert.equal(payload.eea, expected, `EEA literal ${literal ?? "absent"}`);
+    assert.equal(typeof payload.eea, "boolean");
+  }
+});
 
 test("fetchCaseLaw reads precomputed details from the data store and never writes", async () => {
   const cacheDir = fs.mkdtempSync(path.join(os.tmpdir(), "case-law-cache-"));

@@ -3,6 +3,8 @@ const {
   buildCanonicalEliFromReference,
 } = require('../search/legal-cache-store');
 
+const RESOLUTION_NEGATIVE_CACHE_MS = 5 * 60 * 1000;
+
 function parseReferenceText(text = '') {
   const normalized = text.replace(/\s+/g, ' ').trim();
   const lower = normalized.toLowerCase();
@@ -263,6 +265,7 @@ function buildEurlexOjFallbackUrl(oj, lang, toSearchLang, EURLEX_BASE) {
 function createReferenceResolver({
   EURLEX_BASE,
   RESOLUTION_CACHE_MS,
+  RESOLUTION_NEGATIVE_CACHE_MS: negativeCacheTtl = RESOLUTION_NEGATIVE_CACHE_MS,
   TIMEOUT_MS,
   cacheGet,
   cacheSet,
@@ -270,6 +273,9 @@ function createReferenceResolver({
   resolutionCache,
   toSearchLang,
 }) {
+  const resolutionCacheTtl = (payload) =>
+    payload?.resolved === null ? negativeCacheTtl : RESOLUTION_CACHE_MS;
+
   async function fetchWithTimeout(url, options = {}) {
     // AbortSignal.timeout stays armed while the body is consumed, so the
     // deadline also covers the caller's response.json()/text() reads — the
@@ -340,7 +346,7 @@ LIMIT 5`;
             url: buildEurlexSearchFallbackUrl(reference, lang, toSearchLang, EURLEX_BASE),
           },
         };
-        cacheSet(resolutionCache, cacheKey, payload, RESOLUTION_CACHE_MS);
+        cacheSet(resolutionCache, cacheKey, payload, resolutionCacheTtl(payload));
         return payload;
       }
     }
@@ -353,7 +359,7 @@ LIMIT 5`;
         url: buildEurlexSearchFallbackUrl(reference, lang, toSearchLang, EURLEX_BASE),
       },
     };
-    cacheSet(resolutionCache, cacheKey, payload, RESOLUTION_CACHE_MS);
+    cacheSet(resolutionCache, cacheKey, payload, resolutionCacheTtl(payload));
     return payload;
   }
 
@@ -460,7 +466,7 @@ LIMIT 5`;
       };
     }
 
-    cacheSet(resolutionCache, cacheKey, payload, RESOLUTION_CACHE_MS);
+    cacheSet(resolutionCache, cacheKey, payload, resolutionCacheTtl(payload));
     return payload;
   }
 
@@ -549,7 +555,7 @@ LIMIT 5`;
       tried: [{ source: 'cellar-com', comnatId, celex: celexValues }],
       fallback,
     };
-    cacheSet(resolutionCache, cacheKey, payload, RESOLUTION_CACHE_MS);
+    cacheSet(resolutionCache, cacheKey, payload, resolutionCacheTtl(payload));
     return payload;
   }
 
@@ -569,7 +575,7 @@ LIMIT 5`;
         },
         fallback: null,
       };
-      cacheSet(resolutionCache, cacheKey, payload, RESOLUTION_CACHE_MS);
+      cacheSet(resolutionCache, cacheKey, payload, resolutionCacheTtl(payload));
       return payload;
     }
 
@@ -610,7 +616,7 @@ LIMIT 5`;
         tried: resolution.tried,
         fallback: resolution.fallback,
       };
-      cacheSet(resolutionCache, cacheKey, payload, RESOLUTION_CACHE_MS);
+      cacheSet(resolutionCache, cacheKey, payload, resolutionCacheTtl(payload));
       return payload;
     }
 
@@ -630,7 +636,7 @@ LIMIT 5`;
         },
         ...(resolution.error ? { error: resolution.error } : {}),
       };
-      cacheSet(resolutionCache, cacheKey, payload, RESOLUTION_CACHE_MS);
+      cacheSet(resolutionCache, cacheKey, payload, resolutionCacheTtl(payload));
       return payload;
     }
 
@@ -649,7 +655,7 @@ LIMIT 5`;
           url: parsed.url.toString(),
         },
       };
-      cacheSet(resolutionCache, cacheKey, payload, RESOLUTION_CACHE_MS);
+      cacheSet(resolutionCache, cacheKey, payload, resolutionCacheTtl(payload));
       return payload;
     }
 
@@ -664,7 +670,7 @@ LIMIT 5`;
         url: parsed.url.toString(),
       },
     };
-    cacheSet(resolutionCache, cacheKey, payload, RESOLUTION_CACHE_MS);
+    cacheSet(resolutionCache, cacheKey, payload, resolutionCacheTtl(payload));
     return payload;
   }
 
@@ -687,5 +693,6 @@ module.exports = {
   parseEurlexUrl,
   parseReferenceText,
   parseStructuredReference,
+  RESOLUTION_NEGATIVE_CACHE_MS,
   validateCelex,
 };

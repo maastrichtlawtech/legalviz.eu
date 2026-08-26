@@ -23,23 +23,50 @@ function toSearchLang(lang) {
 
 const DEFAULT_CACHE_MAX_ENTRIES = 10_000;
 
-function cacheGet(cache, key) {
-  const entry = cache.get(key);
-  if (!entry) return null;
-  if (Date.now() > entry.expiresAt) {
-    cache.delete(key);
-    return null;
-  }
-  return entry.value;
+function getPersistentStore(cache) {
+  const store = cache?.persistentStore;
+  return store && typeof store.get === 'function' ? store : null;
 }
 
-function cacheSet(cache, key, value, ttlMs, maxEntries = DEFAULT_CACHE_MAX_ENTRIES) {
-  if (cache.size >= maxEntries) {
+function cacheRemember(cache, key, entry, maxEntries) {
+  if (cache.size >= maxEntries && !cache.has(key)) {
     // Evict oldest entry (first inserted key in Map iteration order)
     const oldestKey = cache.keys().next().value;
     cache.delete(oldestKey);
   }
-  cache.set(key, { value, expiresAt: Date.now() + ttlMs });
+  cache.set(key, entry);
+}
+
+function cacheGet(cache, key) {
+  const entry = cache.get(key);
+  if (entry) {
+    if (Date.now() > entry.expiresAt) {
+      cache.delete(key);
+    } else {
+      return entry.value;
+    }
+  }
+
+  const persistentStore = getPersistentStore(cache);
+  if (!persistentStore) return null;
+
+  const persistedEntry = persistentStore.get(key);
+  if (!persistedEntry || Date.now() > persistedEntry.expiresAt) return null;
+  const maxEntries = Number.isSafeInteger(persistentStore.maxEntries) && persistentStore.maxEntries > 0
+    ? persistentStore.maxEntries
+    : DEFAULT_CACHE_MAX_ENTRIES;
+  cacheRemember(cache, key, persistedEntry, maxEntries);
+  return persistedEntry.value;
+}
+
+function cacheSet(cache, key, value, ttlMs, maxEntries = DEFAULT_CACHE_MAX_ENTRIES) {
+  const entry = { value, expiresAt: Date.now() + ttlMs };
+  cacheRemember(cache, key, entry, maxEntries);
+
+  const persistentStore = getPersistentStore(cache);
+  if (persistentStore) {
+    persistentStore.set(key, value, entry.expiresAt, maxEntries);
+  }
 }
 
 class ClientError extends Error {

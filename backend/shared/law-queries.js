@@ -34,7 +34,7 @@ PREFIX owl: <http://www.w3.org/2002/07/owl#>
 PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
 SELECT DISTINCT
   ?dateEntryIntoForce ?dateEndOfValidity ?inForce
-  ?eli ?dateSignature ?dateDocument ?eea
+  ?eli ?dateSignature ?dateDocument
 WHERE {
   ?work owl:sameAs <${celexUri}> .
   OPTIONAL { ?work cdm:resource_legal_date_entry-into-force ?dateEntryIntoForce }
@@ -43,7 +43,6 @@ WHERE {
   OPTIONAL { ?work cdm:resource_legal_eli ?eli }
   OPTIONAL { ?work cdm:resource_legal_date_signature ?dateSignature }
   OPTIONAL { ?work cdm:work_date_document ?dateDocument }
-  OPTIONAL { ?work cdm:resource_legal_eea ?eea }
 }
 LIMIT 10`;
 
@@ -64,7 +63,6 @@ LIMIT 10`;
     eli: first.eli?.value || null,
     dateSignature: first.dateSignature?.value || null,
     dateDocument: first.dateDocument?.value || null,
-    eea: first.eea?.value === 'true',
   };
 }
 

@@ -18,6 +18,21 @@ const {
   parseCitationsToRefs,
 } = require('./case-law-parser');
 
+function writeFileAtomically(filePath, data, encoding) {
+  const tempPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
+  try {
+    fs.writeFileSync(tempPath, data, encoding);
+    fs.renameSync(tempPath, filePath);
+  } catch (error) {
+    try {
+      fs.unlinkSync(tempPath);
+    } catch {
+      // The write may have failed before creating the temporary file.
+    }
+    throw error;
+  }
+}
+
 // Kept in step with parseInForce() in search/in-force-enrich.js: a shape change
 // upstream must surface as "unknown", never as a default.
 function parseInForceLiteral(value) {
@@ -34,7 +49,7 @@ PREFIX owl: <http://www.w3.org/2002/07/owl#>
 PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
 SELECT DISTINCT
   ?dateEntryIntoForce ?dateEndOfValidity ?inForce
-  ?eli ?dateSignature ?dateDocument ?eea
+  ?eli ?dateSignature ?dateDocument
 WHERE {
   ?work owl:sameAs <${celexUri}> .
   OPTIONAL { ?work cdm:resource_legal_date_entry-into-force ?dateEntryIntoForce }
@@ -43,7 +58,6 @@ WHERE {
   OPTIONAL { ?work cdm:resource_legal_eli ?eli }
   OPTIONAL { ?work cdm:resource_legal_date_signature ?dateSignature }
   OPTIONAL { ?work cdm:work_date_document ?dateDocument }
-  OPTIONAL { ?work cdm:resource_legal_eea ?eea }
 }
 LIMIT 10`;
 
@@ -64,7 +78,6 @@ LIMIT 10`;
     eli: first.eli?.value || null,
     dateSignature: first.dateSignature?.value || null,
     dateDocument: first.dateDocument?.value || null,
-    eea: first.eea?.value === 'true',
   };
 }
 
@@ -396,7 +409,8 @@ function loadCaseLawCache(cacheDir, { readOnly = false } = {}) {
       }
       if (!readOnly) {
         try {
-          fs.writeFileSync(filePath, JSON.stringify(migrated, null, 2), 'utf8');
+          fs.mkdirSync(cacheDir, { recursive: true });
+          writeFileAtomically(filePath, JSON.stringify(migrated, null, 2), 'utf8');
         } catch {
           // best-effort; we'll re-migrate next load
         }
@@ -415,7 +429,7 @@ function loadCaseLawCache(cacheDir, { readOnly = false } = {}) {
         }
         const seedBytes = zlib.gunzipSync(fs.readFileSync(CASE_LAW_CACHE_SEED));
         fs.mkdirSync(cacheDir, { recursive: true });
-        fs.writeFileSync(filePath, seedBytes);
+        writeFileAtomically(filePath, seedBytes);
         const seeded = readCaseLawCacheFile(filePath);
         if (seeded) return seeded;
       } catch {
@@ -431,7 +445,8 @@ function loadCaseLawCache(cacheDir, { readOnly = false } = {}) {
 function saveCaseLawCache(cacheDir, cache) {
   try {
     const filePath = path.join(cacheDir, CASE_LAW_CACHE_FILE);
-    fs.writeFileSync(filePath, JSON.stringify(cache, null, 2), 'utf8');
+    fs.mkdirSync(cacheDir, { recursive: true });
+    writeFileAtomically(filePath, JSON.stringify(cache, null, 2), 'utf8');
     // Refresh the memo in place so the next request doesn't re-parse ~50 MB.
     const stat = fs.statSync(filePath);
     caseLawCacheMemo = { path: filePath, mtimeMs: stat.mtimeMs, size: stat.size, cache };

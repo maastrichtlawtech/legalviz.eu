@@ -4,45 +4,68 @@ const {
 } = require('../search/legal-cache-store');
 const { resolveInstrumentCelex } = require('./legal-reference-core.mjs');
 
+const RESOLUTION_NEGATIVE_CACHE_MS = 5 * 60 * 1000;
+
 function parseReferenceText(text = '') {
   const normalized = text.replace(/\s+/g, ' ').trim();
   const lower = normalized.toLowerCase();
   const typeMatch = lower.match(/\b(regulation|directive|decision)\b/);
   const actType = typeMatch ? typeMatch[1] : null;
 
+  const expandYear = (value) => {
+    const year = String(value);
+    if (!/^(?:\d{2}|\d{4})$/.test(year)) return null;
+    if (year.length === 4) return year;
+    // Two-digit years occur in the old OJ reference form (89/552/EEC), but
+    // the same form was still used for early-2000s acts (01/83/EC). Use the
+    // conventional 50-year pivot while the explicit "No" grammar below
+    // continues to identify number-first references unambiguously.
+    const numeric = Number.parseInt(year, 10);
+    return String(numeric >= 50 ? 1900 + numeric : 2000 + numeric);
+  };
+
   // EU numbering has two eras: post-2015 acts are "year/number" (e.g. "(EU)
   // 2016/679"), pre-2015 acts are "No number/year" (e.g. "(EC) No 1924/2006").
-  // Both shapes look like "\d+/\d+", so the year-first pattern below would
-  // otherwise match a pre-2015 reference too and invert year/number. We keep
-  // this pattern first (not reordered after the "No " pattern) because text
-  // can contain both forms and the first pattern must keep winning for the
-  // post-2015 act (see the "mixed text" regression test) -- instead the
-  // negative lookbehind refuses the match when the digit run is immediately
-  // preceded by "No " (or "No." -- older OJ renderings abbreviate with a
-  // period), leaving that text for the second pattern to catch.
+  // Both shapes look like "\d+/\d+", so either grammar can find a candidate
+  // in the same text. Consider both matches together so the reference
+  // occurring first in the text wins; the grammar that matched determines
+  // whether its fields are year-first or number-first.
   const numberPatterns = [
-    /\b(?:\((?:eu|ec|eec|euratom)\)\s*)?(?<!\bno\.?\s)(\d{4})\/(\d{1,4})\b/i,
-    /\bno\.?\s+(\d{1,4})\/(\d{4})\b/i,
+    {
+      pattern: /\b(?:\((?:eu|ec|eec|euratom)\)\s*)?((?:\d{2}|\d{4}))\/(\d{1,4})(?:\/([a-z]+))?\b/i,
+      order: 'year-first',
+    },
+    {
+      pattern: /\bno\.?\s+(\d{1,4})\/((?:\d{2}|\d{4}))(?:\/([a-z]+))?\b/i,
+      order: 'number-first',
+    },
   ];
 
   let year = null;
   let number = null;
   let numberingOrder = 'ambiguous';
+  let suffix = null;
 
-  for (const pattern of numberPatterns) {
-    const match = normalized.match(pattern);
-    if (!match) continue;
+  const candidate = numberPatterns
+    .map(({ pattern, order }) => {
+      const match = normalized.match(pattern);
+      return match ? { match, order } : null;
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.match.index - b.match.index)[0];
 
-    if (pattern === numberPatterns[0]) {
-      year = match[1];
+  if (candidate) {
+    const { match, order } = candidate;
+    if (order === 'year-first') {
+      year = expandYear(match[1]);
       number = match[2];
       numberingOrder = 'year-first';
     } else {
-      year = match[2];
+      year = expandYear(match[2]);
       number = match[1];
       numberingOrder = 'number-first';
     }
-    break;
+    suffix = match[3] ? match[3].toUpperCase() : null;
   }
 
   const types = actType ? [actType] : ['regulation', 'directive', 'decision'];
@@ -55,6 +78,7 @@ function parseReferenceText(text = '') {
     year,
     number,
     numberingOrder,
+    suffix,
   };
 }
 
@@ -296,6 +320,7 @@ function buildEurlexOjFallbackUrl(oj, lang, toSearchLang, EURLEX_BASE) {
 function createReferenceResolver({
   EURLEX_BASE,
   RESOLUTION_CACHE_MS,
+  RESOLUTION_NEGATIVE_CACHE_MS: negativeCacheTtl = RESOLUTION_NEGATIVE_CACHE_MS,
   TIMEOUT_MS,
   cacheGet,
   cacheSet,
@@ -303,6 +328,9 @@ function createReferenceResolver({
   resolutionCache,
   toSearchLang,
 }) {
+  const resolutionCacheTtl = (payload) =>
+    payload?.resolved === null ? negativeCacheTtl : RESOLUTION_CACHE_MS;
+
   async function fetchWithTimeout(url, options = {}) {
     // AbortSignal.timeout stays armed while the body is consumed, so the
     // deadline also covers the caller's response.json()/text() reads — the
@@ -416,7 +444,7 @@ LIMIT 5`;
             url: buildEurlexSearchFallbackUrl(reference, lang, toSearchLang, EURLEX_BASE),
           },
         };
-        cacheSet(resolutionCache, cacheKey, payload, RESOLUTION_CACHE_MS);
+        cacheSet(resolutionCache, cacheKey, payload, resolutionCacheTtl(payload));
         return payload;
       }
     }
@@ -429,7 +457,7 @@ LIMIT 5`;
         url: buildEurlexSearchFallbackUrl(reference, lang, toSearchLang, EURLEX_BASE),
       },
     };
-    cacheSet(resolutionCache, cacheKey, payload, RESOLUTION_CACHE_MS);
+    cacheSet(resolutionCache, cacheKey, payload, resolutionCacheTtl(payload));
     return payload;
   }
 
@@ -536,7 +564,7 @@ LIMIT 5`;
       };
     }
 
-    cacheSet(resolutionCache, cacheKey, payload, RESOLUTION_CACHE_MS);
+    cacheSet(resolutionCache, cacheKey, payload, resolutionCacheTtl(payload));
     return payload;
   }
 
@@ -625,7 +653,7 @@ LIMIT 5`;
       tried: [{ source: 'cellar-com', comnatId, celex: celexValues }],
       fallback,
     };
-    cacheSet(resolutionCache, cacheKey, payload, RESOLUTION_CACHE_MS);
+    cacheSet(resolutionCache, cacheKey, payload, resolutionCacheTtl(payload));
     return payload;
   }
 
@@ -645,7 +673,7 @@ LIMIT 5`;
         },
         fallback: null,
       };
-      cacheSet(resolutionCache, cacheKey, payload, RESOLUTION_CACHE_MS);
+      cacheSet(resolutionCache, cacheKey, payload, resolutionCacheTtl(payload));
       return payload;
     }
 
@@ -686,7 +714,7 @@ LIMIT 5`;
         tried: resolution.tried,
         fallback: resolution.fallback,
       };
-      cacheSet(resolutionCache, cacheKey, payload, RESOLUTION_CACHE_MS);
+      cacheSet(resolutionCache, cacheKey, payload, resolutionCacheTtl(payload));
       return payload;
     }
 
@@ -706,7 +734,7 @@ LIMIT 5`;
         },
         ...(resolution.error ? { error: resolution.error } : {}),
       };
-      cacheSet(resolutionCache, cacheKey, payload, RESOLUTION_CACHE_MS);
+      cacheSet(resolutionCache, cacheKey, payload, resolutionCacheTtl(payload));
       return payload;
     }
 
@@ -725,7 +753,7 @@ LIMIT 5`;
           url: parsed.url.toString(),
         },
       };
-      cacheSet(resolutionCache, cacheKey, payload, RESOLUTION_CACHE_MS);
+      cacheSet(resolutionCache, cacheKey, payload, resolutionCacheTtl(payload));
       return payload;
     }
 
@@ -740,7 +768,7 @@ LIMIT 5`;
         url: parsed.url.toString(),
       },
     };
-    cacheSet(resolutionCache, cacheKey, payload, RESOLUTION_CACHE_MS);
+    cacheSet(resolutionCache, cacheKey, payload, resolutionCacheTtl(payload));
     return payload;
   }
 
@@ -763,5 +791,6 @@ module.exports = {
   parseEurlexUrl,
   parseReferenceText,
   parseStructuredReference,
+  RESOLUTION_NEGATIVE_CACHE_MS,
   validateCelex,
 };

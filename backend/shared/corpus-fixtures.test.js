@@ -2,13 +2,14 @@
 
 // Parse-health regression across every EU document-format era we support.
 //
-// __fixtures__/corpus/ holds one real, frozen EUR-Lex capture per format era
-// (see manifest.json for the map). Each is parsed through the same path the
-// production build uses — FMX via wrapForParsing() + the Formex parser, EUR-Lex
-// HTML via the HTML parser — and asserted to still yield at least the article/
-// recital/definition counts recorded at freeze time. A parser change that breaks
-// an older era (the recurring failure mode: recitals silently dropping to zero)
-// fails here instead of shipping.
+// __fixtures__/corpus/ holds one frozen EUR-Lex capture per format era, plus
+// targeted parser regression fixtures (see manifest.json for the map). Each is
+// parsed through the same path the production build uses — FMX via
+// wrapForParsing() + the Formex parser, EUR-Lex HTML via the HTML parser — and
+// asserted to still yield at least the article/recital/definition counts
+// recorded at freeze time. A parser change that breaks an older era (the
+// recurring failure mode: recitals silently dropping to zero) fails here
+// instead of shipping.
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
@@ -70,6 +71,13 @@ for (const entry of manifest.fixtures) {
       annexes >= (entry.expect.minAnnexes || 0),
       `${entry.celex}: expected >= ${entry.expect.minAnnexes || 0} annexes, got ${annexes}`,
     );
+
+    if (entry.celex === "32000R2909") {
+      assert.deepEqual(combined.definitions.map((definition) => definition.term), ["Depreciation"]);
+    }
+    if (entry.celex === "32004R0671") {
+      assert.deepEqual(combined.definitions, [], "quoted amendment targets must not become definitions");
+    }
 
     // Cross-reference / citation extraction floors. These guard that older HTML
     // laws populate a crossReferences map (recital preambles + articles), capture

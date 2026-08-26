@@ -42,7 +42,18 @@ function readCache(cachePath) {
 }
 
 function writeCache(cachePath, payload) {
-  fs.writeFileSync(cachePath, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
+  const tempPath = `${cachePath}.${process.pid}.${Date.now()}.tmp`;
+  try {
+    fs.writeFileSync(tempPath, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
+    fs.renameSync(tempPath, cachePath);
+  } catch (error) {
+    try {
+      fs.unlinkSync(tempPath);
+    } catch {
+      // The write may have failed before creating the temporary file.
+    }
+    throw error;
+  }
 }
 
 function isEligible(record, options) {

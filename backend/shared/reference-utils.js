@@ -2,6 +2,7 @@ const { ClientError } = require('./api-utils');
 const {
   buildCanonicalEliFromReference,
 } = require('../search/legal-cache-store');
+const { resolveInstrumentCelex } = require('./legal-reference-core.mjs');
 
 const RESOLUTION_NEGATIVE_CACHE_MS = 5 * 60 * 1000;
 
@@ -42,6 +43,7 @@ function parseReferenceText(text = '') {
 
   let year = null;
   let number = null;
+  let numberingOrder = 'ambiguous';
   let suffix = null;
 
   const candidate = numberPatterns
@@ -57,9 +59,11 @@ function parseReferenceText(text = '') {
     if (order === 'year-first') {
       year = expandYear(match[1]);
       number = match[2];
+      numberingOrder = 'year-first';
     } else {
       year = expandYear(match[2]);
       number = match[1];
+      numberingOrder = 'number-first';
     }
     suffix = match[3] ? match[3].toUpperCase() : null;
   }
@@ -73,6 +77,7 @@ function parseReferenceText(text = '') {
     types,
     year,
     number,
+    numberingOrder,
     suffix,
   };
 }
@@ -87,6 +92,9 @@ function parseStructuredReference(input = {}) {
   const ojColl = input.ojColl ? String(input.ojColl).trim().toUpperCase() : null;
   const ojNo = input.ojNo ? String(input.ojNo).trim() : null;
   const ojYear = input.ojYear ? String(input.ojYear).trim() : null;
+  const numberingOrder = input.numberingOrder === 'year-first' || input.numberingOrder === 'number-first'
+    ? input.numberingOrder
+    : 'ambiguous';
 
   return {
     raw,
@@ -100,6 +108,7 @@ function parseStructuredReference(input = {}) {
     ojColl,
     ojNo,
     ojYear,
+    numberingOrder,
   };
 }
 
@@ -278,6 +287,30 @@ function buildEliCandidates(reference) {
   );
 }
 
+function decodeCelexValue(value) {
+  const raw = String(value || '').split('/').pop();
+  if (!raw.includes('%')) return raw;
+
+  try {
+    // Decode the URI segment once; a second decode could change a literal
+    // percent escape that belongs to the value rather than the transport.
+    return decodeURIComponent(raw);
+  } catch {
+    return raw;
+  }
+}
+
+function buildCelexCandidate(reference) {
+  const actType = reference.actType === 'decision' && reference.suffix === 'JHA'
+    ? 'framework decision'
+    : reference.actType;
+  const suffix = reference.suffix ? `/${reference.suffix}` : '';
+  return resolveInstrumentCelex({
+    actType,
+    identifier: `${reference.year}/${reference.number}${suffix}`,
+  });
+}
+
 function buildEurlexOjFallbackUrl(oj, lang, toSearchLang, EURLEX_BASE) {
   const langCode = toSearchLang(lang).toUpperCase();
   if (!oj?.ojColl || !oj?.ojYear || !oj?.ojNo) return null;
@@ -335,11 +368,54 @@ function createReferenceResolver({
 
   async function resolveReferenceViaCellar(reference, lang = 'ENG') {
     const eliCandidates = buildEliCandidates(reference);
-    const cacheKey = JSON.stringify({ type: 'cellar-resolve', reference, lang, eliCandidates });
+    const shouldProbeCelex = reference.numberingOrder === 'number-first';
+    const celexCandidate = shouldProbeCelex ? buildCelexCandidate(reference) : null;
+    const cacheKey = JSON.stringify({ type: 'cellar-resolve', reference, lang, eliCandidates, celexCandidate });
     const cached = cacheGet(resolutionCache, cacheKey);
     if (cached) return cached;
 
     const results = [];
+
+    if (shouldProbeCelex && celexCandidate) {
+      results.push({ source: 'cellar-celex', celex: celexCandidate });
+      const directCelexQuery = `
+PREFIX owl: <http://www.w3.org/2002/07/owl#>
+SELECT ?work ?eli WHERE {
+  ?work owl:sameAs <http://publications.europa.eu/resource/celex/${celexCandidate}> .
+  OPTIONAL {
+    ?work ?predicate ?eli .
+    FILTER(STRSTARTS(STR(?eli), "http://publications.europa.eu/resource/eli/"))
+  }
+}
+      LIMIT 3`;
+
+      let directCelexData = null;
+      try {
+        directCelexData = await runSparqlQuery(directCelexQuery);
+      } catch {
+        // The computed candidate is only an optimization; an unavailable
+        // direct probe must not prevent the more authoritative ELI lookups.
+      }
+
+      const directBinding = directCelexData?.results?.bindings?.[0];
+      if (directBinding) {
+        const payload = {
+          resolved: {
+            celex: celexCandidate,
+            eli: directBinding.eli?.value || null,
+            source: 'cellar-sparql',
+          },
+          tried: results,
+          fallback: {
+            type: 'eurlex-search',
+            url: buildEurlexSearchFallbackUrl(reference, lang, toSearchLang, EURLEX_BASE),
+          },
+        };
+        cacheSet(resolutionCache, cacheKey, payload, RESOLUTION_CACHE_MS);
+        return payload;
+      }
+    }
+
     for (const eli of eliCandidates) {
       const query = `
 PREFIX owl: <http://www.w3.org/2002/07/owl#>
@@ -351,7 +427,7 @@ SELECT ?celex WHERE {
 LIMIT 5`;
       const data = await runSparqlQuery(query);
       const celexValues = (data.results?.bindings || []).map((binding) =>
-        binding.celex?.value?.split('/').pop()
+        decodeCelexValue(binding.celex?.value)
       ).filter(Boolean);
 
       results.push({ eli, celex: celexValues });
@@ -567,7 +643,7 @@ LIMIT 5`;
 
     const data = await runSparqlQuery(query);
     const celexValues = (data.results?.bindings || [])
-      .map((binding) => binding.celex?.value)
+      .map((binding) => decodeCelexValue(binding.celex?.value))
       .filter(Boolean);
 
     const payload = {

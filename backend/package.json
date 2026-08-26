@@ -13,6 +13,7 @@
     "stats": "node --env-file-if-exists=../.env --env-file-if-exists=.env bin/stats.js",
     "build:search-cache": "node search/search-build.js",
     "build:citation-graph": "node search/citation-graph-build.js",
+    "repair:corpus": "node search/corpus-dedupe.js",
     "build:definition-index": "node search/definition-index-build.js",
     "build:fulltext-index": "node search/fulltext-index-build.js",
     "build:search-eurovoc": "node search/fetch-eurovoc.js",

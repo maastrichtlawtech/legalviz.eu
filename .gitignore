@@ -45,6 +45,7 @@ backend/search/data/case-law/
 backend/search/data/shards/
 backend/search/data/html-shards/
 backend/search/data/search-build-state*.json
+backend/search/data/corpus-dedupe-progress.json
 backend/search/data/law-dates.json
 backend/search/data/eurovoc.json
 backend/search/data/in-force.json

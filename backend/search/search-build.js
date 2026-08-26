@@ -256,14 +256,39 @@ async function findFmx4Uri(celex, lang = "ENG") {
   return fmx4Uri;
 }
 
+// Lock-step with `findDownloadUrls` in shared/fmx-service.js, exactly as the
+// two `findFmx4Uri`s above are. The two cannot share an implementation as they
+// stand: this one fetches through `requestWithRetry` (WAF/429 backoff for
+// unattended harvests) and throws plain Errors, the serving one fetches through
+// an AbortSignal-timed `fetch` and throws `ClientError`s that map to HTTP
+// statuses. Only the *selection* rules below are common, and they must not
+// drift — `search-fmx-uri.test.js` drives both real implementations over the
+// same fixture RDF and asserts they pick the same URLs, because this pair did
+// drift and nothing noticed for the life of the corpus (issue #219).
 async function findDownloadUrls(fmx4Uri) {
   const rdf = await fetchText(fmx4Uri, { "Accept-Language": "eng" });
   const uris = extractUris(rdf);
   const zipUrl = uris.find((uri) => uri.endsWith(".zip"));
   if (zipUrl) return { type: "zip", urls: [zipUrl] };
 
+  // Cellar lists the *same* physical `.fmx4.<lang>.xml` under several
+  // manifestation URIs, one per production system that minted an id for the act
+  // (`/oj/L_<9digits>`, `/oj/JOL_…`, `/celex/<CELEX>`, `/consolidation/…`).
+  // `fetchCombinedFmxXml` fetches every URL this returns and joins them, so
+  // handing back all of them stores the act two or three times over in one
+  // corpus file. Key the dedupe on the filename after `.fmx4.` — that suffix
+  // identifies the physical file, while the URI prefix identifies only which
+  // system named it. Multi-part acts (a `.doc.xml` wrapper plus the act itself,
+  // or several data files) have *different* suffixes and all survive.
   const allXmlUrls = uris.filter((uri) => uri.match(/\.fmx4\.[^/]+\.xml$/) && !uri.endsWith(".doc.xml"));
-  if (allXmlUrls.length) return { type: "xml", urls: allXmlUrls };
+  const seen = new Set();
+  const xmlUrls = allXmlUrls.filter((uri) => {
+    const suffix = uri.split(".fmx4.").pop();
+    if (seen.has(suffix)) return false;
+    seen.add(suffix);
+    return true;
+  });
+  if (xmlUrls.length) return { type: "xml", urls: xmlUrls };
 
   const docXmlUrls = uris.filter((uri) => uri.endsWith(".doc.xml"));
   if (docXmlUrls.length) return { type: "xml", urls: docXmlUrls };
@@ -424,14 +449,27 @@ function buildExcerptFromCombined(combined) {
 }
 
 // A single CELLAR download can be more than one XML file — modern Formex ships
-// the act as an <OJ>/<PUBLICATION> wrapper *plus* a separate <ACT> document, so
-// the combined corpus blob has multiple roots. The streaming FMX parser rejects
-// multiple roots, so normalise to a single synthetic root: drop every embedded
-// XML declaration and wrap the whole thing. A well-formed single-root document
-// is unaffected (the parser still finds the ACT nested one level deeper).
+// the act as an <OJ>/<PUBLICATION> wrapper *plus* a separate <ACT> document and
+// one <ANNEX> document per annex, so the combined corpus blob has multiple
+// roots. The streaming FMX parser rejects multiple roots, so normalise to a
+// single synthetic root: drop every embedded XML declaration and wrap the whole
+// thing. A well-formed single-root document is unaffected (the parser still
+// finds the ACT nested one level deeper).
+//
+// The wrapper is <COMBINED.FMX> — the same one `fmx-service.js` writes for the
+// serving path — and not the <FMX.COLLECTION> this used to emit, because the
+// parser treats the two differently for annexes: it unwraps a collection with
+// exactly one <ACT>/<GENERAL> child down to that child, and then looks for
+// annexes *inside* it, where sibling <ANNEX> documents are invisible. Only
+// <COMBINED.FMX> keeps the search there (`annexContainer` in fmxParser.mjs).
+// That mattered nowhere while every corpus file held the act 2-3× over — two
+// <ACT> children suppress the unwrap — and would have silently zeroed the
+// annexes of every act the corpus dedupe (issue #219) reduces to a single
+// document. With <COMBINED.FMX> the corpus parses to exactly what production
+// `/api/laws/<celex>/parsed` returns for the same act, annexes included.
 function wrapForParsing(xml) {
   const withoutDecls = String(xml || "").replace(/<\?xml[\s\S]*?\?>/g, "").trim();
-  return `<FMX.COLLECTION>${withoutDecls}</FMX.COLLECTION>`;
+  return `<COMBINED.FMX>${withoutDecls}</COMBINED.FMX>`;
 }
 
 // A few acts (annex-heavy regulations, tariff/correlation tables) ship tens of
@@ -1220,6 +1258,7 @@ module.exports = {
   ensurePositiveInt,
   extractTitleFromEurlexHtml,
   extractOfficialTitleWithFallback,
+  findDownloadUrls,
   findFmx4Uri,
   logProgress,
   normalizeYearQueryActTypes,

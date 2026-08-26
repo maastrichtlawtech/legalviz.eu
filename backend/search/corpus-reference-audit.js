@@ -32,9 +32,13 @@ const MAX_FMX_PARSE_BYTES = 6 * 1024 * 1024;
 
 // Keep this tool independent of search-build: the audit parses raw law files
 // directly and must not require optional search-index/database dependencies.
+// The wrapper element still has to match search-build's `wrapForParsing`
+// exactly — <COMBINED.FMX>, not <FMX.COLLECTION> — or the audit reports a
+// different set of annexes than the builders it is auditing (see the comment
+// on `wrapForParsing` in search-build.js).
 function wrapForParsing(xml) {
   const withoutDecls = String(xml || "").replace(/<\?xml[\s\S]*?\?>/g, "").trim();
-  return `<FMX.COLLECTION>${withoutDecls}</FMX.COLLECTION>`;
+  return `<COMBINED.FMX>${withoutDecls}</COMBINED.FMX>`;
 }
 
 function hasExtractedText(parsed) {

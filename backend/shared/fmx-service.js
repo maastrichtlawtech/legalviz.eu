@@ -6,6 +6,23 @@ const { ClientError } = require('./api-utils');
 
 /** Trailing `.<LANG>.fmx4` on a Cellar manifestation URI, any 3-letter language. */
 const FMX4_ANY_LANG = /\.[A-Z]{3}\.fmx4$/;
+const FMX_PATH_MEMO_FILE = 'fmx-paths-v1.json';
+const CACHE_PROBE_BYTES = 64 * 1024;
+
+function writeFileAtomically(filePath, data, encoding) {
+  const tempPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
+  try {
+    fs.writeFileSync(tempPath, data, encoding);
+    fs.renameSync(tempPath, filePath);
+  } catch (error) {
+    try {
+      fs.unlinkSync(tempPath);
+    } catch {
+      // The write may have failed before creating the temporary file.
+    }
+    throw error;
+  }
+}
 
 /** True when the system `unzip` binary is available. */
 const HAS_SYSTEM_UNZIP = (() => {
@@ -23,6 +40,171 @@ function createFmxService({
   STORAGE_LIMIT_MB,
   TIMEOUT_MS,
 }) {
+  const cacheRoot = path.resolve(FMX_DIR);
+  const servePathMemoPath = path.join(FMX_DIR, FMX_PATH_MEMO_FILE);
+
+  function isFmxTempFile(filename) {
+    return /(?:\.xml|\.zip)\.\d+(?:\.\d+)?\.tmp$/.test(filename)
+      || (filename.startsWith(`${FMX_PATH_MEMO_FILE}.`)
+        && /^\d+(?:\.\d+)?\.tmp$/.test(filename.slice(FMX_PATH_MEMO_FILE.length + 1)));
+  }
+
+  function cleanupTempFiles() {
+    try {
+      for (const filename of fs.readdirSync(FMX_DIR).filter(isFmxTempFile)) {
+        try {
+          fs.unlinkSync(path.join(FMX_DIR, filename));
+        } catch {
+          // A concurrent writer may have already renamed or removed it.
+        }
+      }
+    } catch {
+      // The cache directory may not exist until the first download.
+    }
+  }
+
+  function readFileEdges(filePath) {
+    let fd;
+    try {
+      const stat = fs.statSync(filePath);
+      if (!stat.isFile() || stat.size === 0) return null;
+
+      fd = fs.openSync(filePath, 'r');
+      const length = Math.min(CACHE_PROBE_BYTES, stat.size);
+      const head = Buffer.alloc(length);
+      const tail = Buffer.alloc(length);
+      fs.readSync(fd, head, 0, length, 0);
+      fs.readSync(fd, tail, 0, length, Math.max(0, stat.size - length));
+      return { stat, head, tail };
+    } catch {
+      return null;
+    } finally {
+      if (fd !== undefined) {
+        try {
+          fs.closeSync(fd);
+        } catch {
+          // Nothing useful can be done if a best-effort integrity probe cannot close.
+        }
+      }
+    }
+  }
+
+  /**
+   * Validate the cheap structural markers that an interrupted write cannot
+   * leave behind. This deliberately probes only both ends of the file: the
+   * full XML is parsed by the caller after prepareLawPayload returns, while a
+   * zero-byte or cut-off cache must never be mistaken for a hit here.
+   */
+  function isValidCachedFile(filePath, existingEdges = null) {
+    const edges = existingEdges || readFileEdges(filePath);
+    if (!edges) return false;
+
+    if (filePath.endsWith('.zip')) {
+      return [
+        Buffer.from([0x50, 0x4b, 0x05, 0x06]), // end of central directory
+        Buffer.from([0x50, 0x4b, 0x06, 0x06]), // ZIP64 end of central directory
+      ].some((signature) => edges.tail.includes(signature));
+    }
+
+    const head = edges.head.toString('utf8').replace(/^\uFEFF/, '').trimStart();
+    const tail = edges.tail.toString('utf8').trimEnd();
+    if (!head.startsWith('<') || !tail.endsWith('>')) return false;
+
+    if (filePath.endsWith('.combined.xml')) {
+      return /<COMBINED\.FMX(?:\s[^>]*)?>/.test(head)
+        && /<\/COMBINED\.FMX>\s*$/.test(tail);
+    }
+
+    const rootMatch = head.match(/<(?![!?/])([A-Za-z_][\w:.-]*)(?:\s[^<>]*)?>/);
+    if (!rootMatch) return false;
+    if (/\/\s*>$/.test(rootMatch[0])) return true;
+    const rootName = rootMatch[1].replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return new RegExp(`</${rootName}\\s*>\\s*$`).test(tail);
+  }
+
+  function loadServePathMemo() {
+    try {
+      const parsed = JSON.parse(fs.readFileSync(servePathMemoPath, 'utf8'));
+      if (!parsed || parsed.version !== 1 || !parsed.entries || typeof parsed.entries !== 'object') {
+        return {};
+      }
+      return parsed.entries;
+    } catch {
+      return {};
+    }
+  }
+
+  let servePathMemo;
+
+  function persistServePathMemo() {
+    try {
+      fs.mkdirSync(FMX_DIR, { recursive: true });
+      writeFileAtomically(
+        servePathMemoPath,
+        JSON.stringify({ version: 1, entries: servePathMemo }, null, 2),
+        'utf8'
+      );
+    } catch {
+      // The on-disk memo is an optimization; a failed persistence must not
+      // make an otherwise valid download fail.
+    }
+  }
+
+  function memoKey(celex, lang) {
+    return `${celex}\u0000${lang}`;
+  }
+
+  function resolveMemoPath(relativePath) {
+    if (typeof relativePath !== 'string' || relativePath.length === 0) return null;
+    const candidate = path.resolve(FMX_DIR, relativePath);
+    const relative = path.relative(cacheRoot, candidate);
+    if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) return null;
+    return candidate;
+  }
+
+  function getMemoizedPayload(celex, lang) {
+    const key = memoKey(celex, lang);
+    const entry = servePathMemo[key];
+    const relativePath = typeof entry === 'string' ? entry : entry?.path;
+    const servePath = resolveMemoPath(relativePath);
+    const hasWrongIdentity = entry && typeof entry === 'object'
+      && (entry.celex !== celex || entry.lang !== lang);
+    const edges = servePath && readFileEdges(servePath);
+    if (hasWrongIdentity
+      || !servePath
+      || !edges
+      || !isValidCachedFile(servePath, edges)
+      || (entry && typeof entry === 'object' && entry.size !== undefined && entry.size !== edges.stat.size)) {
+      if (Object.prototype.hasOwnProperty.call(servePathMemo, key)) {
+        delete servePathMemo[key];
+        persistServePathMemo();
+      }
+      return null;
+    }
+
+    return {
+      type: entry?.type === 'zip' ? 'zip' : 'xml',
+      files: [{ filename: path.basename(servePath), path: servePath, cached: true, size: edges.stat.size }],
+      servePath,
+    };
+  }
+
+  function rememberServePath(celex, lang, type, servePath) {
+    const relativePath = path.relative(cacheRoot, path.resolve(servePath));
+    if (!relativePath || relativePath.startsWith('..') || path.isAbsolute(relativePath)) return;
+    servePathMemo[memoKey(celex, lang)] = {
+      celex,
+      lang,
+      path: relativePath,
+      type,
+      size: fs.statSync(servePath).size,
+    };
+    persistServePathMemo();
+  }
+
+  cleanupTempFiles();
+  servePathMemo = loadServePathMemo();
+
   function getCacheSizeMB() {
     try {
       const files = fs.readdirSync(FMX_DIR).filter((filename) => filename.endsWith('.xml') || filename.endsWith('.zip'));
@@ -51,6 +233,7 @@ function createFmxService({
   }
 
   function evictOldestIfNeeded(requiredMB) {
+    cleanupTempFiles();
     const currentMB = getCacheSizeMB();
     if (currentMB + requiredMB <= STORAGE_LIMIT_MB) {
       return { evicted: 0 };
@@ -162,7 +345,7 @@ function createFmxService({
 
   function combineZipToXml(zipPath) {
     const combinedPath = zipPath.replace(/\.zip$/, '.combined.xml');
-    if (fs.existsSync(combinedPath)) return combinedPath;
+    if (isValidCachedFile(combinedPath)) return combinedPath;
 
     if (HAS_SYSTEM_UNZIP) {
       return combineZipWithUnzip(zipPath, combinedPath);
@@ -198,7 +381,10 @@ function createFmxService({
     }
     parts.push('</COMBINED.FMX>');
 
-    fs.writeFileSync(combinedPath, parts.join('\n'), 'utf8');
+    writeFileAtomically(combinedPath, parts.join('\n'), 'utf8');
+    if (!isValidCachedFile(combinedPath)) {
+      throw new Error(`Combined ZIP output failed integrity check: ${combinedPath}`);
+    }
     console.log(`[ZIP] Combined ${physRefs.length} files from ${path.basename(zipPath)} -> ${path.basename(combinedPath)}`);
     return combinedPath;
   }
@@ -222,7 +408,10 @@ function createFmxService({
     }
     parts.push('</COMBINED.FMX>');
 
-    fs.writeFileSync(combinedPath, parts.join('\n'), 'utf8');
+    writeFileAtomically(combinedPath, parts.join('\n'), 'utf8');
+    if (!isValidCachedFile(combinedPath)) {
+      throw new Error(`Combined ZIP output failed integrity check: ${combinedPath}`);
+    }
     console.log(`[ZIP] Combined ${physRefs.length} files from ${path.basename(zipPath)} -> ${path.basename(combinedPath)}`);
     return combinedPath;
   }
@@ -283,7 +472,7 @@ function createFmxService({
         const filename = url.split('/').pop();
         const destPath = path.join(FMX_DIR, filename);
 
-        if (fs.existsSync(destPath)) {
+        if (isValidCachedFile(destPath)) {
           const stat = fs.statSync(destPath);
           downloaded.push({ filename, path: destPath, cached: true, size: stat.size });
         } else {
@@ -309,7 +498,10 @@ function createFmxService({
         if (!response.ok) throw new Error(`HTTP ${response.status} downloading ${file.url}`);
 
         const buffer = Buffer.from(await response.arrayBuffer());
-        fs.writeFileSync(file.path, buffer);
+        writeFileAtomically(file.path, buffer);
+        if (!isValidCachedFile(file.path)) {
+          throw new Error(`Downloaded Formex file failed integrity check: ${file.filename}`);
+        }
         file.size = buffer.length;
       }
 
@@ -336,11 +528,15 @@ function createFmxService({
   }
 
   async function prepareLawPayload(celex, lang) {
-    console.log(`[API] Fetching ${celex} (lang: ${lang})...`);
-    const { type, files } = await downloadFmx(celex, lang);
+    const requestedLang = lang || 'ENG';
+    const memoized = getMemoizedPayload(celex, requestedLang);
+    if (memoized) return memoized;
+
+    console.log(`[API] Fetching ${celex} (lang: ${requestedLang})...`);
+    const { type, files } = await downloadFmx(celex, requestedLang);
 
     if (files.length === 0) {
-      throw new ClientError(`No FMX files found for ${celex}`, 404, 'fmx_not_found', { celex, lang });
+      throw new ClientError(`No FMX files found for ${celex}`, 404, 'fmx_not_found', { celex, lang: requestedLang });
     }
 
     let servePath;
@@ -348,7 +544,7 @@ function createFmxService({
       servePath = combineZipToXml(files[0].path);
     } else if (files.length > 1) {
       const combinedPath = files[0].path.replace(/\.xml$/, '.combined.xml');
-      if (!fs.existsSync(combinedPath)) {
+      if (!isValidCachedFile(combinedPath)) {
         const parts = ['<?xml version="1.0" encoding="UTF-8"?>', '<COMBINED.FMX>'];
         for (const file of files) {
           let xml = fs.readFileSync(file.path, 'utf8');
@@ -356,7 +552,10 @@ function createFmxService({
           parts.push(xml);
         }
         parts.push('</COMBINED.FMX>');
-        fs.writeFileSync(combinedPath, parts.join('\n'), 'utf8');
+        writeFileAtomically(combinedPath, parts.join('\n'), 'utf8');
+        if (!isValidCachedFile(combinedPath)) {
+          throw new Error(`Combined XML output failed integrity check: ${combinedPath}`);
+        }
         console.log(`[API] Combined ${files.length} XML files -> ${path.basename(combinedPath)}`);
       }
       servePath = combinedPath;
@@ -364,11 +563,13 @@ function createFmxService({
       servePath = files[0].path;
     }
 
-    if (!fs.existsSync(servePath)) {
-      throw new ClientError('Cached file missing', 404, 'cached_file_missing', { celex, lang });
+    if (!isValidCachedFile(servePath)) {
+      throw new ClientError('Cached file missing or corrupt', 404, 'cached_file_invalid', { celex, lang: requestedLang });
     }
 
-    return { type, files, servePath };
+    const result = { type, files, servePath };
+    rememberServePath(celex, requestedLang, type, servePath);
+    return result;
   }
 
   function sendLawResponse(res, servePath) {

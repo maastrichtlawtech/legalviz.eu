@@ -9,6 +9,17 @@ function parseReferenceText(text = '') {
   const typeMatch = lower.match(/\b(regulation|directive|decision)\b/);
   const actType = typeMatch ? typeMatch[1] : null;
 
+  const expandYear = (value) => {
+    const year = String(value);
+    if (year.length === 4) return year;
+    // Two-digit years occur in the old OJ reference form (89/552/EEC), but
+    // the same form was still used for early-2000s acts (01/83/EC). Use the
+    // conventional 50-year pivot while the explicit "No" grammar below
+    // continues to identify number-first references unambiguously.
+    const numeric = Number.parseInt(year, 10);
+    return String(numeric >= 50 ? 1900 + numeric : 2000 + numeric);
+  };
+
   // EU numbering has two eras: post-2015 acts are "year/number" (e.g. "(EU)
   // 2016/679"), pre-2015 acts are "No number/year" (e.g. "(EC) No 1924/2006").
   // Both shapes look like "\d+/\d+", so the year-first pattern below would
@@ -20,24 +31,32 @@ function parseReferenceText(text = '') {
   // preceded by "No " (or "No." -- older OJ renderings abbreviate with a
   // period), leaving that text for the second pattern to catch.
   const numberPatterns = [
-    /\b(?:\((?:eu|ec|eec|euratom)\)\s*)?(?<!\bno\.?\s)(\d{4})\/(\d{1,4})\b/i,
-    /\bno\.?\s+(\d{1,4})\/(\d{4})\b/i,
+    {
+      pattern: /\b(?:\((?:eu|ec|eec|euratom)\)\s*)?(?<!\bno\.?\s)(\d{2,4})\/(\d{1,4})(?:\/([a-z]+))?\b/i,
+      order: 'year-first',
+    },
+    {
+      pattern: /\bno\.?\s+(\d{1,4})\/(\d{2,4})(?:\/([a-z]+))?\b/i,
+      order: 'number-first',
+    },
   ];
 
   let year = null;
   let number = null;
+  let suffix = null;
 
-  for (const pattern of numberPatterns) {
+  for (const { pattern, order } of numberPatterns) {
     const match = normalized.match(pattern);
     if (!match) continue;
 
-    if (pattern === numberPatterns[0]) {
-      year = match[1];
+    if (order === 'year-first') {
+      year = expandYear(match[1]);
       number = match[2];
     } else {
-      year = match[2];
+      year = expandYear(match[2]);
       number = match[1];
     }
+    suffix = match[3] ? match[3].toUpperCase() : null;
     break;
   }
 
@@ -50,6 +69,7 @@ function parseReferenceText(text = '') {
     types,
     year,
     number,
+    suffix,
   };
 }
 

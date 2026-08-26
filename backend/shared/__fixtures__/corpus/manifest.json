@@ -1,5 +1,5 @@
 {
-  "description": "Real EUR-Lex captures, one per format era we parse, frozen as gzipped fixtures. This file is the map of the EU document-format versions LegalViz has to handle; the paired corpus-fixtures.test.js asserts each still parses into articles/recitals so a parser change can't silently regress an era. Counts below are the parse output at freeze time; tests assert `>=` these floors, so parser improvements are free but regressions fail. To refresh or extend, drop a new `<kind>-<era>-<CELEX>.<ext>.gz` here (FMX: xml, EUR-Lex HTML: html) and add an entry. Sourced from the gitignored local corpus (backend/search/data/laws{,-html}); HTML fixtures are the raw EUR-Lex HTML the live viewer reparses.",
+  "description": "Real EUR-Lex captures and targeted parser regression fixtures, one per format era or reported edge case, frozen as gzipped fixtures. This file is the map of the EU document-format versions LegalViz has to handle; the paired corpus-fixtures.test.js asserts each still parses into articles/recitals so a parser change can't silently regress an era. Counts below are the parse output at freeze time; tests assert `>=` these floors, so parser improvements are free but regressions fail. To refresh or extend, drop a new `<kind>-<era>-<CELEX>.<ext>.gz` here (FMX: xml, EUR-Lex HTML: html) and add an entry. Era fixtures are sourced from the gitignored local corpus (backend/search/data/laws{,-html}); HTML fixtures are the raw EUR-Lex HTML the live viewer reparses.",
   "fixtures": [
     {
       "file": "fmx-v2-2004-32004R0097.xml.gz",
@@ -90,6 +90,24 @@
       "format": "EUR-Lex HTML — <TXT_TE> with TITLE divisions and a trailing ANNEX",
       "note": "Regulation with TITLE I–IV chapter structure and an annex after the articles. Guards annex extraction in the plaintext branch (which previously dropped annexes and let their content bleed into the last article) plus TITLE-level division parsing.",
       "expect": { "minArticles": 29, "minRecitals": 18, "minDefinitions": 0, "minAnnexes": 1 }
+    },
+    {
+      "file": "fmx-v4-2000-32000R2909.xml.gz",
+      "kind": "fmx",
+      "celex": "32000R2909",
+      "year": 2000,
+      "format": "Formex v4 — unquoted definition verb",
+      "note": "Targeted parser fixture for Article 27's bare `Depreciation shall be understood as …` definition wording.",
+      "expect": { "minArticles": 1, "minRecitals": 1, "minDefinitions": 1 }
+    },
+    {
+      "file": "fmx-v4-2004-32004R0671.xml.gz",
+      "kind": "fmx",
+      "celex": "32004R0671",
+      "year": 2004,
+      "format": "Formex v4 — quoted amendment targets",
+      "note": "Targeted parser fixture for quoted amendment labels that must not be promoted to definitions by the fallback grammar.",
+      "expect": { "minArticles": 1, "minRecitals": 0, "minDefinitions": 0 }
     }
   ]
 }

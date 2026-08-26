@@ -109,6 +109,13 @@ describe("parseFmxToCombined — DGA", () => {
     expect(Object.keys(result.crossReferences).length).toBeGreaterThan(0);
   });
 
+  it("bounds malformed recital range expansion", () => {
+    const refs = extractCrossRefsFromText("recitals 1 to 999999999", getLangConfig("EN"));
+    const recitalRefs = refs.filter((ref) => ref.type === "recital");
+    expect(recitalRefs).toHaveLength(1000);
+    expect(recitalRefs.at(-1).target).toBe("1000");
+  });
+
   it("cross-references include article references", () => {
     const allRefs = Object.values(result.crossReferences).flat();
     const articleRefs = allRefs.filter((r) => r.type === "article");
@@ -1774,6 +1781,58 @@ describe("definition extraction beyond the titled definitions article", () => {
     expect(result.definitions[0].definition).toBe(
       "a chemical element and its compounds in the natural state or obtained by any manufacturing process."
     );
+  });
+
+  it("reads an unquoted term followed by 'shall be understood as'", () => {
+    const result = parseFmxToCombined(actWithArticles(`
+      <ARTICLE IDENTIFIER="027">
+        <TI.ART>Article 27</TI.ART>
+        <STI.ART>Definition</STI.ART>
+        <ALINEA>
+          <P>Depreciation shall be understood as the accounting estimate of the durable decline in value of a fixed asset.</P>
+        </ALINEA>
+      </ARTICLE>`));
+
+    expect(result.definitions).toEqual([
+      expect.objectContaining({
+        term: "Depreciation",
+        definition: "the accounting estimate of the durable decline in value of a fixed asset.",
+        sourceArticle: "27",
+      }),
+    ]);
+  });
+
+  it("does not treat quoted amendment targets as definitions", () => {
+    const result = parseFmxToCombined(actWithArticles(`
+      <ARTICLE IDENTIFIER="002">
+        <TI.ART>Article 2</TI.ART>
+        <ALINEA>
+          <LIST TYPE="ARAB">
+            <ITEM><NP><NO.P>(a)</NO.P><TXT>${quoted("L. UNITED KINGDOM")} shall be replaced by the following:</TXT></NP></ITEM>
+            <ITEM><NP><NO.P>(b)</NO.P><TXT>${quoted("14. DENMARK — FRANCE")} shall be replaced by the following:</TXT></NP></ITEM>
+            <ITEM><NP><NO.P>(c)</NO.P><TXT>${quoted("40. FRANCE — IRELAND")} shall be replaced by the following:</TXT></NP></ITEM>
+          </LIST>
+        </ALINEA>
+      </ARTICLE>`));
+
+    expect(result.definitions).toEqual([]);
+  });
+
+  it("does not treat a quoted amendment sentence as a definition term", () => {
+    const amendmentSentence = "In such cases, one of the following entries shall be added by the competent authorities of the Member States";
+    const result = parseFmxToCombined(actWithArticles(`
+      <ARTICLE IDENTIFIER="002">
+        <TI.ART>Article 2</TI.ART>
+        <ALINEA>
+          <LIST TYPE="ARAB">
+            <ITEM><NP><NO.P>(a)</NO.P><TXT>${quoted(amendmentSentence)} shall be replaced by the following:</TXT></NP></ITEM>
+            <ITEM><NP><NO.P>(b)</NO.P><TXT>${quoted(amendmentSentence)} shall be replaced by the following:</TXT></NP></ITEM>
+            <ITEM><NP><NO.P>(c)</NO.P><TXT>${quoted(amendmentSentence)} shall be replaced by the following:</TXT></NP></ITEM>
+          </LIST>
+        </ALINEA>
+      </ARTICLE>`));
+
+    expect(result.definitions).toEqual([]);
   });
 
   it("does not treat a bare unquoted 'term: definition' with no verb as a definition", () => {

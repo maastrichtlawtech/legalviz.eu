@@ -114,6 +114,19 @@ const { resolveEurlexUrl, resolveReference, resolveReferenceViaCellar, runSparql
   toSearchLang,
 });
 
+// Share the consolidated-version lookup between the consolidated route and
+// parsed-law resolution. Cache only fulfilled lookups so Cellar failures stay
+// non-fatal and retryable.
+async function fetchConsolidatedVersionsMemo(celex) {
+  const cacheKey = `consolidated:${celex}`;
+  const cached = cacheGet(resolutionCache, cacheKey);
+  if (cached) return cached;
+
+  const payload = await fetchConsolidatedVersions(celex, runSparqlQuery);
+  cacheSet(resolutionCache, cacheKey, payload, RESOLUTION_CACHE_MS);
+  return payload;
+}
+
 // CELEX to friendly name mapping
 const CELEX_NAMES = {
   '32016R0679': 'GDPR',
@@ -273,6 +286,7 @@ const resolveParsedLaw = createParsedLawResolver({
   CELEX_NAMES,
   fetchConsolidatedVersions,
   parseFmxXml: parserPool.parseFmxXml,
+  fetchConsolidatedVersionsMemo,
   runSparqlQuery,
 });
 
@@ -287,6 +301,7 @@ registerApiRoutes(app, {
   cacheSet,
   findDownloadUrls,
   findFmx4Uri,
+  fetchConsolidatedVersionsMemo,
   citationGraphStore,
   legalCacheStore,
   parseReferenceText,

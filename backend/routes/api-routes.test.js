@@ -152,6 +152,9 @@ function registerTestRoutes(overrides = {}) {
       prepareLawPayload: deps.prepareLawPayload,
       fetchAndParseHtmlLaw: deps.fetchAndParseHtmlLaw,
       CELEX_NAMES: deps.CELEX_NAMES,
+      fetchConsolidatedVersions: deps.fetchConsolidatedVersions,
+      fetchConsolidatedVersionsMemo: deps.fetchConsolidatedVersionsMemo,
+      runSparqlQuery: deps.runSparqlQuery,
     });
   }
 
@@ -494,6 +497,48 @@ test("GET /api/laws/:celex/parsed accepts ?version=current and forwards it to re
   assert.deepEqual(calls, [{ celex: "32013R0575", lang: "ENG", options: { skipFmxProbe: false, version: "current" } }]);
 });
 
+test("parsed and consolidated routes share the consolidated-version memo", async () => {
+  const celex = "32013R0575";
+  const resolutionCache = new Map();
+  let upstreamCalls = 0;
+  const fetchConsolidatedVersions = async (requestedCelex) => {
+    upstreamCalls += 1;
+    return {
+      celex: requestedCelex,
+      base: "02013R0575",
+      versions: [{ celex: "02013R0575-20260626", date: "2026-06-26" }],
+    };
+  };
+  const fetchConsolidatedVersionsMemo = async (requestedCelex) => {
+    const cacheKey = `consolidated:${requestedCelex}`;
+    const cached = cacheGet(resolutionCache, cacheKey);
+    if (cached) return cached;
+    const payload = await fetchConsolidatedVersions(requestedCelex);
+    cacheSet(resolutionCache, cacheKey, payload, 60_000);
+    return payload;
+  };
+
+  const { app } = registerTestRoutes({
+    resolutionCache,
+    fetchConsolidatedVersionsMemo,
+    prepareLawPayload: async () => ({ servePath: gdprFmxPath }),
+  });
+
+  const consolidatedHandler = app.routes.get("/api/laws/:celex/consolidated");
+  const consolidatedResponse = createResponseRecorder();
+  await consolidatedHandler({ params: { celex }, query: {} }, consolidatedResponse);
+
+  const parsedHandler = app.routes.get("/api/laws/:celex/parsed");
+  const parsedResponse = createResponseRecorder();
+  await parsedHandler({ params: { celex }, query: { lang: "ENG", version: "current" } }, parsedResponse);
+
+  assert.equal(consolidatedResponse.statusCode, 200);
+  assert.equal(parsedResponse.statusCode, 200);
+  assert.equal(parsedResponse.payload.source, "fmx-consolidated");
+  assert.equal(upstreamCalls, 1, "the parsed route should reuse the consolidated route's cached lookup");
+  assert.ok(resolutionCache.has(`consolidated:${celex}`));
+});
+
 test("GET /api/laws/:celex/case-law uses a short cache ttl", async () => {
   const resolutionCache = new Map();
   const cacheDir = fs.mkdtempSync(path.join(os.tmpdir(), "case-law-route-"));
@@ -521,6 +566,196 @@ test("GET /api/laws/:celex/case-law uses a short cache ttl", async () => {
   const ttlMs = entry.expiresAt - Date.now();
   assert.ok(ttlMs <= 5 * 60 * 1000 + 1_000, `Expected short cache ttl, got ${ttlMs}ms`);
   assert.ok(ttlMs >= 5 * 60 * 1000 - 1_000, `Expected short cache ttl, got ${ttlMs}ms`);
+});
+
+const METADATA_KEYS = [
+  "celex",
+  "entryIntoForce",
+  "endOfValidity",
+  "inForce",
+  "eli",
+  "dateSignature",
+  "dateDocument",
+];
+
+function metadataBindings({ inForce = "1", endOfValidity = "9999-12-31", entryDates = ["2016-05-24"], includeExtended = true } = {}) {
+  return entryDates.map((entryDate, index) => ({
+    dateEntryIntoForce: { value: entryDate },
+    dateEndOfValidity: index === 0 ? { value: endOfValidity } : undefined,
+    inForce: index === 0 && inForce !== undefined ? { value: inForce } : undefined,
+    eli: index === 0 ? { value: "http://data.europa.eu/eli/reg/2016/679/oj" } : undefined,
+    dateSignature: index === 0 && includeExtended ? { value: "2016-04-27" } : undefined,
+    dateDocument: index === 0 && includeExtended ? { value: "2016-04-27" } : undefined,
+  }));
+}
+
+async function getMetadata(handler, celex = "32016R0679") {
+  const res = createResponseRecorder();
+  await handler({ params: { celex }, query: {} }, res);
+  return res;
+}
+
+test("GET /api/laws/:celex/metadata serves a complete store record with the SPARQL contract shape", async () => {
+  let sparqlCalls = 0;
+  const celex = "32016R0679";
+  const { app } = registerTestRoutes({
+    legalCacheStore: {
+      getByCelex: () => ({
+        celex,
+        eli: "http://data.europa.eu/eli/reg/2016/679/oj",
+        date: "2016-04-27",
+        inForce: true,
+        endOfValidity: "9999-12-31",
+        entryIntoForce: "2016-05-24",
+      }),
+    },
+    runSparqlQuery: async () => {
+      sparqlCalls += 1;
+      return { results: { bindings: [] } };
+    },
+  });
+
+  const res = await getMetadata(app.routes.get("/api/laws/:celex/metadata"), celex);
+
+  assert.equal(res.statusCode, 200);
+  assert.deepEqual(Object.keys(res.payload), METADATA_KEYS);
+  assert.deepEqual(res.payload, {
+    celex,
+    entryIntoForce: ["2016-05-24"],
+    endOfValidity: null,
+    inForce: true,
+    eli: "http://data.europa.eu/eli/reg/2016/679/oj",
+    dateSignature: null,
+    dateDocument: null,
+  });
+  assert.equal(sparqlCalls, 0);
+});
+
+test("GET /api/laws/:celex/metadata falls back to SPARQL on a store miss and memoizes it", async () => {
+  const celex = "32016R0679";
+  let sparqlCalls = 0;
+  const { app } = registerTestRoutes({
+    legalCacheStore: { getByCelex: () => null },
+    runSparqlQuery: async () => {
+      sparqlCalls += 1;
+      return { results: { bindings: metadataBindings({ entryDates: ["2018-05-25", "2016-05-24"] }) } };
+    },
+  });
+  const handler = app.routes.get("/api/laws/:celex/metadata");
+
+  const first = await getMetadata(handler, celex);
+  const second = await getMetadata(handler, celex);
+
+  assert.equal(first.statusCode, 200);
+  assert.deepEqual(first.payload, {
+    celex,
+    entryIntoForce: ["2016-05-24", "2018-05-25"],
+    endOfValidity: null,
+    inForce: true,
+    eli: "http://data.europa.eu/eli/reg/2016/679/oj",
+    dateSignature: "2016-04-27",
+    dateDocument: "2016-04-27",
+  });
+  assert.deepEqual(second.payload, first.payload);
+  assert.equal(sparqlCalls, 1);
+});
+
+test("GET /api/laws/:celex/metadata falls back when the store record lacks enrichment fields", async () => {
+  const celex = "32016R0679";
+  let sparqlCalls = 0;
+  const { app } = registerTestRoutes({
+    legalCacheStore: {
+      getByCelex: () => ({
+        celex,
+        eli: "http://data.europa.eu/eli/reg/2016/679/oj",
+        inForce: true,
+        endOfValidity: null,
+        // A pre-enrichment record has no entryIntoForce field.
+      }),
+    },
+    runSparqlQuery: async () => {
+      sparqlCalls += 1;
+      return { results: { bindings: metadataBindings({ inForce: "0", entryDates: ["1995-12-13"], endOfValidity: "2018-05-24" }) } };
+    },
+  });
+
+  const res = await getMetadata(app.routes.get("/api/laws/:celex/metadata"), celex);
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.payload.inForce, false);
+  assert.equal(res.payload.endOfValidity, "2018-05-24");
+  assert.deepEqual(res.payload.entryIntoForce, ["1995-12-13"]);
+  assert.equal(sparqlCalls, 1);
+});
+
+test("GET /api/laws/:celex/metadata falls back when the store record carries the field as undefined", async () => {
+  // The shape production actually serves: compactSqliteRecord builds its
+  // whitelist as an object literal, so a record predating a field still has the
+  // key, holding `undefined`. A key-presence gate opens on that and answers
+  // with a hole — an empty entryIntoForce — instead of asking Cellar.
+  const celex = "32016R0679";
+  let sparqlCalls = 0;
+  const { app } = registerTestRoutes({
+    legalCacheStore: {
+      getByCelex: () => ({
+        celex,
+        eli: "http://data.europa.eu/eli/reg/2016/679/oj",
+        inForce: true,
+        endOfValidity: null,
+        entryIntoForce: undefined,
+      }),
+    },
+    runSparqlQuery: async () => {
+      sparqlCalls += 1;
+      return { results: { bindings: metadataBindings() } };
+    },
+  });
+
+  const res = await getMetadata(app.routes.get("/api/laws/:celex/metadata"), celex);
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(sparqlCalls, 1, "an undefined field must not satisfy the store gate");
+  assert.deepEqual(res.payload.entryIntoForce, ["2016-05-24"]);
+});
+
+test("GET /api/laws/:celex/metadata keeps tri-state status and sentinel handling identical on both paths", async () => {
+  const celex = "32016R0679";
+  for (const [label, inForce, literal] of [
+    ["true", true, "1"],
+    ["false", false, "0"],
+    ["unknown", null, null],
+  ]) {
+    const storeApp = registerTestRoutes({
+      legalCacheStore: {
+        getByCelex: () => ({
+          celex,
+          eli: "http://data.europa.eu/eli/reg/2016/679/oj",
+          inForce,
+          endOfValidity: "9999-12-31",
+          entryIntoForce: "9999-12-31",
+              }),
+      },
+      runSparqlQuery: async () => ({ results: { bindings: [] } }),
+    });
+    const storeResponse = await getMetadata(storeApp.app.routes.get("/api/laws/:celex/metadata"), celex);
+
+    const sparqlApp = registerTestRoutes({
+      legalCacheStore: { getByCelex: () => null },
+      runSparqlQuery: async () => ({
+        results: {
+          bindings: metadataBindings({ inForce: literal, entryDates: ["9999-12-31"], includeExtended: false }),
+        },
+      }),
+    });
+    const sparqlResponse = await getMetadata(sparqlApp.app.routes.get("/api/laws/:celex/metadata"), celex);
+
+    assert.equal(storeResponse.statusCode, 200, `${label} store response`);
+    assert.equal(sparqlResponse.statusCode, 200, `${label} SPARQL response`);
+    assert.deepEqual(storeResponse.payload, sparqlResponse.payload, `${label} payloads differ`);
+    assert.equal(storeResponse.payload.inForce, inForce);
+    assert.equal(storeResponse.payload.endOfValidity, null);
+    assert.deepEqual(storeResponse.payload.entryIntoForce, []);
+  }
 });
 
 test("GET /api/laws/:celex/procedure returns and caches legislative procedure metadata", async () => {

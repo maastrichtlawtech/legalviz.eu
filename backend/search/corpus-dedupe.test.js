@@ -1,5 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const { spawnSync } = require("node:child_process");
 const fs = require("node:fs");
 const fsp = require("node:fs/promises");
 const os = require("node:os");
@@ -159,6 +160,50 @@ test("repairCorpusAct reports an unreadable file rather than throwing", async ()
   }
 });
 
+test("repairCorpus retries an unreadable act on a resumed run", async () => {
+  const dataDir = makeDataDir();
+  try {
+    const celex = "31953D0004";
+    const filePath = corpusPathFor(dataDir, celex);
+    await fsp.mkdir(path.dirname(filePath), { recursive: true });
+    await fsp.writeFile(filePath, Buffer.from("not gzip"));
+
+    const first = await repairCorpus({ dataDir });
+    assert.equal(first.unreadable, 1);
+    assert.deepEqual(first.unreadableCelex, [celex]);
+    assert.equal(readJournal(path.join(dataDir, DEFAULT_JOURNAL_NAME)).has(celex), false);
+
+    const second = await repairCorpus({ dataDir });
+    assert.equal(second.unreadable, 1);
+    assert.deepEqual(second.unreadableCelex, [celex]);
+    assert.equal(second.scanned, 1);
+    assert.equal(second.skipped, 0);
+  } finally {
+    fs.rmSync(dataDir, { recursive: true, force: true });
+  }
+});
+
+test("corpus-dedupe exits non-zero when an act is unreadable", async () => {
+  const dataDir = makeDataDir();
+  try {
+    const celex = "31953D0004";
+    const filePath = corpusPathFor(dataDir, celex);
+    await fsp.mkdir(path.dirname(filePath), { recursive: true });
+    await fsp.writeFile(filePath, Buffer.from("not gzip"));
+
+    const result = spawnSync(process.execPath, [
+      path.join(__dirname, "corpus-dedupe.js"),
+      "--data-dir",
+      dataDir,
+      "--no-resume",
+    ], { encoding: "utf8" });
+    assert.equal(result.status, 1, result.stderr);
+    assert.match(result.stdout, new RegExp(`unreadable sample: ${celex}`));
+  } finally {
+    fs.rmSync(dataDir, { recursive: true, force: true });
+  }
+});
+
 test("repairCorpus sweeps the tree, skips AppleDouble sidecars, and is idempotent", async () => {
   const dataDir = makeDataDir();
   try {
@@ -185,12 +230,14 @@ test("repairCorpus sweeps the tree, skips AppleDouble sidecars, and is idempoten
     assert.equal(await readCorpusXml(dataDir, "32004R1721"), `${ACT}\n${ANNEX_I}`);
     assert.equal(await readCorpusXml(dataDir, "32003D0251"), "<ACT><P>unbalanced</ACT>");
 
-    // Resume: the journal replays as skips, and nothing is rewritten.
+    // Resume: only completed acts replay as skips; the unsplittable act retries.
     const journal = readJournal(path.join(dataDir, DEFAULT_JOURNAL_NAME));
-    assert.equal(journal.size, 4);
+    assert.equal(journal.size, 3, "only clean and repaired acts are journalled");
     const second = await repairCorpus({ dataDir });
-    assert.equal(second.scanned, 0);
-    assert.equal(second.skipped, 4);
+    assert.equal(second.scanned, 1);
+    assert.equal(second.skipped, 3);
+    assert.equal(second.unsplittable, 1);
+    assert.deepEqual(second.unsplittableCelex, ["32003D0251"]);
 
     // Idempotent without the journal too.
     const third = await repairCorpus({ dataDir, resume: false });

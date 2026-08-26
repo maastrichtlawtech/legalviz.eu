@@ -283,6 +283,7 @@ async function repairCorpus({
     bytesSaved: 0,
   };
   const unsplittable = [];
+  const unreadable = [];
   let sinceFlush = 0;
 
   for (const entry of files) {
@@ -303,14 +304,15 @@ async function repairCorpus({
       stats.clean += 1;
     } else if (result.status === "unreadable") {
       stats.unreadable += 1;
+      if (unreadable.length < 100) unreadable.push(entry.celex);
     } else {
       stats.unsplittable += 1;
       if (unsplittable.length < 100) unsplittable.push(entry.celex);
     }
 
-    // Journal only after the atomic rename has landed, so a crash between the
-    // two re-does the act rather than skipping a still-duplicated file.
-    done.add(entry.celex);
+    // Journal only completed outcomes. Unreadable and unsplittable acts remain
+    // retryable under --resume.
+    if (result.status === "clean" || result.status === "repaired") done.add(entry.celex);
     sinceFlush += 1;
     if (!dryRun && resume && sinceFlush >= JOURNAL_FLUSH_EVERY) {
       writeJournal(journal, done);
@@ -320,7 +322,12 @@ async function repairCorpus({
   }
 
   if (!dryRun && resume) writeJournal(journal, done);
-  return { ...stats, unsplittableCelex: unsplittable, journalPath: journal };
+  return {
+    ...stats,
+    unreadableCelex: unreadable,
+    unsplittableCelex: unsplittable,
+    journalPath: journal,
+  };
 }
 
 async function main() {
@@ -365,11 +372,18 @@ async function main() {
   if (stats.unsplittableCelex.length) {
     console.log(`[corpus-dedupe] unsplittable sample: ${stats.unsplittableCelex.slice(0, 10).join(", ")}`);
   }
+  if (stats.unreadableCelex.length) {
+    console.log(`[corpus-dedupe] unreadable sample: ${stats.unreadableCelex.slice(0, 10).join(", ")}`);
+  }
   console.log(
     "[corpus-dedupe] exact-block dedupe is a floor: some acts repeat under blocks that are not"
     + " byte-identical, and only a re-harvest through the fixed findDownloadUrls clears those.",
   );
   console.log("[corpus-dedupe] next: rebuild the full-text index and the derived caches from the repaired corpus.");
+
+  // Unsplittable files can be expected benign corpus shapes; unreadable files
+  // are failures and make the CLI exit non-zero.
+  process.exitCode = stats.unreadable > 0 ? 1 : 0;
 }
 
 if (require.main === module) {

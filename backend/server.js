@@ -18,6 +18,7 @@ const {
   createReferenceResolver,
   parseReferenceText,
   parseStructuredReference,
+  RESOLUTION_NEGATIVE_CACHE_MS,
   validateCelex,
 } = require('./shared/reference-utils');
 const {
@@ -109,6 +110,7 @@ const htmlCache = createHtmlCacheService({
 const { resolveEurlexUrl, resolveReference, resolveReferenceViaCellar, runSparqlQuery } = createReferenceResolver({
   EURLEX_BASE,
   RESOLUTION_CACHE_MS,
+  RESOLUTION_NEGATIVE_CACHE_MS,
   TIMEOUT_MS,
   cacheGet,
   cacheSet,
@@ -285,6 +287,7 @@ registerApiRoutes(app, {
   FMX_DIR: CACHE_DIR,
   RATE_LIMIT_MAX,
   RESOLUTION_CACHE_MS,
+  RESOLUTION_NEGATIVE_CACHE_MS,
   cacheGet,
   cacheSet,
   findDownloadUrls,

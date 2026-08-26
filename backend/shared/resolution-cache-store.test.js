@@ -8,9 +8,15 @@ const Database = require('better-sqlite3');
 const { cacheGet, cacheSet } = require('./api-utils');
 const {
   DEFAULT_RESOLUTION_CACHE_FILE,
+  MAX_RESOLUTION_CACHE_ENTRY_BYTES,
   RESOLUTION_CACHE_SCHEMA_VERSION,
   createPersistentCache,
 } = require('./resolution-cache-store');
+const {
+  createReferenceResolver,
+  RESOLUTION_NEGATIVE_CACHE_MS,
+} = require('./reference-utils');
+const { toSearchLang } = require('./api-utils');
 
 function withTempCacheDir(callback) {
   const cacheDir = fs.mkdtempSync(path.join(os.tmpdir(), 'legalviz-resolution-cache-'));
@@ -24,6 +30,33 @@ function withTempCacheDir(callback) {
 function closeCache(cache) {
   cache.persistentStore.close();
 }
+
+test('unresolved reference payloads use the short TTL while positive results keep the long TTL', async () => {
+  const cacheWrites = [];
+  const resolver = createReferenceResolver({
+    EURLEX_BASE: 'https://eur-lex.europa.eu',
+    RESOLUTION_CACHE_MS: 24 * 60 * 60 * 1000,
+    TIMEOUT_MS: 1_000,
+    cacheGet: () => null,
+    cacheSet: (...args) => cacheWrites.push(args),
+    resolutionCache: new Map(),
+    toSearchLang,
+  });
+
+  const unresolved = await resolver.resolveEurlexUrl(
+    'https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=unknown:reference',
+    'ENG',
+  );
+  assert.equal(unresolved.resolved, null);
+  assert.equal(cacheWrites.at(-1)[3], RESOLUTION_NEGATIVE_CACHE_MS);
+
+  const resolved = await resolver.resolveEurlexUrl(
+    'https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32016R0679',
+    'ENG',
+  );
+  assert.equal(resolved.resolved.celex, '32016R0679');
+  assert.equal(cacheWrites.at(-1)[3], 24 * 60 * 60 * 1000);
+});
 
 test('a value written before a simulated restart is served from the durable cache', () => {
   withTempCacheDir((cacheDir) => {
@@ -120,5 +153,47 @@ test('a schema-version mismatch resets the cache table instead of serving stale 
     const finalProcessCache = createPersistentCache({ cacheDir });
     assert.deepEqual(cacheGet(finalProcessCache, 'amendments:fresh'), { fresh: true });
     closeCache(finalProcessCache);
+  });
+});
+
+test('a transient SQLite busy error does not disable the durable store', () => {
+  withTempCacheDir((cacheDir) => {
+    const cache = createPersistentCache({ cacheDir });
+    const originalWriteTransaction = cache.persistentStore.writeTransaction;
+    const busyError = Object.assign(new Error('database is busy'), { code: 'SQLITE_BUSY' });
+    cache.persistentStore.writeTransaction = () => {
+      throw busyError;
+    };
+
+    assert.doesNotThrow(() => cacheSet(cache, 'busy', { memoryOnly: true }, 60_000));
+    assert.equal(cache.persistentStore.available, true);
+    assert.deepEqual(cacheGet(cache, 'busy'), { memoryOnly: true });
+
+    cache.persistentStore.writeTransaction = originalWriteTransaction;
+    cacheSet(cache, 'durable-after-busy', { durable: true }, 60_000);
+    closeCache(cache);
+
+    const restartedCache = createPersistentCache({ cacheDir });
+    assert.deepEqual(cacheGet(restartedCache, 'durable-after-busy'), { durable: true });
+    closeCache(restartedCache);
+  });
+});
+
+test('oversized keys and values remain in memory but skip persistence', () => {
+  withTempCacheDir((cacheDir) => {
+    const cache = createPersistentCache({ cacheDir });
+    const oversizedKey = 'k'.repeat(MAX_RESOLUTION_CACHE_ENTRY_BYTES + 1);
+    const oversizedValue = { data: 'v'.repeat(MAX_RESOLUTION_CACHE_ENTRY_BYTES) };
+
+    cacheSet(cache, oversizedKey, { keyTooLarge: true }, 60_000);
+    cacheSet(cache, 'value-too-large', oversizedValue, 60_000);
+    assert.deepEqual(cacheGet(cache, oversizedKey), { keyTooLarge: true });
+    assert.deepEqual(cacheGet(cache, 'value-too-large'), oversizedValue);
+    closeCache(cache);
+
+    const restartedCache = createPersistentCache({ cacheDir });
+    assert.equal(cacheGet(restartedCache, oversizedKey), null);
+    assert.equal(cacheGet(restartedCache, 'value-too-large'), null);
+    closeCache(restartedCache);
   });
 });

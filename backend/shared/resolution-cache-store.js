@@ -2,6 +2,9 @@ const path = require('path');
 
 const DEFAULT_RESOLUTION_CACHE_FILE = 'resolution-cache.sqlite';
 const DEFAULT_RESOLUTION_CACHE_MAX_ENTRIES = 10_000;
+const SQLITE_BUSY_TIMEOUT_MS = 5_000;
+// Keep individual cache keys and serialized values below 64 KiB to bound file growth.
+const MAX_RESOLUTION_CACHE_ENTRY_BYTES = 64 * 1024;
 // Expired rows are swept on a timer rather than on every read and write: this
 // cache sits on the request path, and a DELETE per lookup would take a write
 // lock for each one. Correctness does not depend on the sweep — reads filter on
@@ -10,6 +13,10 @@ const PRUNE_INTERVAL_MS = 60 * 1000;
 
 // This is deliberately independent of the shipped data.sqlite schema version.
 const RESOLUTION_CACHE_SCHEMA_VERSION = 1;
+
+function isTransientSqliteError(error) {
+  return error?.code === 'SQLITE_BUSY' || error?.code === 'SQLITE_LOCKED';
+}
 
 function normalizeMaxEntries(value) {
   const parsed = Number(value);
@@ -46,6 +53,7 @@ class ResolutionCacheStore {
       const Database = require('better-sqlite3');
       database = new Database(this.databasePath);
       this.database = database;
+      database.pragma(`busy_timeout = ${SQLITE_BUSY_TIMEOUT_MS}`);
       // WAL keeps a writer from blocking the readers on the request path.
       database.pragma('journal_mode = WAL');
 
@@ -102,11 +110,25 @@ class ResolutionCacheStore {
           }
         }
         this.statements.upsert.run(key, serialized, expiresAt);
-      });
+      }).immediate;
 
       this.prune(this.maxEntries);
       this.available = true;
     } catch (error) {
+      if (isTransientSqliteError(error)) {
+        this.logTransientFailure(error);
+        if (this.database && this.statements && this.writeTransaction) {
+          this.available = true;
+          return;
+        }
+        if (database) {
+          try { database.close(); } catch { /* best effort */ }
+        }
+        this.database = null;
+        this.statements = null;
+        this.writeTransaction = null;
+        return;
+      }
       if (database && !this.database) {
         try { database.close(); } catch { /* best effort */ }
       }
@@ -143,6 +165,10 @@ class ResolutionCacheStore {
         expiresAt: row.expiresAt,
       };
     } catch (error) {
+      if (isTransientSqliteError(error)) {
+        this.logTransientFailure(error);
+        return null;
+      }
       this.disable(error);
       return null;
     }
@@ -156,12 +182,26 @@ class ResolutionCacheStore {
       if (typeof serialized !== 'string') {
         throw new TypeError('Cache value is not JSON-serializable');
       }
+      const normalizedKey = String(key);
+      if (Buffer.byteLength(normalizedKey, 'utf8') > MAX_RESOLUTION_CACHE_ENTRY_BYTES
+        || Buffer.byteLength(serialized, 'utf8') > MAX_RESOLUTION_CACHE_ENTRY_BYTES) {
+        return;
+      }
       const normalizedMaxEntries = normalizeMaxEntries(maxEntries);
       this.maybePrune(normalizedMaxEntries);
-      this.writeTransaction(String(key), serialized, expiresAt, normalizedMaxEntries);
+      this.writeTransaction(normalizedKey, serialized, expiresAt, normalizedMaxEntries);
     } catch (error) {
+      if (isTransientSqliteError(error)) {
+        this.logTransientFailure(error);
+        return;
+      }
       this.disable(error);
     }
+  }
+
+  logTransientFailure(error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn(`[ResolutionCache] Persistent operation skipped after transient SQLite error: ${message}`);
   }
 
   disable(error) {
@@ -205,7 +245,9 @@ function createPersistentCache(options = {}) {
 module.exports = {
   DEFAULT_RESOLUTION_CACHE_FILE,
   DEFAULT_RESOLUTION_CACHE_MAX_ENTRIES,
+  MAX_RESOLUTION_CACHE_ENTRY_BYTES,
   RESOLUTION_CACHE_SCHEMA_VERSION,
+  SQLITE_BUSY_TIMEOUT_MS,
   ResolutionCacheStore,
   createPersistentCache,
 };

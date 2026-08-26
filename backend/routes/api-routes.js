@@ -118,6 +118,7 @@ function registerApiRoutes(app, deps) {
     parseReferenceText,
     parseStructuredReference,
     prepareLawPayload,
+    parseFmxXml: parseFmxXmlImpl = parseFmxXml,
     rateLimitMiddleware,
     // Guards applied *only* to the four routes that can trigger a billed model
     // call, on top of the generic limiter: a tight per-IP generation budget
@@ -602,7 +603,7 @@ function registerApiRoutes(app, deps) {
               name: CELEX_NAMES[celex] || null,
               format: 'combined-v1',
               source: 'fmx',
-              ...(await parseFmxXml(rawText)),
+              ...(await parseFmxXmlImpl(rawText)),
             };
           }
           return resolveParsedLaw(celex, lang, { skipFmxProbe: true });

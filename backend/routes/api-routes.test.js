@@ -523,6 +523,172 @@ test("GET /api/laws/:celex/case-law uses a short cache ttl", async () => {
   assert.ok(ttlMs >= 5 * 60 * 1000 - 1_000, `Expected short cache ttl, got ${ttlMs}ms`);
 });
 
+const METADATA_KEYS = [
+  "celex",
+  "entryIntoForce",
+  "endOfValidity",
+  "inForce",
+  "eli",
+  "dateSignature",
+  "dateDocument",
+  "eea",
+];
+
+function metadataBindings({ inForce = "1", endOfValidity = "9999-12-31", entryDates = ["2016-05-24"], eea = "true", includeExtended = true } = {}) {
+  return entryDates.map((entryDate, index) => ({
+    dateEntryIntoForce: { value: entryDate },
+    dateEndOfValidity: index === 0 ? { value: endOfValidity } : undefined,
+    inForce: index === 0 && inForce !== undefined ? { value: inForce } : undefined,
+    eli: index === 0 ? { value: "http://data.europa.eu/eli/reg/2016/679/oj" } : undefined,
+    dateSignature: index === 0 && includeExtended ? { value: "2016-04-27" } : undefined,
+    dateDocument: index === 0 && includeExtended ? { value: "2016-04-27" } : undefined,
+    eea: index === 0 ? { value: eea } : undefined,
+  }));
+}
+
+async function getMetadata(handler, celex = "32016R0679") {
+  const res = createResponseRecorder();
+  await handler({ params: { celex }, query: {} }, res);
+  return res;
+}
+
+test("GET /api/laws/:celex/metadata serves a complete store record with the SPARQL contract shape", async () => {
+  let sparqlCalls = 0;
+  const celex = "32016R0679";
+  const { app } = registerTestRoutes({
+    legalCacheStore: {
+      getByCelex: () => ({
+        celex,
+        eli: "http://data.europa.eu/eli/reg/2016/679/oj",
+        date: "2016-04-27",
+        inForce: true,
+        endOfValidity: "9999-12-31",
+        entryIntoForce: "2016-05-24",
+        eea: true,
+      }),
+    },
+    runSparqlQuery: async () => {
+      sparqlCalls += 1;
+      return { results: { bindings: [] } };
+    },
+  });
+
+  const res = await getMetadata(app.routes.get("/api/laws/:celex/metadata"), celex);
+
+  assert.equal(res.statusCode, 200);
+  assert.deepEqual(Object.keys(res.payload), METADATA_KEYS);
+  assert.deepEqual(res.payload, {
+    celex,
+    entryIntoForce: ["2016-05-24"],
+    endOfValidity: null,
+    inForce: true,
+    eli: "http://data.europa.eu/eli/reg/2016/679/oj",
+    dateSignature: null,
+    dateDocument: null,
+    eea: true,
+  });
+  assert.equal(sparqlCalls, 0);
+});
+
+test("GET /api/laws/:celex/metadata falls back to SPARQL on a store miss and memoizes it", async () => {
+  const celex = "32016R0679";
+  let sparqlCalls = 0;
+  const { app } = registerTestRoutes({
+    legalCacheStore: { getByCelex: () => null },
+    runSparqlQuery: async () => {
+      sparqlCalls += 1;
+      return { results: { bindings: metadataBindings({ entryDates: ["2018-05-25", "2016-05-24"] }) } };
+    },
+  });
+  const handler = app.routes.get("/api/laws/:celex/metadata");
+
+  const first = await getMetadata(handler, celex);
+  const second = await getMetadata(handler, celex);
+
+  assert.equal(first.statusCode, 200);
+  assert.deepEqual(first.payload, {
+    celex,
+    entryIntoForce: ["2016-05-24", "2018-05-25"],
+    endOfValidity: null,
+    inForce: true,
+    eli: "http://data.europa.eu/eli/reg/2016/679/oj",
+    dateSignature: "2016-04-27",
+    dateDocument: "2016-04-27",
+    eea: true,
+  });
+  assert.deepEqual(second.payload, first.payload);
+  assert.equal(sparqlCalls, 1);
+});
+
+test("GET /api/laws/:celex/metadata falls back when the store record lacks enrichment fields", async () => {
+  const celex = "32016R0679";
+  let sparqlCalls = 0;
+  const { app } = registerTestRoutes({
+    legalCacheStore: {
+      getByCelex: () => ({
+        celex,
+        eli: "http://data.europa.eu/eli/reg/2016/679/oj",
+        inForce: true,
+        endOfValidity: null,
+        // A pre-enrichment record has no entryIntoForce field.
+      }),
+    },
+    runSparqlQuery: async () => {
+      sparqlCalls += 1;
+      return { results: { bindings: metadataBindings({ inForce: "0", entryDates: ["1995-12-13"], endOfValidity: "2018-05-24" }) } };
+    },
+  });
+
+  const res = await getMetadata(app.routes.get("/api/laws/:celex/metadata"), celex);
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.payload.inForce, false);
+  assert.equal(res.payload.endOfValidity, "2018-05-24");
+  assert.deepEqual(res.payload.entryIntoForce, ["1995-12-13"]);
+  assert.equal(sparqlCalls, 1);
+});
+
+test("GET /api/laws/:celex/metadata keeps tri-state status and sentinel handling identical on both paths", async () => {
+  const celex = "32016R0679";
+  for (const [label, inForce, literal] of [
+    ["true", true, "1"],
+    ["false", false, "0"],
+    ["unknown", null, null],
+  ]) {
+    const storeApp = registerTestRoutes({
+      legalCacheStore: {
+        getByCelex: () => ({
+          celex,
+          eli: "http://data.europa.eu/eli/reg/2016/679/oj",
+          inForce,
+          endOfValidity: "9999-12-31",
+          entryIntoForce: "9999-12-31",
+          eea: true,
+        }),
+      },
+      runSparqlQuery: async () => ({ results: { bindings: [] } }),
+    });
+    const storeResponse = await getMetadata(storeApp.app.routes.get("/api/laws/:celex/metadata"), celex);
+
+    const sparqlApp = registerTestRoutes({
+      legalCacheStore: { getByCelex: () => null },
+      runSparqlQuery: async () => ({
+        results: {
+          bindings: metadataBindings({ inForce: literal, entryDates: ["9999-12-31"], includeExtended: false }),
+        },
+      }),
+    });
+    const sparqlResponse = await getMetadata(sparqlApp.app.routes.get("/api/laws/:celex/metadata"), celex);
+
+    assert.equal(storeResponse.statusCode, 200, `${label} store response`);
+    assert.equal(sparqlResponse.statusCode, 200, `${label} SPARQL response`);
+    assert.deepEqual(storeResponse.payload, sparqlResponse.payload, `${label} payloads differ`);
+    assert.equal(storeResponse.payload.inForce, inForce);
+    assert.equal(storeResponse.payload.endOfValidity, null);
+    assert.deepEqual(storeResponse.payload.entryIntoForce, []);
+  }
+});
+
 test("GET /api/laws/:celex/procedure returns and caches legislative procedure metadata", async () => {
   const resolutionCache = new Map();
   let sparqlCalls = 0;

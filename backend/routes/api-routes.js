@@ -92,6 +92,69 @@ function sendChatError(res, err, context) {
 }
 
 const CASE_LAW_ROUTE_CACHE_MS = 5 * 60 * 1000;
+const CELLAR_NO_END_OF_VALIDITY = '9999-12-31';
+const STORE_METADATA_FIELDS = ['inForce', 'endOfValidity', 'entryIntoForce', 'eli', 'eea'];
+
+function hasOwn(object, key) {
+  return Object.prototype.hasOwnProperty.call(object, key);
+}
+
+function normalizeMetadataDate(value) {
+  const text = String(value ?? '').trim();
+  return text && !text.startsWith(CELLAR_NO_END_OF_VALIDITY) ? value : null;
+}
+
+function normalizeMetadataEntryDates(value) {
+  const values = Array.isArray(value) ? value : value == null ? [] : [value];
+  return [...new Set(values
+    .map((entry) => String(entry ?? '').trim())
+    .filter((entry) => entry && !entry.startsWith(CELLAR_NO_END_OF_VALIDITY)))]
+    .sort();
+}
+
+// Keep the API contract at the wire boundary. The SPARQL helper intentionally
+// remains unchanged for the CLI, while cache records store only the earliest
+// entry date as a scalar. The route exposes an array on both paths and removes
+// Cellar's open-ended-validity sentinel before it can reach a client.
+function normalizeMetadataPayload(payload, celex) {
+  return {
+    celex: payload?.celex || celex,
+    entryIntoForce: normalizeMetadataEntryDates(payload?.entryIntoForce),
+    endOfValidity: normalizeMetadataDate(payload?.endOfValidity),
+    inForce: payload?.inForce === true ? true : payload?.inForce === false ? false : null,
+    eli: payload?.eli || null,
+    dateSignature: payload?.dateSignature || null,
+    dateDocument: payload?.dateDocument || null,
+    eea: payload?.eea === true,
+  };
+}
+
+function metadataFromLegalCache(celex, legalCacheStore) {
+  let record;
+  try {
+    record = legalCacheStore?.getByCelex?.(celex);
+  } catch {
+    // The precomputed artifact is optional. A failed lookup must not take down
+    // the metadata endpoint; the live path remains the source of truth.
+    return null;
+  }
+
+  // EEA is rendered by the law overview, so omitting it would be a visible
+  // degradation. It is not currently part of released records; require it
+  // here so those records fall through to the complete SPARQL response.
+  if (!record || !STORE_METADATA_FIELDS.every((field) => hasOwn(record, field))) return null;
+
+  return normalizeMetadataPayload({
+    celex,
+    entryIntoForce: record.entryIntoForce,
+    endOfValidity: record.endOfValidity,
+    inForce: record.inForce,
+    eli: record.eli,
+    dateSignature: null,
+    dateDocument: null,
+    eea: record.eea,
+  }, celex);
+}
 
 function parsePaginationValue(value, name, { defaultValue, min, max = Infinity }) {
   if (value === undefined || value === null || value === '') return defaultValue;
@@ -372,13 +435,21 @@ function registerApiRoutes(app, deps) {
         return res.status(400).json({ error: 'Invalid CELEX format' });
       }
 
+      const storePayload = metadataFromLegalCache(celex, legalCacheStore);
+      if (storePayload) {
+        return res.json(storePayload);
+      }
+
       const cacheKey = `metadata:${celex}`;
       const cached = cacheGet(resolutionCache, cacheKey);
       if (cached) {
-        return res.json(cached);
+        return res.json(normalizeMetadataPayload(cached, celex));
       }
 
-      const payload = await fetchMetadata(celex, runSparqlQuery);
+      const payload = normalizeMetadataPayload(
+        await fetchMetadata(celex, runSparqlQuery),
+        celex,
+      );
       cacheSet(resolutionCache, cacheKey, payload, RESOLUTION_CACHE_MS);
       res.json(payload);
     } catch (err) {

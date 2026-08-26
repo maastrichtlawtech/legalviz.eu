@@ -12,12 +12,14 @@ const { createFmxService } = require('./shared/fmx-service');
 const { fetchEurlexHtmlLaw, closeSharedPlaywrightBrowser } = require('./shared/eurlex-html-parser');
 const { createParserPool } = require('./shared/parser-worker-pool');
 const { createHtmlCacheService } = require('./shared/html-cache-service');
+const { createPersistentCache } = require('./shared/resolution-cache-store');
 const { createGenerationLimitMiddleware, createRateLimitMiddleware } = require('./shared/rate-limit');
 const { createOriginAllowlistMiddleware } = require('./shared/origin-guard');
 const {
   createReferenceResolver,
   parseReferenceText,
   parseStructuredReference,
+  RESOLUTION_NEGATIVE_CACHE_MS,
   validateCelex,
 } = require('./shared/reference-utils');
 const {
@@ -58,8 +60,17 @@ const GENERATION_LIMIT_MAX = parseInt(process.env.GENERATION_LIMIT_MAX) || 10; /
 const STORAGE_LIMIT_MB = parseInt(process.env.STORAGE_LIMIT_MB) || 500; // FMX files
 const HTML_CACHE_LIMIT_MB = parseInt(process.env.HTML_CACHE_LIMIT_MB) || 200; // parsed HTML
 
-const resolutionCache = new Map(); // key -> { expiresAt, value }
 const RESOLUTION_CACHE_MS = 24 * 60 * 60 * 1000;
+// Ensure cache directory exists
+try {
+  if (!fs.existsSync(CACHE_DIR)) {
+    fs.mkdirSync(CACHE_DIR, { recursive: true });
+  }
+} catch {
+  // The persistent resolution store reports the single cache degradation.
+}
+
+const resolutionCache = createPersistentCache({ cacheDir: CACHE_DIR });
 const legalCacheStore = new JsonLegalCacheStore(process.env.SEARCH_CACHE_PATH || DEFAULT_SEARCH_CACHE_PATH);
 const citationGraphStore = new CitationGraphStore(
   process.env.CITATION_GRAPH_PATH || DEFAULT_CITATION_GRAPH_PATH,
@@ -76,11 +87,6 @@ const generationLimitMiddleware = createGenerationLimitMiddleware({
 // CORS stays permissive everywhere else — the public API and the MCP endpoint
 // are meant to be callable from anywhere; only generation is origin-restricted.
 const generationOriginMiddleware = createOriginAllowlistMiddleware();
-
-// Ensure cache directory exists
-if (!fs.existsSync(CACHE_DIR)) {
-  fs.mkdirSync(CACHE_DIR, { recursive: true });
-}
 
 legalCacheStore.load();
 citationGraphStore.load();
@@ -106,6 +112,7 @@ const parserPool = createParserPool();
 const { resolveEurlexUrl, resolveReference, resolveReferenceViaCellar, runSparqlQuery } = createReferenceResolver({
   EURLEX_BASE,
   RESOLUTION_CACHE_MS,
+  RESOLUTION_NEGATIVE_CACHE_MS,
   TIMEOUT_MS,
   cacheGet,
   cacheSet,
@@ -297,6 +304,7 @@ registerApiRoutes(app, {
   FMX_DIR: CACHE_DIR,
   RATE_LIMIT_MAX,
   RESOLUTION_CACHE_MS,
+  RESOLUTION_NEGATIVE_CACHE_MS,
   cacheGet,
   cacheSet,
   findDownloadUrls,
@@ -399,6 +407,7 @@ async function gracefulShutdown(signal) {
     await new Promise((resolve) => server.close(resolve));
     analytics.shutdown();
     await parserPool.close();
+    resolutionCache.persistentStore?.close();
     legalCacheStore.close();
     await closeSharedPlaywrightBrowser();
     console.log('[shutdown] Clean exit');

@@ -249,6 +249,203 @@ test('resolveReference uses legal cache before Cellar', async () => {
   }
 });
 
+test('resolveReference prefers the deterministic CELEX for decision 243/2012', async () => {
+  const fetchCalls = [];
+  const { resolver, restore } = createResolver({
+    fetchImpl: async (url) => {
+      const query = new URL(String(url)).searchParams.get('query') || '';
+      fetchCalls.push(query);
+      return {
+        ok: true,
+        status: 200,
+        async json() {
+          return {
+            results: {
+              bindings: [{
+                work: { value: 'http://publications.europa.eu/resource/cellar/decision-243' },
+                eli: { value: 'http://publications.europa.eu/resource/eli/dec/2012/243(2)/oj' },
+              }],
+            },
+          };
+        },
+      };
+    },
+  });
+
+  try {
+    const result = await resolver.resolveReference({
+      actType: 'decision',
+      year: '2012',
+      number: '243',
+      raw: 'Decision No 243/2012/EU',
+    }, 'ENG');
+
+    assert.equal(result.resolved?.celex, '32012D0243');
+    assert.equal(result.resolved?.eli, 'http://publications.europa.eu/resource/eli/dec/2012/243(2)/oj');
+    assert.equal(result.resolved?.source, 'cellar-sparql');
+    assert.equal(fetchCalls.length, 1);
+    assert.match(fetchCalls[0], /resource\/celex\/32012D0243/);
+    assert.doesNotMatch(fetchCalls[0], /SELECT \?celex/);
+  } finally {
+    restore();
+  }
+});
+
+test('resolveReference decodes percent-encoded CELEX values from ELI bindings', async () => {
+  const fetchCalls = [];
+  const responses = [
+    { bindings: [] },
+    { bindings: [] },
+    { bindings: [{ celex: { value: 'http://publications.europa.eu/resource/celex/32012D0243%2801%29' } }] },
+  ];
+  const { resolver, restore } = createResolver({
+    fetchImpl: async (url) => {
+      fetchCalls.push(String(url));
+      return {
+        ok: true,
+        status: 200,
+        async json() {
+          return { results: responses.shift() || { bindings: [] } };
+        },
+      };
+    },
+  });
+
+  try {
+    const result = await resolver.resolveReference({
+      actType: 'decision',
+      year: '2012',
+      number: '243',
+      raw: 'Decision No 243/2012/EU',
+    }, 'ENG');
+
+    assert.equal(result.resolved?.celex, '32012D0243(01)');
+    assert.equal(result.tried.at(-1).celex[0], '32012D0243(01)');
+    assert.equal(fetchCalls.length, 3);
+  } finally {
+    restore();
+  }
+});
+
+test('resolveReference resolves regulation 679/2016 through its deterministic CELEX', async () => {
+  const { resolver, restore } = createResolver({
+    fetchImpl: async () => ({
+      ok: true,
+      status: 200,
+      async json() {
+        return { results: { bindings: [{ work: { value: 'http://publications.europa.eu/resource/cellar/gdpr' } }] } };
+      },
+    }),
+  });
+
+  try {
+    const result = await resolver.resolveReference({
+      actType: 'regulation',
+      year: '2016',
+      number: '679',
+      raw: 'Regulation (EU) 2016/679',
+    }, 'ENG');
+
+    assert.equal(result.resolved?.celex, '32016R0679');
+    assert.equal(result.resolved?.source, 'cellar-sparql');
+  } finally {
+    restore();
+  }
+});
+
+test('resolveReference keeps the implementing-regulation ELI fallback', async () => {
+  const { resolver, restore } = createResolver({
+    fetchImpl: async (url) => {
+      const query = new URL(String(url)).searchParams.get('query') || '';
+      const bindings = query.includes('/eli/reg_impl/2014/28/oj')
+        ? [{ celex: { value: 'http://publications.europa.eu/resource/celex/32014R0028' } }]
+        : [];
+      return {
+        ok: true,
+        status: 200,
+        async json() {
+          return { results: { bindings } };
+        },
+      };
+    },
+  });
+
+  try {
+    const result = await resolver.resolveReference({
+      actType: 'regulation',
+      year: '2014',
+      number: '28',
+      raw: 'Commission Implementing Regulation (EU) No 28/2014',
+    }, 'ENG');
+
+    assert.equal(result.resolved?.celex, '32014R0028');
+    assert.equal(result.resolved?.eli, 'http://publications.europa.eu/resource/eli/reg_impl/2014/28/oj');
+    assert.equal(result.resolved?.source, 'cellar-sparql');
+  } finally {
+    restore();
+  }
+});
+
+test('resolveReference keeps the JHA framework-decision ELI fallback', async () => {
+  const { resolver, restore } = createResolver({
+    fetchImpl: async (url) => {
+      const query = new URL(String(url)).searchParams.get('query') || '';
+      const bindings = query.includes('/eli/dec_framw/2008/977/oj')
+        ? [{ celex: { value: 'http://publications.europa.eu/resource/celex/32008D0977' } }]
+        : [];
+      return {
+        ok: true,
+        status: 200,
+        async json() {
+          return { results: { bindings } };
+        },
+      };
+    },
+  });
+
+  try {
+    const result = await resolver.resolveReference({
+      actType: 'decision',
+      year: '2008',
+      number: '977',
+      suffix: 'JHA',
+      raw: 'Council Framework Decision 2008/977/JHA',
+    }, 'ENG');
+
+    assert.equal(result.resolved?.celex, '32008D0977');
+    assert.equal(result.resolved?.eli, 'http://publications.europa.eu/resource/eli/dec_framw/2008/977/oj');
+    assert.equal(result.resolved?.source, 'cellar-sparql');
+  } finally {
+    restore();
+  }
+});
+
+test('resolveReference keeps the unresolved fallback when Cellar has no match', async () => {
+  const { resolver, restore } = createResolver({
+    fetchImpl: async () => ({
+      ok: true,
+      status: 200,
+      async json() {
+        return { results: { bindings: [] } };
+      },
+    }),
+  });
+
+  try {
+    const result = await resolver.resolveReference({
+      actType: 'decision',
+      year: '2099',
+      number: '9999',
+      raw: 'Decision 2099/9999',
+    }, 'ENG');
+
+    assert.equal(result.resolved, null);
+    assert.equal(result.fallback?.type, 'eurlex-search');
+  } finally {
+    restore();
+  }
+});
+
 test('resolveReference falls back to Cellar when cache match is ambiguous', async () => {
   const store = createAmbiguousStore();
   const fetchCalls = [];
@@ -352,8 +549,9 @@ test('resolveEurlexUrl keeps OJ fallback path when cache cannot resolve determin
     const result = await resolver.resolveEurlexUrl('https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=OJ:L:2015:00999:TOC', 'ENG');
     assert.equal(result.resolved, null);
     assert.equal(result.fallback?.type, 'open-source-url');
-    // 3 act types x their subtype candidates: reg(3) + dir(3) + dec(4) = 10.
-    assert.equal(fetchCalls.length, 10);
+    // 3 direct CELEX probes + 3 act types x their subtype candidates:
+    // reg(3) + dir(3) + dec(4) = 13.
+    assert.equal(fetchCalls.length, 13);
   } finally {
     restore();
   }
@@ -385,6 +583,26 @@ test('resolveEurlexUrl resolves a Commission-document URL via the COMNAT identif
     assert.equal(result.resolved?.source, 'cellar-com');
     assert.equal(fetchCalls.length, 1);
     assert.match(decodeURIComponent(fetchCalls[0]), /comnat:COM_2026_0502_FIN/);
+  } finally {
+    restore();
+  }
+});
+
+test('resolveEurlexUrl decodes percent-encoded Commission CELEX values', async () => {
+  const { resolver, restore } = createResolver({
+    fetchImpl: async () => ({
+      ok: true,
+      status: 200,
+      async json() {
+        return { results: { bindings: [{ celex: { value: '52026PC0502%2801%29' } }] } };
+      },
+    }),
+  });
+
+  try {
+    const result = await resolver.resolveEurlexUrl('https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=COM:2026:502:FIN', 'ENG');
+    assert.equal(result.resolved?.celex, '52026PC0502(01)');
+    assert.equal(result.tried[0].celex[0], '52026PC0502(01)');
   } finally {
     restore();
   }

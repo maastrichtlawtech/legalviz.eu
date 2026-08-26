@@ -2,6 +2,7 @@ const { ClientError } = require('./api-utils');
 const {
   buildCanonicalEliFromReference,
 } = require('../search/legal-cache-store');
+const { resolveInstrumentCelex } = require('./legal-reference-core.mjs');
 
 function parseReferenceText(text = '') {
   const normalized = text.replace(/\s+/g, ' ').trim();
@@ -26,6 +27,7 @@ function parseReferenceText(text = '') {
 
   let year = null;
   let number = null;
+  let numberingOrder = 'ambiguous';
 
   for (const pattern of numberPatterns) {
     const match = normalized.match(pattern);
@@ -34,9 +36,11 @@ function parseReferenceText(text = '') {
     if (pattern === numberPatterns[0]) {
       year = match[1];
       number = match[2];
+      numberingOrder = 'year-first';
     } else {
       year = match[2];
       number = match[1];
+      numberingOrder = 'number-first';
     }
     break;
   }
@@ -50,6 +54,7 @@ function parseReferenceText(text = '') {
     types,
     year,
     number,
+    numberingOrder,
   };
 }
 
@@ -63,6 +68,9 @@ function parseStructuredReference(input = {}) {
   const ojColl = input.ojColl ? String(input.ojColl).trim().toUpperCase() : null;
   const ojNo = input.ojNo ? String(input.ojNo).trim() : null;
   const ojYear = input.ojYear ? String(input.ojYear).trim() : null;
+  const numberingOrder = input.numberingOrder === 'year-first' || input.numberingOrder === 'number-first'
+    ? input.numberingOrder
+    : 'ambiguous';
 
   return {
     raw,
@@ -76,6 +84,7 @@ function parseStructuredReference(input = {}) {
     ojColl,
     ojNo,
     ojYear,
+    numberingOrder,
   };
 }
 
@@ -268,14 +277,14 @@ function decodeCelexValue(value) {
 }
 
 function buildCelexCandidate(reference) {
-  const typeCode = {
-    regulation: 'R',
-    directive: 'L',
-    decision: 'D',
-  }[reference.actType];
-  const number = String(parseInt(reference.number, 10));
-
-  return `3${reference.year}${typeCode}${number.padStart(4, '0')}`;
+  const actType = reference.actType === 'decision' && reference.suffix === 'JHA'
+    ? 'framework decision'
+    : reference.actType;
+  const suffix = reference.suffix ? `/${reference.suffix}` : '';
+  return resolveInstrumentCelex({
+    actType,
+    identifier: `${reference.year}/${reference.number}${suffix}`,
+  });
 }
 
 function buildEurlexOjFallbackUrl(oj, lang, toSearchLang, EURLEX_BASE) {
@@ -331,12 +340,17 @@ function createReferenceResolver({
 
   async function resolveReferenceViaCellar(reference, lang = 'ENG') {
     const eliCandidates = buildEliCandidates(reference);
-    const celexCandidate = buildCelexCandidate(reference);
+    const shouldProbeCelex = reference.numberingOrder === 'number-first';
+    const celexCandidate = shouldProbeCelex ? buildCelexCandidate(reference) : null;
     const cacheKey = JSON.stringify({ type: 'cellar-resolve', reference, lang, eliCandidates, celexCandidate });
     const cached = cacheGet(resolutionCache, cacheKey);
     if (cached) return cached;
 
-    const directCelexQuery = `
+    const results = [];
+
+    if (shouldProbeCelex && celexCandidate) {
+      results.push({ source: 'cellar-celex', celex: celexCandidate });
+      const directCelexQuery = `
 PREFIX owl: <http://www.w3.org/2002/07/owl#>
 SELECT ?work ?eli WHERE {
   ?work owl:sameAs <http://publications.europa.eu/resource/celex/${celexCandidate}> .
@@ -345,27 +359,33 @@ SELECT ?work ?eli WHERE {
     FILTER(STRSTARTS(STR(?eli), "http://publications.europa.eu/resource/eli/"))
   }
 }
-LIMIT 3`;
-    const directCelexData = await runSparqlQuery(directCelexQuery);
-    const directBinding = directCelexData.results?.bindings?.[0];
-    const directEli = directBinding?.eli?.value || null;
-    const results = [{ source: 'cellar-celex', celex: celexCandidate }];
+      LIMIT 3`;
 
-    if (directBinding) {
-      const payload = {
-        resolved: {
-          celex: celexCandidate,
-          eli: directEli,
-          source: 'cellar-sparql',
-        },
-        tried: results,
-        fallback: {
-          type: 'eurlex-search',
-          url: buildEurlexSearchFallbackUrl(reference, lang, toSearchLang, EURLEX_BASE),
-        },
-      };
-      cacheSet(resolutionCache, cacheKey, payload, RESOLUTION_CACHE_MS);
-      return payload;
+      let directCelexData = null;
+      try {
+        directCelexData = await runSparqlQuery(directCelexQuery);
+      } catch {
+        // The computed candidate is only an optimization; an unavailable
+        // direct probe must not prevent the more authoritative ELI lookups.
+      }
+
+      const directBinding = directCelexData?.results?.bindings?.[0];
+      if (directBinding) {
+        const payload = {
+          resolved: {
+            celex: celexCandidate,
+            eli: directBinding.eli?.value || null,
+            source: 'cellar-sparql',
+          },
+          tried: results,
+          fallback: {
+            type: 'eurlex-search',
+            url: buildEurlexSearchFallbackUrl(reference, lang, toSearchLang, EURLEX_BASE),
+          },
+        };
+        cacheSet(resolutionCache, cacheKey, payload, RESOLUTION_CACHE_MS);
+        return payload;
+      }
     }
 
     for (const eli of eliCandidates) {

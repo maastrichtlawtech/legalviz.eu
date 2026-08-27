@@ -1,0 +1,412 @@
+name: Repair corpus
+
+# One-off, offline sweep that removes duplicated top-level blocks from the FMX
+# corpus (issue #219), then republishes the whole corpus as a new immutable
+# release.
+#
+# Why this is its own workflow rather than a step inside refresh-corpus.yml:
+# refresh-corpus runs a gap audit and backfills only the CELEX ids the corpus is
+# MISSING. Enrichment is corpus-first and never refetches a file it already has,
+# so fixing findDownloadUrls does not fix the 24k files already on disk -- see
+# "Repairing a duplicated corpus" in backend/README.md. The sweep has to walk
+# every existing file, which is a different shape of job from a backfill.
+#
+# The repair only touches the `laws` tree (CORPUS_SUBDIR in
+# search/corpus-dedupe.js). `laws-html` and `case-law` pass through byte for
+# byte, but they are re-uploaded anyway: a corpus release must carry the FULL
+# asset set, because refresh-corpus.yml and rederive-parser-assets.yml both
+# download their inputs from a single corpus tag and fail on a missing one.
+#
+# After this publishes, run rederive-parser-assets.yml: it resolves `latest
+# corpus` and will pick this release up, rebuilding every derived artifact
+# against the repaired corpus and opening one PR that bumps DATA_RELEASE_TAG and
+# FULLTEXT_RELEASE_TAG together.
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Optional exact corpus release tag to mint or resume (dated corpus-YYYY-MM-DD.NN); otherwise resolve today's next tag automatically
+        type: string
+        required: false
+      dry_run:
+        description: Report what would be repaired and publish nothing
+        type: boolean
+        default: false
+      limit:
+        description: Repair at most this many acts (0 = no limit); the sweep is resumable via its journal
+        type: string
+        required: false
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: corpus-repair
+  cancel-in-progress: false
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    outputs:
+      corpus_tag: ${{ steps.resolve-corpus.outputs.next_tag }}
+      resume_draft: ${{ steps.resolve-corpus.outputs.resume_draft }}
+      repaired: ${{ steps.sweep.outputs.repaired }}
+      publish: ${{ steps.sweep.outputs.publish }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.15.0
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+      # Mirrors refresh-corpus.yml: the repository has no pnpm lockfile, and
+      # pnpm 10 blocks dependency build scripts, which leaves better-sqlite3
+      # without its native binding.
+      - name: Install backend dependencies
+        run: |
+          set -euo pipefail
+          pnpm install --dir backend --no-frozen-lockfile
+          cd backend
+          pnpm rebuild better-sqlite3
+          node -e "const D = require('better-sqlite3'); new D(':memory:').close()"
+
+      - name: Resolve current and next corpus release
+        id: resolve-corpus
+        env:
+          REQUESTED_TAG: ${{ inputs.release_tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          requested_tag="$REQUESTED_TAG"
+          if [ -n "$requested_tag" ]; then
+            .github/scripts/release-tags.sh validate corpus "$requested_tag"
+            next_tag="$requested_tag"
+            resume_draft=false
+            if existing=$(gh release view "$next_tag" --repo "${{ github.repository }}" --json isDraft 2>/dev/null); then
+              jq -e '.isDraft == true' <<< "$existing" >/dev/null || {
+                echo "A published release already exists for $next_tag; resolve it before retrying." >&2
+                exit 1
+              }
+              resume_draft=true
+            fi
+          else
+            resolved=$(.github/scripts/release-tags.sh resolve corpus)
+            next_tag=$(sed -n 's/^tag=//p' <<< "$resolved")
+            resolve_state=$(sed -n 's/^state=//p' <<< "$resolved")
+            case "$resolve_state" in
+              absent) resume_draft=false ;;
+              draft) resume_draft=true ;;
+              *)
+                echo "Unexpected state from release-tags.sh resolve: $resolve_state" >&2
+                exit 1
+                ;;
+            esac
+          fi
+          current_tag=$(.github/scripts/release-tags.sh latest corpus)
+          {
+            echo "current_tag=$current_tag"
+            echo "next_tag=$next_tag"
+            echo "resume_draft=$resume_draft"
+          } >> "$GITHUB_OUTPUT"
+          echo "Repairing $current_tag; validated output will be published as $next_tag." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Download the current corpus
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p repair-inputs repair-output backend/search/data
+          current_tag="${{ steps.resolve-corpus.outputs.current_tag }}"
+          corpus_assets=$(gh release view "$current_tag" \
+            --repo "${{ github.repository }}" --json assets --jq '.assets[].name')
+          gh release download "$current_tag" \
+            --repo "${{ github.repository }}" \
+            --pattern laws.tar \
+            --pattern laws-html.tar \
+            --pattern case-law.tar \
+            --pattern case-law-harvest-state.json \
+            --pattern case-law-targets.txt \
+            --dir repair-inputs
+          # Carry every optional asset forward untouched. A corpus release that
+          # drops one breaks the next refresh-corpus run, which downloads its
+          # inputs from a single tag.
+          for optional in case-law-misses.json case-law-harvest-state.json.misses.txt \
+            law-dates.json eurovoc.json in-force.json; do
+            if grep -Fxq "$optional" <<< "$corpus_assets"; then
+              gh release download "$current_tag" \
+                --repo "${{ github.repository }}" \
+                --pattern "$optional" \
+                --dir repair-inputs
+            fi
+          done
+          for asset in laws.tar laws-html.tar case-law.tar \
+            case-law-harvest-state.json case-law-targets.txt; do
+            test -s "repair-inputs/$asset" || { echo "Missing required corpus input: $asset" >&2; exit 1; }
+          done
+
+      - name: Restore the corpus and record a baseline
+        id: baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          for corpus in laws laws-html case-law; do
+            tar xf "repair-inputs/$corpus.tar" -C backend/search/data
+            test -d "backend/search/data/$corpus"
+          done
+          laws=$(find backend/search/data/laws -type f -name '*.xml.gz' ! -name '._*' | wc -l | tr -d ' ')
+          laws_html=$(find backend/search/data/laws-html -type f -name '*.html.gz' ! -name '._*' | wc -l | tr -d ' ')
+          case_law=$(find backend/search/data/case-law -type f -name '*.html.gz' ! -name '._*' | wc -l | tr -d ' ')
+          test "$laws" -gt 0
+          test "$laws_html" -gt 0
+          test "$case_law" -gt 0
+          bytes=$(du -sb backend/search/data/laws | cut -f1)
+          {
+            echo "laws=$laws"
+            echo "laws_html=$laws_html"
+            echo "case_law=$case_law"
+            echo "bytes=$bytes"
+          } >> "$GITHUB_OUTPUT"
+          echo "Baseline: laws=$laws, laws-html=$laws_html, case-law=$case_law." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Sweep duplicated blocks out of the FMX corpus
+        id: sweep
+        working-directory: backend
+        env:
+          DRY_RUN: ${{ inputs.dry_run }}
+          LIMIT: ${{ inputs.limit }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          args=()
+          if [ "$DRY_RUN" = "true" ]; then args+=(--dry-run); fi
+          if [ -n "${LIMIT:-}" ] && [ "$LIMIT" != "0" ]; then args+=(--limit "$LIMIT"); fi
+          # corpus-dedupe.js exits non-zero when any act was unreadable, so an
+          # unrepaired corpus can never reach the publish job.
+          node search/corpus-dedupe.js "${args[@]}" 2>&1 | tee ../repair-output/corpus-dedupe.log
+          summary=$(grep -F 'repaired ·' ../repair-output/corpus-dedupe.log | tail -1)
+          repaired=$(sed -n 's/.*[^0-9]\([0-9][0-9]*\) repaired .*/\1/p' <<< "$summary")
+          test -n "$repaired"
+          publish=true
+          if [ "$DRY_RUN" = "true" ]; then
+            publish=false
+          elif [ "$repaired" = "0" ]; then
+            # Nothing changed, so minting a tag would publish a byte-identical
+            # corpus and pointlessly invalidate the Docker pin.
+            publish=false
+            echo "Corpus is already clean; nothing to publish." >> "$GITHUB_STEP_SUMMARY"
+          fi
+          {
+            echo "repaired=$repaired"
+            echo "publish=$publish"
+          } >> "$GITHUB_OUTPUT"
+          echo "$summary" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Validate the repaired corpus
+        if: ${{ steps.sweep.outputs.publish == 'true' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          laws=$(find backend/search/data/laws -type f -name '*.xml.gz' ! -name '._*' | wc -l | tr -d ' ')
+          # The sweep rewrites in place. Gaining or losing a file means it did
+          # something other than remove duplicate blocks.
+          test "$laws" = "${{ steps.baseline.outputs.laws }}" || {
+            echo "laws file count changed: ${{ steps.baseline.outputs.laws }} -> $laws" >&2
+            exit 1
+          }
+          bytes=$(du -sb backend/search/data/laws | cut -f1)
+          test "$bytes" -le "${{ steps.baseline.outputs.bytes }}" || {
+            echo "repaired corpus grew: ${{ steps.baseline.outputs.bytes }} -> $bytes" >&2
+            exit 1
+          }
+          # Every act must still be readable gzip holding non-empty XML. This is
+          # verified independently of the sweep's own reporting.
+          find backend/search/data/laws -type f -name '*.xml.gz' ! -name '._*' -print0 \
+            | xargs -0 -P 4 -n 64 gzip -t
+          empty=$(find backend/search/data/laws -type f -name '*.xml.gz' ! -name '._*' -empty | wc -l | tr -d ' ')
+          test "$empty" = "0" || { echo "$empty empty corpus files after repair" >&2; exit 1; }
+          saved=$(( ${{ steps.baseline.outputs.bytes }} - bytes ))
+          echo "Validated repaired corpus: $laws files, $(( saved / 1048576 )) MiB smaller." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Package the corpus candidate
+        if: ${{ steps.sweep.outputs.publish == 'true' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          for corpus in laws laws-html case-law; do
+            tar -cf "repair-output/$corpus.tar" -C backend/search/data "$corpus"
+            test -s "repair-output/$corpus.tar"
+            tar -tf "repair-output/$corpus.tar" \
+              | awk -v root="$corpus/" 'index($0, root) == 1 { found=1 } END { exit found ? 0 : 1 }'
+          done
+          for asset in case-law-harvest-state.json case-law-targets.txt \
+            case-law-misses.json case-law-harvest-state.json.misses.txt \
+            law-dates.json eurovoc.json in-force.json; do
+            if [ -f "repair-inputs/$asset" ]; then
+              cp "repair-inputs/$asset" "repair-output/$asset"
+            fi
+          done
+          laws=$(find backend/search/data/laws -type f -name '*.xml.gz' ! -name '._*' | wc -l | tr -d ' ')
+          laws_html=$(find backend/search/data/laws-html -type f -name '*.html.gz' ! -name '._*' | wc -l | tr -d ' ')
+          case_law=$(find backend/search/data/case-law -type f -name '*.html.gz' ! -name '._*' | wc -l | tr -d ' ')
+          jq -n \
+            --arg corpusTag "${{ steps.resolve-corpus.outputs.next_tag }}" \
+            --argjson laws "$laws" \
+            --argjson lawsHtml "$laws_html" \
+            --argjson caseLaw "$case_law" \
+            --argjson baseLaws "${{ steps.baseline.outputs.laws }}" \
+            --argjson baseLawsHtml "${{ steps.baseline.outputs.laws_html }}" \
+            --argjson baseCaseLaw "${{ steps.baseline.outputs.case_law }}" \
+            '{corpusTag:$corpusTag, files:{laws:$laws, lawsHtml:$lawsHtml, caseLaw:$caseLaw}, baselineFiles:{laws:$baseLaws, lawsHtml:$baseLawsHtml, caseLaw:$baseCaseLaw}}' \
+            > repair-output/corpus-summary.json
+
+      - name: Upload the corpus candidate
+        if: ${{ steps.sweep.outputs.publish == 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: repaired-corpus-${{ github.run_id }}
+          path: repair-output/
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload the sweep log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: corpus-repair-log-${{ github.run_id }}
+          path: repair-output/corpus-dedupe.log
+          if-no-files-found: warn
+          retention-days: 14
+
+  publish:
+    if: ${{ needs.repair.result == 'success' && needs.repair.outputs.publish == 'true' }}
+    needs: repair
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      CORPUS_TAG: ${{ needs.repair.outputs.corpus_tag }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+      - uses: actions/download-artifact@v4
+        with:
+          name: repaired-corpus-${{ github.run_id }}
+          path: release-assets
+
+      - name: Verify the corpus candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          for asset in laws.tar laws-html.tar case-law.tar \
+            case-law-harvest-state.json case-law-targets.txt corpus-summary.json; do
+            test -s "release-assets/$asset" || { echo "Missing candidate corpus asset: $asset" >&2; exit 1; }
+          done
+          for spec in "laws.tar:laws/" "laws-html.tar:laws-html/" "case-law.tar:case-law/"; do
+            archive=${spec%%:*}
+            root=${spec#*:}
+            tar -tf "release-assets/$archive" \
+              | awk -v root="$root" 'index($0, root) == 1 { found=1 } END { exit found ? 0 : 1 }'
+          done
+
+      - name: Render the release summary
+        shell: bash
+        run: |
+          set -euo pipefail
+          node .github/scripts/render-refresh-notes.mjs \
+            --kind corpus \
+            --dir release-assets \
+            --tag "$CORPUS_TAG" \
+            --run-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            --mode release \
+            > release-notes.md
+          {
+            echo
+            echo "### Repair"
+            echo
+            echo "Duplicated top-level blocks removed from the Formex corpus (issue #219)."
+            echo "File counts are unchanged by design: the sweep rewrites each act in place."
+            echo
+            echo '```'
+            grep -F '[corpus-dedupe]' release-assets/corpus-dedupe.log 2>/dev/null | tail -4 || true
+            echo '```'
+            echo
+            echo "Rebuild the derived artifacts against this corpus with \`rederive-parser-assets.yml\`."
+          } >> release-notes.md
+          test -s release-notes.md
+          cat release-notes.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Create the draft corpus release
+        if: ${{ needs.repair.outputs.resume_draft != 'true' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release create "$CORPUS_TAG" \
+            --repo "${{ github.repository }}" \
+            --draft \
+            --title "$CORPUS_TAG" \
+            --notes-file release-notes.md
+
+      - name: Upload the complete corpus asset set to the draft
+        shell: bash
+        run: |
+          set -euo pipefail
+          assets=(
+            release-assets/laws.tar
+            release-assets/laws-html.tar
+            release-assets/case-law.tar
+            release-assets/case-law-harvest-state.json
+            release-assets/case-law-targets.txt
+          )
+          for optional in case-law-misses.json case-law-harvest-state.json.misses.txt \
+            law-dates.json eurovoc.json in-force.json; do
+            if [ -f "release-assets/$optional" ]; then
+              assets+=("release-assets/$optional")
+            fi
+          done
+          gh release upload "$CORPUS_TAG" \
+            "${assets[@]}" \
+            --repo "${{ github.repository }}" \
+            --clobber
+
+      - name: Verify draft release asset completeness
+        shell: bash
+        run: |
+          set -euo pipefail
+          release=$(gh release view "$CORPUS_TAG" --repo "${{ github.repository }}" --json isDraft,assets)
+          jq -e '.isDraft == true' <<< "$release" >/dev/null
+          for asset in laws.tar laws-html.tar case-law.tar \
+            case-law-harvest-state.json case-law-targets.txt; do
+            jq -e --arg name "$asset" 'any(.assets[]; .name == $name and (.size | numbers) > 0)' \
+              <<< "$release" >/dev/null || { echo "Draft release is missing $asset" >&2; exit 1; }
+          done
+          for optional in case-law-misses.json case-law-harvest-state.json.misses.txt \
+            law-dates.json eurovoc.json in-force.json; do
+            if [ -f "release-assets/$optional" ]; then
+              jq -e --arg name "$optional" 'any(.assets[]; .name == $name and (.size | numbers) > 0)' \
+                <<< "$release" >/dev/null || { echo "Draft release is missing $optional" >&2; exit 1; }
+            fi
+          done
+
+      - name: Publish the validated corpus release
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Notes are set here as well as at creation, so a draft left behind by
+          # an interrupted run is published with this run's numbers.
+          gh release edit "$CORPUS_TAG" \
+            --repo "${{ github.repository }}" \
+            --notes-file release-notes.md \
+            --draft=false
+          published=$(gh release view "$CORPUS_TAG" --repo "${{ github.repository }}" --json isDraft)
+          jq -e '.isDraft == false' <<< "$published" >/dev/null
+          echo "Published repaired corpus release $CORPUS_TAG." >> "$GITHUB_STEP_SUMMARY"
+          echo "Next: run rederive-parser-assets.yml to rebuild the derived artifacts against it." >> "$GITHUB_STEP_SUMMARY"

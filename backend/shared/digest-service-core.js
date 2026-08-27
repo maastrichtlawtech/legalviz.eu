@@ -49,7 +49,13 @@ function parseThemedDigestJson(text, input, { citeLimit } = {}) {
       if (!theme || typeof theme !== 'object') return null;
       const name = normalizeText(theme.name, THEME_NAME_MAX_CHARS);
       const description = normalizeText(theme.description, THEME_DESCRIPTION_MAX_CHARS);
-      const cites = normalizeCites(theme.cites, input, citeLimit ? { limit: citeLimit } : undefined);
+      // Explicitly undefined-checked rather than truthy: a citeLimit of 0 must
+      // mean "no cites", not "fall back to normalizeCites' default of 6".
+      const cites = normalizeCites(
+        theme.cites,
+        input,
+        citeLimit === undefined ? undefined : { limit: citeLimit },
+      );
       if (!name || !description || cites.length === 0) return null;
       return { name, description, cites };
     })

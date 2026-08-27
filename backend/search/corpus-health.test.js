@@ -17,8 +17,8 @@ const zlib = require("node:zlib");
 
 const { parseFmxXml } = require("../shared/fmx-parser-node.js");
 const { parseEurlexHtmlToCombined } = require("../shared/eurlex-html-parser.js");
-const { getLangConfig } = require("../shared/formex-parser/languages.mjs");
 const { wrapForParsing, buildExcerptFromCombined } = require("./search-build.js");
+const { emptyHealth, inspectParseHealth, mergeParseHealth } = require("./parse-health.js");
 
 const DATA_DIR = path.join(__dirname, "data");
 const FMX_ROOT = path.join(DATA_DIR, "laws");
@@ -51,63 +51,8 @@ function evenSample(files, cap) {
   return picked;
 }
 
-// These are shape checks, not semantic judgments. A point marker, bullet, or
-// finite-verb clause at the start of a defined term means the parser consumed
-// surrounding prose instead of a noun phrase. In particular, do not replace
-// this with a word-count cutoff: legitimate multilingual terms can be long.
-const DEFINITION_POINT_SHAPE = /^\(?\s*(?:[a-z]{1,2}|\d{1,3})\s*[).]\s+/i;
-const DEFINITION_DASH_SHAPE = /^[-\u2010-\u2015]\s*/;
-const DEFINITION_VERB_SHAPE = /^(?:\S+\s+){1,}\b(?:is|are|was|were|be|been|being|has|have|had|do|does|did|can|could|shall|should|may|might|must|will|would|means?|includes?|consists?|concerns?|applies?|defines?|refers?|provides?|requires?|states?|ensures?|establishes?|determines?|represents?|covers?|specifies?|indicates?|allows?|prohibits?|permits?|entails?|follows?)\b/i;
-
-function isMalformedDefinitionTerm(term) {
-  const value = String(term || "").trim();
-  return DEFINITION_POINT_SHAPE.test(value)
-    || DEFINITION_DASH_SHAPE.test(value)
-    || DEFINITION_VERB_SHAPE.test(value);
-}
-
-function inspectDefinitionHealth(combined, file, result) {
-  const lang = getLangConfig(combined.langCode || "EN");
-  const definitionsByArticle = new Map();
-  for (const definition of combined.definitions || []) {
-    const key = String(definition.sourceArticle);
-    definitionsByArticle.set(key, (definitionsByArticle.get(key) || 0) + 1);
-    result.definitions += 1;
-    if (isMalformedDefinitionTerm(definition.term)) {
-      result.malformedDefinitionTerms += 1;
-      if (result.definitionSignalSamples.length < 10) {
-        result.definitionSignalSamples.push(
-          `${path.basename(file)} Article ${key}: malformed term ${JSON.stringify(definition.term)}`,
-        );
-      }
-    }
-  }
-
-  for (const article of combined.articles || []) {
-    if (!lang.definition?.test(article.article_title || "")) continue;
-    result.definitionArticles += 1;
-    if (!definitionsByArticle.has(String(article.article_number))) {
-      result.definitionArticlesWithoutDefinitions += 1;
-      if (result.definitionSignalSamples.length < 10) {
-        result.definitionSignalSamples.push(
-          `${path.basename(file)} Article ${article.article_number}: title declares definitions but none were extracted`,
-        );
-      }
-    }
-  }
-}
-
 async function scan(files, parse) {
-  const result = {
-    empty: 0,
-    errors: 0,
-    invalidInternalRefs: 0,
-    definitions: 0,
-    definitionArticles: 0,
-    definitionArticlesWithoutDefinitions: 0,
-    malformedDefinitionTerms: 0,
-    definitionSignalSamples: [],
-  };
+  const result = { empty: 0, errors: 0, invalidInternalRefs: 0, ...emptyHealth() };
   const errorSamples = [];
   for (const file of files) {
     let raw;
@@ -130,17 +75,13 @@ async function scan(files, parse) {
           }
         }
       }
-      inspectDefinitionHealth(combined, file, result);
+      mergeParseHealth(result, inspectParseHealth(combined), { label: path.basename(file) });
     } catch (e) {
       result.errors += 1;
       if (errorSamples.length < 10) errorSamples.push(`${path.basename(file)}: ${e.message}`);
     }
   }
-  return {
-    scanned: files.length,
-    ...result,
-    errorSamples,
-  };
+  return { scanned: files.length, ...result, errorSamples };
 }
 
 test("FMX corpus parses into non-empty excerpts", async (t) => {
@@ -154,11 +95,24 @@ test("FMX corpus parses into non-empty excerpts", async (t) => {
   const errorRate = r.errors / r.scanned;
   const definitionArticleEmptyRate = r.definitionArticlesWithoutDefinitions / (r.definitionArticles || 1);
   const malformedDefinitionRate = r.malformedDefinitionTerms / (r.definitions || 1);
+  const duplicateRecitalRate = r.recitalsDuplicated / r.scanned;
+  const missingRecitalRate = r.recitalsMissing / r.scanned;
+  const articlelessRate = r.articlelessWithBody / r.scanned;
   assert.ok(errorRate < 0.02, `FMX parse errors ${(errorRate * 100).toFixed(1)}% > 2% :: ${r.errorSamples.join(" | ")}`);
   assert.ok(emptyRate < 0.1, `FMX empty excerpts ${(emptyRate * 100).toFixed(1)}% > 10% (scanned ${r.scanned})`);
   assert.equal(r.invalidInternalRefs, 0, `FMX invalid internal refs :: ${r.errorSamples.join(" | ")}`);
-  assert.ok(definitionArticleEmptyRate < 0.02, `FMX definition articles with zero definitions ${(definitionArticleEmptyRate * 100).toFixed(1)}% > 2% :: ${r.definitionSignalSamples.join(" | ")}`);
-  assert.ok(malformedDefinitionRate < 0.02, `FMX malformed definition terms ${(malformedDefinitionRate * 100).toFixed(1)}% > 2% :: ${r.definitionSignalSamples.join(" | ")}`);
+  assert.ok(definitionArticleEmptyRate < 0.02, `FMX definition articles with zero definitions ${(definitionArticleEmptyRate * 100).toFixed(1)}% > 2% :: ${r.signals.join(" | ")}`);
+  assert.ok(malformedDefinitionRate < 0.02, `FMX malformed definition terms ${(malformedDefinitionRate * 100).toFixed(1)}% > 2% :: ${r.signals.join(" | ")}`);
+  // Recital-numbering and segmentation contradictions. These are asserted as
+  // rates, not as zero: a handful of individual acts are known to trip them
+  // (31993R2463 parses 30 recitals numbered up to 44), and failing the whole
+  // sweep on one such act in a 100-act sample would make the check unusable.
+  // The failure mode worth catching here is systemic — duplicate recital
+  // numbers fired on most of the FMX corpus while harvested captures held the
+  // act two or three times, and would again if that regressed.
+  assert.ok(duplicateRecitalRate < 0.02, `FMX acts with duplicate recital numbers ${(duplicateRecitalRate * 100).toFixed(1)}% > 2% :: ${r.signals.join(" | ")}`);
+  assert.ok(missingRecitalRate < 0.02, `FMX acts with recitals numbered above the parsed count ${(missingRecitalRate * 100).toFixed(1)}% > 2% :: ${r.signals.join(" | ")}`);
+  assert.ok(articlelessRate < 0.02, `FMX acts with body text but no articles ${(articlelessRate * 100).toFixed(1)}% > 2% :: ${r.signals.join(" | ")}`);
 });
 
 test("EUR-Lex HTML corpus parses into non-empty excerpts", async (t) => {
@@ -172,9 +126,22 @@ test("EUR-Lex HTML corpus parses into non-empty excerpts", async (t) => {
   const errorRate = r.errors / r.scanned;
   const definitionArticleEmptyRate = r.definitionArticlesWithoutDefinitions / (r.definitionArticles || 1);
   const malformedDefinitionRate = r.malformedDefinitionTerms / (r.definitions || 1);
+  const duplicateRecitalRate = r.recitalsDuplicated / r.scanned;
+  const missingRecitalRate = r.recitalsMissing / r.scanned;
+  const articlelessRate = r.articlelessWithBody / r.scanned;
   assert.ok(errorRate < 0.02, `HTML parse errors ${(errorRate * 100).toFixed(1)}% > 2% :: ${r.errorSamples.join(" | ")}`);
   assert.ok(emptyRate < 0.05, `HTML empty excerpts ${(emptyRate * 100).toFixed(1)}% > 5% (scanned ${r.scanned})`);
   assert.equal(r.invalidInternalRefs, 0, `HTML invalid internal refs :: ${r.errorSamples.join(" | ")}`);
-  assert.ok(definitionArticleEmptyRate < 0.02, `HTML definition articles with zero definitions ${(definitionArticleEmptyRate * 100).toFixed(1)}% > 2% :: ${r.definitionSignalSamples.join(" | ")}`);
-  assert.ok(malformedDefinitionRate < 0.02, `HTML malformed definition terms ${(malformedDefinitionRate * 100).toFixed(1)}% > 2% :: ${r.definitionSignalSamples.join(" | ")}`);
+  assert.ok(definitionArticleEmptyRate < 0.02, `HTML definition articles with zero definitions ${(definitionArticleEmptyRate * 100).toFixed(1)}% > 2% :: ${r.signals.join(" | ")}`);
+  assert.ok(malformedDefinitionRate < 0.02, `HTML malformed definition terms ${(malformedDefinitionRate * 100).toFixed(1)}% > 2% :: ${r.signals.join(" | ")}`);
+  // Recital-numbering and segmentation contradictions. These are asserted as
+  // rates, not as zero: a handful of individual acts are known to trip them
+  // (31993R2463 parses 30 recitals numbered up to 44), and failing the whole
+  // sweep on one such act in a 100-act sample would make the check unusable.
+  // The failure mode worth catching here is systemic — duplicate recital
+  // numbers fired on most of the FMX corpus while harvested captures held the
+  // act two or three times, and would again if that regressed.
+  assert.ok(duplicateRecitalRate < 0.02, `HTML acts with duplicate recital numbers ${(duplicateRecitalRate * 100).toFixed(1)}% > 2% :: ${r.signals.join(" | ")}`);
+  assert.ok(missingRecitalRate < 0.02, `HTML acts with recitals numbered above the parsed count ${(missingRecitalRate * 100).toFixed(1)}% > 2% :: ${r.signals.join(" | ")}`);
+  assert.ok(articlelessRate < 0.02, `HTML acts with body text but no articles ${(articlelessRate * 100).toFixed(1)}% > 2% :: ${r.signals.join(" | ")}`);
 });

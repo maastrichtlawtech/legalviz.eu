@@ -1,7 +1,8 @@
 // Offline, worker-recycled cross-reference audit for the local raw-law corpus.
 //
 // Unlike corpus-health.test.js, this command can scan every downloaded FMX and
-// EUR-Lex HTML law without accumulating JSDOM objects in one process.
+// EUR-Lex HTML law without accumulating JSDOM objects in one process. It checks
+// cross-references plus the self-contradiction signals in parse-health.js.
 //
 // Usage (from backend/):
 //   node search/corpus-reference-audit.js
@@ -17,9 +18,9 @@ const { execFileSync } = require("child_process");
 
 const { parseFmxXml } = require("../shared/fmx-parser-node.js");
 const { parseEurlexHtmlToCombined } = require("../shared/eurlex-html-parser.js");
-const { getLangConfig } = require("../shared/formex-parser/languages.mjs");
 const { DEFAULT_PROGRESS_FILE, recordAudit } = require("./corpus-audit-progress.js");
 const { listCorpusFiles: listCorpusEntries } = require("./corpus-files");
+const { HEALTH_COUNTERS, emptyHealth, inspectParseHealth, mergeParseHealth } = require("./parse-health.js");
 
 const DATA_DIR = path.join(__dirname, "data");
 const CORPORA = {
@@ -86,64 +87,16 @@ function emptyStats() {
     invalidInternalAnchors: 0,
     explicitUnresolved: 0,
     missingResolvedTargets: 0,
-    definitions: 0,
-    definitionArticles: 0,
-    definitionArticlesWithoutDefinitions: 0,
-    malformedDefinitionTerms: 0,
     samples: [],
-    definitionSignalSamples: [],
+    // Parse-health counters and their `signals` samples come from
+    // search/parse-health.js so this sweep, corpus-health.test.js and
+    // corpus-fixtures.test.js check exactly the same contradictions.
+    ...emptyHealth(),
   };
 }
 
 function addSample(stats, text) {
   if (stats.samples.length < 12) stats.samples.push(text);
-}
-
-function addDefinitionSignalSample(stats, text) {
-  if (stats.definitionSignalSamples.length < 10) stats.definitionSignalSamples.push(text);
-}
-
-// Keep this deliberately structural. A malformed term is prose-shaped when it
-// starts with a point marker, bullet, or a finite-verb clause; a word-count
-// cutoff would flag legitimate long multilingual terms.
-const DEFINITION_POINT_SHAPE = /^\(?\s*(?:[a-z]{1,2}|\d{1,3})\s*[).]\s+/i;
-const DEFINITION_DASH_SHAPE = /^[-\u2010-\u2015]\s*/;
-const DEFINITION_VERB_SHAPE = /^(?:\S+\s+){1,}\b(?:is|are|was|were|be|been|being|has|have|had|do|does|did|can|could|shall|should|may|might|must|will|would|means?|includes?|consists?|concerns?|applies?|defines?|refers?|provides?|requires?|states?|ensures?|establishes?|determines?|represents?|covers?|specifies?|indicates?|allows?|prohibits?|permits?|entails?|follows?)\b/i;
-
-function isMalformedDefinitionTerm(term) {
-  const value = String(term || "").trim();
-  return DEFINITION_POINT_SHAPE.test(value)
-    || DEFINITION_DASH_SHAPE.test(value)
-    || DEFINITION_VERB_SHAPE.test(value);
-}
-
-function inspectDefinitionHealth(parsed, file, stats) {
-  const lang = getLangConfig(parsed.langCode || "EN");
-  const definitionsByArticle = new Map();
-  for (const definition of parsed.definitions || []) {
-    const key = String(definition.sourceArticle);
-    definitionsByArticle.set(key, (definitionsByArticle.get(key) || 0) + 1);
-    stats.definitions += 1;
-    if (isMalformedDefinitionTerm(definition.term)) {
-      stats.malformedDefinitionTerms += 1;
-      addDefinitionSignalSample(
-        stats,
-        `${path.basename(file)} Article ${key}: malformed term ${JSON.stringify(definition.term)}`,
-      );
-    }
-  }
-
-  for (const article of parsed.articles || []) {
-    if (!lang.definition?.test(article.article_title || "")) continue;
-    stats.definitionArticles += 1;
-    if (!definitionsByArticle.has(String(article.article_number))) {
-      stats.definitionArticlesWithoutDefinitions += 1;
-      addDefinitionSignalSample(
-        stats,
-        `${path.basename(file)} Article ${article.article_number}: title declares definitions but none were extracted`,
-      );
-    }
-  }
 }
 
 function inspectParsedLaw(parsed, file, stats, knownCelex) {
@@ -188,7 +141,7 @@ function inspectParsedLaw(parsed, file, stats, knownCelex) {
     }
   }
 
-  inspectDefinitionHealth(parsed, file, stats);
+  mergeParseHealth(stats, inspectParseHealth(parsed), { label: path.basename(file) });
 }
 
 async function auditFiles(kind, files, knownCelex = new Set()) {
@@ -215,11 +168,11 @@ async function auditFiles(kind, files, knownCelex = new Set()) {
 }
 
 function mergeStats(target, source) {
-  for (const key of ["scanned", "empty", "oversized", "errors", "refs", "externalInstitutional", "externalNational", "externalCaseLaw", "invalidInternalRefs", "invalidInternalAnchors", "explicitUnresolved", "missingResolvedTargets", "definitions", "definitionArticles", "definitionArticlesWithoutDefinitions", "malformedDefinitionTerms"]) {
+  for (const key of ["scanned", "empty", "oversized", "errors", "refs", "externalInstitutional", "externalNational", "externalCaseLaw", "invalidInternalRefs", "invalidInternalAnchors", "explicitUnresolved", "missingResolvedTargets", ...HEALTH_COUNTERS]) {
     target[key] += source[key] || 0;
   }
   for (const sample of source.samples || []) addSample(target, sample);
-  for (const sample of source.definitionSignalSamples || []) addDefinitionSignalSample(target, sample);
+  mergeParseHealth(target, { signals: source.signals || [] }, {});
   return target;
 }
 
@@ -355,7 +308,12 @@ async function main() {
   const options = parseArgs(process.argv.slice(2));
   if (options.worker) return runWorker(options);
   const result = await auditCorpus(options);
-  const failures = Object.values(result).some((stats) => stats.invalidInternalRefs || stats.invalidInternalAnchors || stats.errors);
+  // Duplicate recital numbers have no legitimate shape — they mean a harvested
+  // capture holds the act more than once, or the parser emitted a recital
+  // twice — and they silently corrupt every offline build input keyed by
+  // position, so they fail the audit. The remaining parse-health signals are
+  // heuristics and stay report-only in the exhaustive sweep.
+  const failures = Object.values(result).some((stats) => stats.invalidInternalRefs || stats.invalidInternalAnchors || stats.errors || stats.recitalsDuplicated);
   if (failures) process.exitCode = 1;
 }
 

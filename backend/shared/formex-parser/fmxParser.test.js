@@ -485,6 +485,54 @@ describe("parseFmxToCombined — v2 CONTENTS body fallback", () => {
 });
 
 describe("parseFmxToCombined — unnumbered PROLOG decisions", () => {
+  // wrapForParsing() exists so a download holding several concatenated
+  // top-level <ACT> documents — invalid XML standalone — still parses instead
+  // of throwing. This pins what that actually yields, because the two halves
+  // behave differently: recitals are merged across every root, while articles
+  // come from the first root only.
+  //
+  // That asymmetry is why duplicated captures were invisible for so long. A
+  // capture holding the act twice reported the right article count and twice
+  // the recitals, and the corpus fixtures for 32015L0412 and 32004R0097 froze
+  // those inflated recital floors as if correct (see the re-freeze notes in
+  // shared/__fixtures__/corpus/manifest.json). The harvest now dedupes Cellar
+  // manifestation URIs, and search/parse-health.js flags a repeated recital
+  // number, so a duplicate cannot silently pass again.
+  it("parses multiple ACT roots in one wrapper, merging recitals but not articles", () => {
+    const act = (number, recital) =>
+      `<ACT><BIB.INSTANCE><LG.DOC>EN</LG.DOC></BIB.INSTANCE>` +
+      `<PREAMBLE><GR.CONSID><CONSID><NP><NO.P>(${recital})</NO.P>` +
+      `<TXT>Recital ${recital}.</TXT></NP></CONSID></GR.CONSID></PREAMBLE>` +
+      `<ENACTING.TERMS><DIVISION><ARTICLE IDENTIFIER="00${number}">` +
+      `<TI.ART>Article ${number}</TI.ART>` +
+      `<ALINEA><P>Operative provision from root ${number}.</P></ALINEA></ARTICLE></DIVISION>` +
+      `</ENACTING.TERMS></ACT>`;
+    const result = parseFmxToCombined(`<COMBINED.FMX>${act(1, 1)}${act(2, 2)}</COMBINED.FMX>`);
+
+    expect(result.langCode).toBe("EN");
+    expect(result.recitals.map((recital) => recital.recital_text)).toEqual([
+      "Recital 1.",
+      "Recital 2.",
+    ]);
+    expect(result.articles.map((article) => article.article_number)).toEqual(["1"]);
+    expect(result.articles[0].article_html).toContain("Operative provision from root 1.");
+  });
+
+  // The same wrapper holding one act twice: the article count looks correct
+  // and only the repeated recital number gives the duplication away.
+  it("reports a repeated recital number when one ACT is captured twice", () => {
+    const act =
+      `<ACT><BIB.INSTANCE><LG.DOC>EN</LG.DOC></BIB.INSTANCE>` +
+      `<PREAMBLE><GR.CONSID><CONSID><NP><NO.P>(1)</NO.P>` +
+      `<TXT>Only recital.</TXT></NP></CONSID></GR.CONSID></PREAMBLE>` +
+      `<ENACTING.TERMS><DIVISION><ARTICLE IDENTIFIER="001"><TI.ART>Article 1</TI.ART>` +
+      `<ALINEA><P>Only article.</P></ALINEA></ARTICLE></DIVISION></ENACTING.TERMS></ACT>`;
+    const result = parseFmxToCombined(`<COMBINED.FMX>${act}${act}</COMBINED.FMX>`);
+
+    expect(result.articles.map((article) => article.article_number)).toEqual(["1"]);
+    expect(result.recitals.map((recital) => recital.recital_number)).toEqual(["1", "1"]);
+  });
+
   it("retains and cites a decision whose only published body is PROLOG", () => {
     const xml =
       `<FMX.COLLECTION><GENERAL><BIB.INSTANCE><LG.DOC>EN</LG.DOC></BIB.INSTANCE>` +

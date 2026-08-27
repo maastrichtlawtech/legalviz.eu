@@ -203,4 +203,47 @@ describe("useLawViewerSource", () => {
       celex: "32015L2366",
     }));
   });
+
+  it("navigateToCanonical carries an explicit search string instead of the current one", async () => {
+    const navigate = vi.fn();
+    mockGetCanonicalLawRoute.mockReturnValue("/regulation-2006-1367/article/1");
+
+    const props = {
+      slug: "regulation-2006-1367",
+      key: undefined,
+      kind: null,
+      id: null,
+      importCelex: "32006R1367",
+      sourceUrl: null,
+      locale: "en",
+      routeLocale: "en",
+      pathname: "/regulation-2006-1367",
+      locationSearch: "?lang=EN",
+      navigate,
+      formexLang: "EN",
+      t: (key) => key,
+      localizePath: (value) => value,
+    };
+
+    await act(async () => {
+      root.render(<Probe {...props} />);
+      await flushEffects();
+    });
+
+    await act(async () => {
+      latestValue.navigateToCanonical("article", "1", { search: "?lang=EN&version=current" });
+    });
+
+    expect(navigate).toHaveBeenCalledWith(
+      "/regulation-2006-1367/article/1?lang=EN&version=current",
+      {}
+    );
+
+    navigate.mockClear();
+    await act(async () => {
+      latestValue.navigateToCanonical("article", "2");
+    });
+
+    expect(navigate).toHaveBeenCalledWith("/regulation-2006-1367/article/1?lang=EN", {});
+  });
 });

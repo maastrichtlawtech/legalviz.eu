@@ -702,7 +702,7 @@ function registerApiRoutes(app, deps) {
           try {
             const { servePath } = await prepareLawPayload(celex, lang);
             return {
-              rawText: fs.readFileSync(servePath, 'utf8'),
+              rawText: await fs.promises.readFile(servePath, 'utf8'),
               sourceFile: path.relative(FMX_DIR, servePath),
             };
           } catch (err) {

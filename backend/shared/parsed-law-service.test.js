@@ -2,6 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const { createParsedLawResolver } = require('./parsed-law-service');
+const { ClientError } = require('./api-utils');
 
 const os = require('os');
 const path = require('path');
@@ -9,7 +10,7 @@ const fs = require('fs');
 
 // Minimal but real Formex XML the actual parser (jsdom-backed) turns into a
 // combined law with one article, so these tests exercise the real
-// prepareLawPayload -> fs.readFileSync -> parseFmxXml path the consolidated
+// prepareLawPayload -> fs.promises.readFile -> parseFmxXml path the consolidated
 // fallback uses, not a mocked shortcut.
 const MINIMAL_FMX_WITH_ARTICLE = `<?xml version="1.0" encoding="UTF-8"?>
 <ACT xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://formex.publications.europa.eu/schema/formex-05.59-20170418.xd">
@@ -104,6 +105,46 @@ test('resolveParsedLaw uses the HTML fallback path when skipFmxProbe is set and 
   // A different language is a distinct cache key.
   await resolveParsedLaw('32016R0679', 'FRA', { skipFmxProbe: true });
   assert.equal(htmlCalls, 2);
+});
+
+test('resolveParsedLaw falls back to HTML when the FMX probe returns a 404', async () => {
+  let htmlCalls = 0;
+  const resolveParsedLaw = createParsedLawResolver({
+    prepareLawPayload: async () => {
+      throw new ClientError('No FMX files found', 404, 'fmx_not_found');
+    },
+    fetchAndParseHtmlLaw: async () => {
+      htmlCalls += 1;
+      return { source: 'eurlex-html', articles: [], recitals: [], annexes: [], definitions: [], crossReferences: {} };
+    },
+  });
+
+  const result = await resolveParsedLaw('32006R1907', 'ENG');
+
+  assert.equal(result.source, 'eurlex-html');
+  assert.equal(htmlCalls, 1);
+});
+
+test('resolveParsedLaw propagates an FMX read error instead of falling back to HTML', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'parsed-law-service-read-error-'));
+  let htmlCalls = 0;
+  try {
+    const resolveParsedLaw = createParsedLawResolver({
+      prepareLawPayload: async () => ({ servePath: path.join(dir, 'missing.xml') }),
+      fetchAndParseHtmlLaw: async () => {
+        htmlCalls += 1;
+        return { source: 'eurlex-html', articles: [], recitals: [], annexes: [], definitions: [], crossReferences: {} };
+      },
+    });
+
+    await assert.rejects(
+      () => resolveParsedLaw('32006R1907', 'ENG'),
+      (error) => error.code === 'ENOENT'
+    );
+    assert.equal(htmlCalls, 0);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test('resolveParsedLaw propagates servedLang from the HTML fallback without overriding the requested lang', async () => {

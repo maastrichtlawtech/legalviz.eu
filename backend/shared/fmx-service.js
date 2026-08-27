@@ -1,8 +1,11 @@
 const fs = require('fs');
 const path = require('path');
-const { execFileSync } = require('child_process');
+const { execFile, execFileSync } = require('child_process');
+const { promisify } = require('util');
 
 const { ClientError } = require('./api-utils');
+
+const execFileAsync = promisify(execFile);
 
 /** Trailing `.<LANG>.fmx4` on a Cellar manifestation URI, any 3-letter language. */
 const FMX4_ANY_LANG = /\.[A-Z]{3}\.fmx4$/;
@@ -364,12 +367,12 @@ function createFmxService({
     throw new ClientError('No downloadable Formex files found for this law', 404, 'fmx_not_found');
   }
 
-  function combineZipToXml(zipPath) {
+  async function combineZipToXml(zipPath) {
     const combinedPath = zipPath.replace(/\.zip$/, '.combined.xml');
     if (isValidCachedFile(combinedPath)) return combinedPath;
 
     if (HAS_SYSTEM_UNZIP) {
-      return combineZipWithUnzip(zipPath, combinedPath);
+      return await combineZipWithUnzip(zipPath, combinedPath);
     }
 
     // Fallback: adm-zip (npm package, works when system unzip is unavailable)
@@ -385,18 +388,19 @@ function createFmxService({
     return combineZipWithAdmZip(zipPath, combinedPath, AdmZip);
   }
 
-  function combineZipWithUnzip(zipPath, combinedPath) {
+  async function combineZipWithUnzip(zipPath, combinedPath) {
     const unzipOpts = { maxBuffer: 50 * 1024 * 1024 };
-    const listing = execFileSync('unzip', ['-Z1', zipPath], unzipOpts).toString('utf8');
+    const { stdout: listing } = await execFileAsync('unzip', ['-Z1', zipPath], unzipOpts);
     const entryNames = listing.split('\n').map((l) => l.trim()).filter(Boolean);
 
     const { docEntryName, isOldFormat } = findManifestEntry(entryNames);
-    const manifest = execFileSync('unzip', ['-p', zipPath, docEntryName], unzipOpts).toString('utf8');
+    const { stdout: manifest } = await execFileAsync('unzip', ['-p', zipPath, docEntryName], unzipOpts);
     const physRefs = resolvePhysicalRefs(manifest, entryNames, docEntryName, isOldFormat);
 
     const parts = ['<?xml version="1.0" encoding="UTF-8"?>', '<COMBINED.FMX>'];
     for (const ref of physRefs) {
-      let xml = execFileSync('unzip', ['-p', zipPath, ref], unzipOpts).toString('utf8');
+      const { stdout: xmlOutput } = await execFileAsync('unzip', ['-p', zipPath, ref], unzipOpts);
+      let xml = xmlOutput;
       xml = xml.replace(/<\?xml[^?]*\?>/, '').trim();
       parts.push(xml);
     }
@@ -562,13 +566,13 @@ function createFmxService({
 
     let servePath;
     if (type === 'zip') {
-      servePath = combineZipToXml(files[0].path);
+      servePath = await combineZipToXml(files[0].path);
     } else if (files.length > 1) {
       const combinedPath = files[0].path.replace(/\.xml$/, '.combined.xml');
       if (!isValidCachedFile(combinedPath)) {
         const parts = ['<?xml version="1.0" encoding="UTF-8"?>', '<COMBINED.FMX>'];
         for (const file of files) {
-          let xml = fs.readFileSync(file.path, 'utf8');
+          let xml = await fs.promises.readFile(file.path, 'utf8');
           xml = xml.replace(/<\?xml[^?]*\?>/, '').trim();
           parts.push(xml);
         }

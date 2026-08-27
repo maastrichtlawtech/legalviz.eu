@@ -10,9 +10,11 @@ const FLUSH_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 const ANALYTICS_SCHEMA_VERSION = 2;
 const DAY_RETENTION = 90;
 const COUNTER_CAP = 1000;
+const COUNTER_COMPACTION_THRESHOLD = COUNTER_CAP + 100;
 const DAILY_TOP_LIMIT = 20;
 const UNIQUE_BITMAP_BITS = 16 * 1024;
 const UNIQUE_BITMAP_BYTES = UNIQUE_BITMAP_BITS / 8;
+const counterObjectSizes = new WeakMap();
 
 function getClientIp(req) {
   return req.ip || req.socket?.remoteAddress || null;
@@ -40,22 +42,34 @@ function utcDateString(now = () => new Date()) {
   return now().toISOString().slice(0, 10);
 }
 
-function capMap(map) {
-  if (map.size <= COUNTER_CAP) return;
+function capMap(map, force = false) {
+  if (map.size <= COUNTER_CAP || (!force && map.size <= COUNTER_COMPACTION_THRESHOLD)) return;
   const sorted = [...map.entries()].sort((a, b) => a[1] - b[1]);
   const toDelete = sorted.slice(0, map.size - COUNTER_CAP);
   for (const [k] of toDelete) map.delete(k);
 }
 
 function increment(obj, key) {
+  let size = counterObjectSizes.get(obj);
+  if (size === undefined) size = Object.keys(obj).length;
+  if (!Object.prototype.hasOwnProperty.call(obj, key)) size += 1;
   obj[key] = (obj[key] || 0) + 1;
+  counterObjectSizes.set(obj, size);
 }
 
-function capObject(obj) {
+function capObject(obj, force = false) {
+  let size = counterObjectSizes.get(obj);
+  if (size === undefined) {
+    size = Object.keys(obj).length;
+    counterObjectSizes.set(obj, size);
+  }
+  if (size <= COUNTER_CAP || (!force && size <= COUNTER_COMPACTION_THRESHOLD)) return;
   const entries = Object.entries(obj);
-  if (entries.length <= COUNTER_CAP) return;
   entries.sort((a, b) => a[1] - b[1]);
-  for (const [key] of entries.slice(0, entries.length - COUNTER_CAP)) delete obj[key];
+  for (const [key] of entries.slice(0, entries.length - COUNTER_CAP)) {
+    if (delete obj[key]) size -= 1;
+  }
+  counterObjectSizes.set(obj, size);
 }
 
 function topObject(obj, n = DAILY_TOP_LIMIT) {
@@ -109,6 +123,10 @@ function hydrateDaily(date, saved = {}) {
   daily.routes = { ...(saved.routes || {}) };
   daily.celexes = { ...(saved.celexes || {}) };
   daily.searches = Number(saved.searches) || 0;
+  capObject(daily.channels, true);
+  capObject(daily.statusCodes, true);
+  capObject(daily.routes, true);
+  capObject(daily.celexes, true);
   return daily;
 }
 
@@ -166,6 +184,22 @@ function createAnalytics({ cacheDir, dataStore, now = () => new Date(), hashKey 
   let totalSearches = 0;
   let today = newDaily(utcDateString(now));
 
+  function compactCounters(force = false) {
+    capMap(routeCounts, force);
+    capMap(celexCounts, force);
+    capMap(channelCounts, force);
+    for (const daily of Object.values(days)) {
+      capObject(daily.channels, force);
+      capObject(daily.statusCodes, force);
+      capObject(daily.routes, force);
+      capObject(daily.celexes, force);
+    }
+    capObject(today.channels, force);
+    capObject(today.statusCodes, force);
+    capObject(today.routes, force);
+    capObject(today.celexes, force);
+  }
+
   // Hydrate from disk
   if (analyticsFile) {
     try {
@@ -206,6 +240,9 @@ function createAnalytics({ cacheDir, dataStore, now = () => new Date(), hashKey 
           const existing = days[stale.date];
           if (!existing || stale.requests > existing.requests) days[stale.date] = stale;
         }
+        capMap(routeCounts, true);
+        capMap(celexCounts, true);
+        capMap(channelCounts, true);
         trimDays(days);
       }
     } catch {
@@ -224,6 +261,7 @@ function createAnalytics({ cacheDir, dataStore, now = () => new Date(), hashKey 
   function flush() {
     if (!analyticsFile) return;
     rolloverDayIfNeeded();
+    compactCounters(true);
     try {
       const persistedDays = {};
       for (const [date, daily] of Object.entries(days)) persistedDays[date] = serializeDaily(daily);
@@ -374,6 +412,7 @@ function createAnalytics({ cacheDir, dataStore, now = () => new Date(), hashKey 
 
   function getStats() {
     rolloverDayIfNeeded();
+    compactCounters(true);
     const publicDays = {};
     for (const [date, daily] of Object.entries(days)) publicDays[date] = publicDaily(daily);
     const todayPublic = publicDaily(today);

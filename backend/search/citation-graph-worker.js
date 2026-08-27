@@ -4,9 +4,10 @@ const { buildCitationGraph, createReferenceResolver } = require("./citation-grap
 // Persistent worker: the parent's pool sends one batch per message and expects
 // exactly one reply per message. Serving many batches from one process amortises
 // module loading and jsdom startup (roughly a second per spawn, previously paid
-// once per batch), and shared/fmx-parser-node.js recycles its DOM-shim window
-// every FMX_DOM_SHIM_RECYCLE parses (default 25), so per-parse retention stays
-// bounded no matter how long this worker lives.
+// once per batch). fmx-parser-node.js recycles its DOM-shim window every
+// FMX_DOM_SHIM_RECYCLE parses (default 25), but that does not cover the HTML
+// fallback parser's per-act JSDOM retention; citation-graph-build.js therefore
+// retires this worker before it takes another batch after its recycle interval.
 const legalCache = workerData.resolverIndex
   ? createReferenceResolver(workerData.resolverIndex)
   : undefined;

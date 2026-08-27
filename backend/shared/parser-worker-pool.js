@@ -23,6 +23,13 @@ const {
 // malformed or unexpectedly large request. Set PARSER_POOL_SIZE=0 to disable.
 const DEFAULT_PARSER_POOL_SIZE = 2;
 const DEFAULT_PARSER_WORKER_HEAP_MB = 640;
+// The largest 1995 HTML act measured at 383 KB retained about 10 MB per parse
+// while its worker was kept in the same event-loop turn: 40 parses reached
+// 465 MB against the 640 MB cap. A 40-task interval leaves measured headroom
+// for parser variance while amortising the roughly one-second worker startup.
+// Set PARSER_WORKER_RECYCLE_TASKS=0 to disable; the generic pool remains off by
+// default so build-side callers keep their existing lifetime behavior.
+const DEFAULT_PARSER_WORKER_RECYCLE_TASKS = 40;
 const MAX_CONSECUTIVE_POOL_FAILURES = 3;
 
 function envInteger(name, fallback, { min = 0 } = {}) {
@@ -37,6 +44,9 @@ function createParserPool(options = {}) {
   const workerHeapMb = options.workerHeapMb === undefined
     ? envInteger("PARSER_WORKER_HEAP_MB", DEFAULT_PARSER_WORKER_HEAP_MB, { min: 1 })
     : options.workerHeapMb;
+  const recycleAfter = options.recycleAfter === undefined
+    ? envInteger("PARSER_WORKER_RECYCLE_TASKS", DEFAULT_PARSER_WORKER_RECYCLE_TASKS)
+    : options.recycleAfter;
   const parseFmxXmlInline = options.parseFmxXml || defaultParseFmxXml;
   const parseEurlexHtmlToCombinedInline = options.parseEurlexHtmlToCombined || defaultParseEurlexHtmlToCombined;
 
@@ -52,6 +62,9 @@ function createParserPool(options = {}) {
   if (!Number.isInteger(workerHeapMb) || workerHeapMb < 1) {
     throw new Error(`Parser worker heap must be a positive integer, got ${workerHeapMb}`);
   }
+  if (!Number.isInteger(recycleAfter) || recycleAfter < 0) {
+    throw new Error(`Parser worker recycle threshold must be a non-negative integer, got ${recycleAfter}`);
+  }
 
   if (poolSize === 0) {
     return {
@@ -66,6 +79,7 @@ function createParserPool(options = {}) {
     poolSize,
     queueLimit: options.queueLimit === undefined ? DEFAULT_QUEUE_LIMIT : options.queueLimit,
     taskDeadlineMs: options.taskDeadlineMs === undefined ? DEFAULT_TASK_DEADLINE_MS : options.taskDeadlineMs,
+    recycleAfter,
     workerFactory: options.spawnWorker || (() => new Worker(path.join(__dirname, "parser-worker.js"), {
       resourceLimits: { maxOldGenerationSizeMb: workerHeapMb },
     })),
@@ -135,6 +149,7 @@ function createParserPool(options = {}) {
 module.exports = {
   DEFAULT_PARSER_POOL_SIZE,
   DEFAULT_PARSER_WORKER_HEAP_MB,
+  DEFAULT_PARSER_WORKER_RECYCLE_TASKS,
   DEFAULT_PARSER_QUEUE_LIMIT: DEFAULT_QUEUE_LIMIT,
   DEFAULT_PARSER_TASK_DEADLINE_MS: DEFAULT_TASK_DEADLINE_MS,
   createParserPool,

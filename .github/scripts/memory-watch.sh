@@ -63,7 +63,15 @@ fi
 shift
 
 samples=$(mktemp)
-trap 'rm -f "$samples"' EXIT
+# Guard the cleanup on being the top-level shell. Subshells inherit this trap,
+# and the sampler below is killed while it may still be inside bash code rather
+# than blocked in `sleep` -- bash then handles the signal and runs the inherited
+# EXIT trap, removing the samples file before the summary awk reads it. The
+# summary comes out empty and the trace this wrapper exists to leave is lost.
+# The race needs the watched command to exit almost immediately, which is why
+# the selftest (`-- true`) hit it perceptibly and long rebuilds did not; a
+# command that dies fast is exactly the OOM case worth having a trace for.
+trap 'if [ "$BASHPID" = "$$" ]; then rm -f "$samples"; fi' EXIT
 
 interval="${MEMORY_WATCH_INTERVAL:-30}"
 

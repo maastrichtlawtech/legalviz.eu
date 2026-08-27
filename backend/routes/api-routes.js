@@ -453,14 +453,32 @@ function registerApiRoutes(app, deps) {
         return res.status(400).json({ error: `Invalid language code: ${rawLang}` });
       }
 
-      const fmx4Uri = await findFmx4Uri(celex, lang);
-      const { type } = await findDownloadUrls(fmx4Uri);
+      // An act with no Formex manifestation is not a missing act: `/parsed`
+      // serves it through the EUR-Lex HTML fallback, and several acts in the
+      // corpus (e.g. 31987L0372) only exist that way. Answering 404 here made
+      // the two endpoints disagree about whether the law exists at all, so
+      // any consumer using `/info` as an existence check got a false negative
+      // on exactly those acts. Report the absence in the body instead, and
+      // keep 404 for the one thing it should mean — Cellar has no such CELEX
+      // (`celex_not_found`, raised before we ever look for a manifestation).
+      let type = null;
+      let formexAvailable = true;
+      try {
+        const fmx4Uri = await findFmx4Uri(celex, lang);
+        ({ type } = await findDownloadUrls(fmx4Uri));
+      } catch (err) {
+        if (!(err instanceof ClientError) || err.statusCode !== 404 || err.code !== 'fmx_not_found') {
+          throw err;
+        }
+        formexAvailable = false;
+      }
 
       res.json({
         celex,
         lang,
         name: CELEX_NAMES[celex] || null,
-        type
+        type,
+        formexAvailable
       });
     } catch (err) {
       safeErrorResponse(res, err, 'Failed to fetch law metadata');
@@ -929,7 +947,7 @@ function registerApiRoutes(app, deps) {
         'GET /api/laws': 'List cached FMX files',
         'GET /api/laws/:celex?lang=ENG': 'Get raw FMX XML by CELEX (fetches & caches)',
         'GET /api/laws/:celex/parsed?lang=ENG': 'Get parsed law as structured JSON (articles, recitals, definitions, annexes, cross-references)',
-        'GET /api/laws/:celex/info': 'Get metadata only',
+        'GET /api/laws/:celex/info': 'Get metadata only (formexAvailable: false when the act has no Formex; 404 only for an unknown CELEX)',
         'GET /api/laws/:celex/procedure': 'Resolve the official EUR-Lex legislative procedure overview',
         'GET /api/laws/by-reference?actType=directive&year=2018&number=1972&lang=ENG': 'Resolve an official reference and fetch the matching FMX',
         'GET /api/laws/:celex/case-law': 'List CJEU judgments that interpret this law',

@@ -59,6 +59,87 @@ test('recordMcpTool feeds route, celex, and search counters', () => {
   analytics.shutdown();
 });
 
+test('compacts large counter sets with slack while preserving the highest counts', () => {
+  const fs = require('node:fs');
+  const os = require('node:os');
+  const path = require('node:path');
+  const cacheDir = fs.mkdtempSync(path.join(os.tmpdir(), 'analytics-compaction-'));
+  const analytics = createAnalytics({ cacheDir });
+  const hotRoute = '/api/hot-route';
+  const hotCelex = '32016R9999';
+
+  for (let count = 0; count < 25; count += 1) {
+    hit(analytics, baseReq({ path: hotRoute, route: { path: hotRoute } }));
+    hit(analytics, baseReq({
+      path: `/api/laws/${hotCelex}`,
+      route: { path: '/api/laws/:celex' },
+      params: { celex: hotCelex },
+    }));
+  }
+  for (let index = 0; index < 5000; index += 1) {
+    const route = `/api/distinct/${index}`;
+    hit(analytics, baseReq({ path: route, route: { path: route } }));
+    const celex = `32016R${String(index).padStart(4, '0')}`;
+    hit(analytics, baseReq({
+      path: `/api/laws/${celex}`,
+      route: { path: '/api/laws/:celex' },
+      params: { celex },
+    }));
+  }
+
+  analytics.shutdown();
+  const persisted = JSON.parse(fs.readFileSync(path.join(cacheDir, 'analytics.json'), 'utf8'));
+
+  assert.equal(persisted.schemaVersion, 2);
+  assert.ok(Object.keys(persisted.routeCounts).length <= 1000);
+  assert.ok(Object.keys(persisted.celexCounts).length <= 1000);
+  assert.ok(Object.keys(persisted.today.routes).length <= 1000);
+  assert.ok(Object.keys(persisted.today.celexes).length <= 1000);
+  assert.equal(persisted.routeCounts[hotRoute], 25);
+  assert.equal(persisted.celexCounts[hotCelex], 25);
+});
+
+test('caps counter objects rehydrated into days, including the stale today merge', () => {
+  const fs = require('node:fs');
+  const os = require('node:os');
+  const path = require('node:path');
+  const cacheDir = fs.mkdtempSync(path.join(os.tmpdir(), 'analytics-rehydration-'));
+  const currentDate = '2026-08-27';
+
+  function overCapRoutes(prefix, hotRoute) {
+    const routes = { [hotRoute]: 100 };
+    for (let index = 0; index < 1001; index += 1) routes[`${prefix}-${index}`] = 1;
+    return routes;
+  }
+
+  fs.writeFileSync(path.join(cacheDir, 'analytics.json'), JSON.stringify({
+    schemaVersion: 2,
+    days: {
+      '2026-08-25': {
+        requests: 1,
+        routes: overCapRoutes('archived', '/api/archived-hot'),
+      },
+    },
+    today: {
+      date: '2026-08-26',
+      requests: 2,
+      routes: overCapRoutes('stale', '/api/stale-hot'),
+    },
+  }), 'utf8');
+
+  const analytics = createAnalytics({
+    cacheDir,
+    now: () => new Date(`${currentDate}T12:00:00Z`),
+  });
+  analytics.shutdown();
+
+  const persisted = JSON.parse(fs.readFileSync(path.join(cacheDir, 'analytics.json'), 'utf8'));
+  assert.ok(Object.keys(persisted.days['2026-08-25'].routes).length <= 1000);
+  assert.ok(Object.keys(persisted.days['2026-08-26'].routes).length <= 1000);
+  assert.equal(persisted.days['2026-08-25'].routes['/api/archived-hot'], 100);
+  assert.equal(persisted.days['2026-08-26'].routes['/api/stale-hot'], 100);
+});
+
 test('persists channel counters across a flush/reload cycle', () => {
   const os = require('node:os');
   const fs = require('node:fs');

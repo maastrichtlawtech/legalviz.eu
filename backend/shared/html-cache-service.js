@@ -73,17 +73,30 @@ function createHtmlCacheService({ CACHE_DIR, STORAGE_LIMIT_MB }) {
    */
   async function get(celex, lang) {
     const filePath = cachePath(celex, lang);
+    let compressed;
     try {
-      const compressed = fs.readFileSync(filePath);
-      const html = (await gunzipAsync(compressed)).toString('utf8');
-      // Touch mtime so LRU eviction treats this as recently used
-      const now = new Date();
-      fs.utimesSync(filePath, now, now);
-      console.log(`[HtmlCache] Hit: ${cacheFileName(celex, lang)}`);
-      return html;
+      compressed = await fs.promises.readFile(filePath);
     } catch {
       return null;
     }
+
+    let html;
+    try {
+      html = (await gunzipAsync(compressed)).toString('utf8');
+    } catch {
+      return null;
+    }
+
+    // Touch mtime so LRU eviction treats this as recently used. A failed LRU
+    // touch must not discard HTML that was read and decompressed successfully.
+    try {
+      const now = new Date();
+      await fs.promises.utimes(filePath, now, now);
+    } catch {
+      // The cache hit remains usable even if the best-effort touch fails.
+    }
+    console.log(`[HtmlCache] Hit: ${cacheFileName(celex, lang)}`);
+    return html;
   }
 
   /**

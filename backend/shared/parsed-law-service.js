@@ -63,7 +63,7 @@ function createParsedLawResolver({
     if (!current) return null;
 
     const { servePath } = await prepareLawPayload(current.celex, lang);
-    const xmlText = fs.readFileSync(servePath, 'utf8');
+    const xmlText = await fs.promises.readFile(servePath, 'utf8');
     const consolidatedParsed = await parseFmxXmlImpl(xmlText);
     if (!hasParsedLawContent(consolidatedParsed)) return null;
 
@@ -81,7 +81,7 @@ function createParsedLawResolver({
     if (!skipFmxProbe) {
       try {
         const { servePath } = await prepareLawPayload(celex, lang);
-        const xmlText = fs.readFileSync(servePath, 'utf8');
+        const xmlText = await fs.promises.readFile(servePath, 'utf8');
         parsed = await parseFmxXmlImpl(xmlText);
       } catch (err) {
         if (!(err instanceof ClientError) || err.statusCode !== 404 || typeof fetchAndParseHtmlLaw !== 'function') {
@@ -95,7 +95,7 @@ function createParsedLawResolver({
       source = parsed.source || 'eurlex-html';
     } else {
       const { servePath } = await prepareLawPayload(celex, lang);
-      const xmlText = fs.readFileSync(servePath, 'utf8');
+      const xmlText = await fs.promises.readFile(servePath, 'utf8');
       parsed = await parseFmxXmlImpl(xmlText);
     }
 

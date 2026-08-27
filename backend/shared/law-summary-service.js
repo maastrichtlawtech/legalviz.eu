@@ -301,9 +301,9 @@ async function ensureLawSummary({
     // upstream lookup and no Formex parse.
     if (servable && cached.rawHash) {
       const sourceFilePath = resolveSourceFilePath(cacheDir, cached.sourceFile);
-      if (sourceFilePath && fs.existsSync(sourceFilePath)) {
+      if (sourceFilePath) {
         try {
-          if (rawSourceHash(fs.readFileSync(sourceFilePath, 'utf8')) === cached.rawHash) {
+          if (rawSourceHash(await fs.promises.readFile(sourceFilePath, 'utf8')) === cached.rawHash) {
             return cachedResult(cached);
           }
         } catch {

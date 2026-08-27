@@ -59,6 +59,23 @@ test("get updates mtime for LRU tracking", async () => {
   assert.ok(mtimeAfter > mtimeBefore, "mtime should be updated on cache hit");
 });
 
+test("get returns HTML when the LRU touch fails", async () => {
+  const dir = makeTempDir();
+  const cache = createHtmlCacheService({ CACHE_DIR: dir, STORAGE_LIMIT_MB: 10 });
+
+  await cache.put("32016R0679", "ENG", SAMPLE_HTML);
+
+  const originalUtimes = fs.promises.utimes;
+  fs.promises.utimes = async () => {
+    throw new Error("simulated LRU touch failure");
+  };
+  try {
+    assert.equal(await cache.get("32016R0679", "ENG"), SAMPLE_HTML);
+  } finally {
+    fs.promises.utimes = originalUtimes;
+  }
+});
+
 test("evictOldestIfNeeded removes oldest files when over limit", async () => {
   const dir = makeTempDir();
   const cache = createHtmlCacheService({ CACHE_DIR: dir, STORAGE_LIMIT_MB: 0 });

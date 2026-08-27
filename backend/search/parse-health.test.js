@@ -97,6 +97,23 @@ test("a Definitions article that cross-refers to another act is exempt", () => {
   assert.equal(health.signals.length, 0);
 });
 
+test("a Definitions article that imports and adds definitions is not exempt", () => {
+  const health = inspectParseHealth({
+    langCode: "EN",
+    articles: [{
+      article_number: "2",
+      article_title: "Definitions",
+      article_text: "The definitions in Directive 95/46/EC shall apply. In addition, 'service provider' means a natural or legal person.",
+    }],
+    definitions: [],
+  });
+
+  assert.equal(health.definitionArticles, 1);
+  assert.equal(health.definitionArticlesWithoutDefinitions, 1);
+  assert.equal(health.signals.length, 1);
+  assert.equal(health.signals[0], "Article 2: title declares definitions but none were extracted");
+});
+
 test("German Begriffsbestimmungen is recognized as a definition article", () => {
   const health = inspectParseHealth({
     langCode: "DE",

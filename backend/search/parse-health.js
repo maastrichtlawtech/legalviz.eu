@@ -43,6 +43,12 @@ const DEFINITION_VERB_SHAPE = /^(?:\S+\s+){1,}\b(?:is|are|was|were|be|been|being
 // signal assertable without an allow-list.
 const CROSS_REFERRING_DEFINITIONS = /\bdefinitions?\b[\s\S]{0,200}?\b(?:in|of|laid\s+down\s+in|set\s+out\s+in|contained\s+in)\b[\s\S]{0,80}?\b(?:Directive|Regulation|Decision|Treaty|Article)\b/i;
 
+// A definitions article may import another act's vocabulary and still add
+// definitions of its own. Do not let the imported sentence exempt the whole
+// article when local definition language remains; that would hide precisely
+// the mixed-content parser gap this check is meant to surface.
+const LOCAL_DEFINITION_CLAUSE = /\b(?:means?|includes?|shall\s+(?:mean|be\s+understood\s+as)|is\s+defined\s+as)\b|["'‘’“”«»][^"'‘’“”«»]{1,200}["'‘’“”«»]\s*:/i;
+
 // Below this, an act with no articles is plausibly a stub or a repealing note
 // rather than a segmentation failure. 32004D0464 (3.4 kB of body, 0 articles)
 // is the shape this is sized for.
@@ -57,6 +63,10 @@ function isMalformedDefinitionTerm(term) {
 
 function stripHtml(html) {
   return String(html || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function onlyCrossRefersToDefinitions(text) {
+  return CROSS_REFERRING_DEFINITIONS.test(text) && !LOCAL_DEFINITION_CLAUSE.test(text);
 }
 
 function bodyTextLength(parsed) {
@@ -118,7 +128,7 @@ function inspectDefinitions(parsed, health) {
     if (!lang.definition?.test(article.article_title || "")) continue;
     health.definitionArticles += 1;
     if (definitionsByArticle.has(String(article.article_number))) continue;
-    if (CROSS_REFERRING_DEFINITIONS.test(stripHtml(article.article_html || article.article_text))) continue;
+    if (onlyCrossRefersToDefinitions(stripHtml(article.article_html || article.article_text))) continue;
     health.definitionArticlesWithoutDefinitions += 1;
     health.signals.push(
       `Article ${article.article_number}: title declares definitions but none were extracted`,

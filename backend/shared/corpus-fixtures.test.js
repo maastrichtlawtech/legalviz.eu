@@ -20,6 +20,7 @@ const zlib = require("node:zlib");
 const { parseFmxXml } = require("./fmx-parser-node.js");
 const { parseEurlexHtmlToCombined } = require("./eurlex-html-parser.js");
 const { wrapForParsing } = require("../search/search-build.js");
+const { inspectParseHealth } = require("../search/parse-health.js");
 
 const FIXTURE_DIR = path.join(__dirname, "__fixtures__", "corpus");
 const manifest = JSON.parse(
@@ -116,6 +117,18 @@ for (const entry of manifest.fixtures) {
         .map((ref) => ref.articleNumber);
       assert.deepEqual(refsTo2299, ["1"], "the Article 2 heading must not bind to Regulation 2299/2003");
     }
+    // Every fixture must be free of the self-contradictions in
+    // search/parse-health.js. This is the one layer of that check that runs in
+    // CI: the corpus sweeps need the gitignored local corpus and skip without
+    // it. It caught two contaminated captures when it was introduced — see the
+    // re-freeze notes in manifest.json.
+    const health = inspectParseHealth(combined);
+    assert.deepEqual(
+      health.signals,
+      [],
+      `${entry.celex}: parse-health contradictions :: ${health.signals.join(" | ")}`,
+    );
+
     // The enacting formula must never leak into a recital in any era.
     assert.ok(
       (combined.recitals || []).every(

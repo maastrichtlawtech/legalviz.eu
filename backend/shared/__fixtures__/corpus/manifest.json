@@ -1,5 +1,5 @@
 {
-  "description": "Real EUR-Lex captures and targeted parser regression fixtures, one per format era or reported edge case, frozen as gzipped fixtures. This file is the map of the EU document-format versions LegalViz has to handle; the paired corpus-fixtures.test.js asserts each still parses into articles/recitals so a parser change can't silently regress an era. Counts below are the parse output at freeze time; tests assert `>=` these floors, so parser improvements are free but regressions fail. To refresh or extend, drop a new `<kind>-<era>-<CELEX>.<ext>.gz` here (FMX: xml, EUR-Lex HTML: html) and add an entry. Era fixtures are sourced from the gitignored local corpus (backend/search/data/laws{,-html}); HTML fixtures are the raw EUR-Lex HTML the live viewer reparses.",
+  "description": "Real EUR-Lex captures and targeted parser regression fixtures, one per format era or reported edge case, frozen as gzipped fixtures. This file is the map of the EU document-format versions LegalViz has to handle; the paired corpus-fixtures.test.js asserts each still parses into articles/recitals so a parser change can't silently regress an era. Counts below are the parse output at freeze time; tests assert `>=` these floors, so parser improvements are free but regressions fail. To refresh or extend, drop a new `<kind>-<era>-<CELEX>.<ext>.gz` here (FMX: xml, EUR-Lex HTML: html) and add an entry. A capture must hold the act exactly once — Cellar manifestation duplication has silently inflated recital counts here before, and shared/corpus-fixtures.test.js now asserts the parse-health signals in search/parse-health.js against every fixture to catch it. Era fixtures are sourced from the gitignored local corpus (backend/search/data/laws{,-html}); HTML fixtures are the raw EUR-Lex HTML the live viewer reparses.",
   "fixtures": [
     {
       "file": "fmx-v2-2004-32004R0097.xml.gz",
@@ -7,8 +7,8 @@
       "celex": "32004R0097",
       "year": 2004,
       "format": "Formex v2 — schema 02.00, <GENERAL>/<BIB.INSTANCE> root",
-      "note": "Earliest bulk-FMX era (pre-2005). isFmxDocument() returns false for the bare <GENERAL> shape, but wrapForParsing() normalises it and recitals + articles parse. Small v2 acts use <ENACTING.TERMS> (this fixture); large structured v2 acts (e.g. Directive 2004/18/EC) instead nest the body under <CONTENTS> — the parser falls back to that container so their articles parse too (guarded by a synthetic test in fmxParser.test.js).",
-      "expect": { "minArticles": 3, "minRecitals": 6, "minDefinitions": 0 }
+      "note": "Earliest bulk-FMX era (pre-2005). isFmxDocument() returns false for the bare <GENERAL> shape, but wrapForParsing() normalises it and recitals + articles parse. Small v2 acts use <ENACTING.TERMS> (this fixture); large structured v2 acts (e.g. Directive 2004/18/EC) instead nest the body under <CONTENTS> — the parser falls back to that container so their articles parse too (guarded by a synthetic test in fmxParser.test.js). Re-frozen for issue #142: the original capture held three identical <PUBLICATION> OJ stubs and three identical copies of the <ACT>, so it parsed 6 recitals against the act’s real 2.",
+      "expect": { "minArticles": 3, "minRecitals": 2, "minDefinitions": 0 }
     },
     {
       "file": "fmx-v4-2009-32009L0004.xml.gz",
@@ -24,9 +24,9 @@
       "kind": "fmx",
       "celex": "32015L0412",
       "year": 2015,
-      "format": "Formex v5 — schema 05.55, multi-root <ACT>+<ACT>",
-      "note": "A CELLAR download can ship the act as multiple concatenated top-level <ACT> documents (invalid XML on its own). wrapForParsing() wraps them in <FMX.COLLECTION> so the streaming parser accepts them — this fixture guards that path. It also references Directive 2001/18/EC and the TFEU, so it guards external-law + treaty cross-reference extraction.",
-      "expect": { "minArticles": 4, "minRecitals": 56, "minDefinitions": 0, "minCrossRefKeys": 10, "minTreatyRefs": 1 }
+      "format": "Formex v5 — schema 05.55, <ACT> root",
+      "note": "Mid-to-late FMX shape. Also references Directive 2001/18/EC and the TFEU, so it guards external-law + treaty cross-reference extraction. Re-frozen for issue #142: the original capture concatenated the same <ACT> twice, so it parsed 56 recitals against the act’s real 28 and the floor here locked that in. The multi-root <ACT>+<ACT> wrapping this fixture used to cover is guarded synthetically in fmxParser.test.js instead — a duplicated capture is not a document shape worth freezing.",
+      "expect": { "minArticles": 4, "minRecitals": 28, "minDefinitions": 0, "minCrossRefKeys": 10, "minTreatyRefs": 1 }
     },
     {
       "file": "fmx-v6-2024-32024D0190.xml.gz",

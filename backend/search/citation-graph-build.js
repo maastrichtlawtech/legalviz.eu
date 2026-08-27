@@ -23,6 +23,23 @@ const DEFAULT_BATCH_SIZE = 100;
 // the 4-vCPU CI runner, and keeping workers alive across batches saves the ~1 s
 // module+jsdom startup a spawn-per-batch design pays ~800 times over a full corpus.
 const DEFAULT_POOL_SIZE = 2;
+// Batches a pool worker handles before it is retired and replaced. Parse
+// throughput decays with a worker's own uptime rather than with the corpus or
+// with memory pressure: replaying one identical 1,578-act slice twelve times
+// over falls from ~18 acts/s to ~2.9 acts/s by act 2,500, with RSS flat at
+// ~1.25 GB and the same curve at a 640 MB and a 4096 MB worker heap. The
+// full-corpus run that this bounds had collapsed from 64 acts/s to 1.0 acts/s
+// by act 60,000 and missed its 300-minute budget with 17k acts left.
+// fulltext-index-build.js carried the same mechanism (and the same reasoning)
+// until 7766856 replaced it with fmx-parser-node.js's shared-window recycling,
+// which only covers the Formex path — the HTML parser builds a fresh JSDOM per
+// act, so a builder that streams tens of thousands of HTML acts through
+// long-lived workers is left uncovered. Retiring workers periodically
+// sidesteps whatever accumulates without having to name it, and is
+// self-verifying: if throughput stops decaying, per-worker state was the
+// cause. At the 100-act default batch size this retires a worker every 500
+// acts, matching the interval that worked there. 0 disables recycling.
+const DEFAULT_RECYCLE_BATCHES = 5;
 const DEFAULT_WORKER_HEAP_MB = 768;
 const DEFAULT_CORPUS_DIR = path.join(__dirname, "data", "laws");
 const DEFAULT_CITATION_GRAPH_PATH = process.env.CITATION_GRAPH_PATH || path.join(__dirname, "data", "citation-graph.json");
@@ -248,7 +265,7 @@ async function writeArtifactAtomic(outputPath, artifact, fsApi = fs) {
 function parseCliArgs(argv) {
   const options = {};
   const valueFlags = ["--corpusDir", "--htmlDir", "--out", "--limit", "--fromYear", "--toYear",
-    "--maxXmlBytes", "--maxHtmlBytes", "--batchSize", "--workerHeapMb", "--pool"];
+    "--maxXmlBytes", "--maxHtmlBytes", "--batchSize", "--workerHeapMb", "--pool", "--recycleBatches"];
   for (let index = 0; index < argv.length; index += 1) {
     const flag = argv[index];
     // --noHtml is the one boolean: it restores the FMX-only graph (and reports the
@@ -281,6 +298,9 @@ function parseCliArgs(argv) {
       if (flag === "--workerHeapMb") options.workerHeapMb = number;
       // Persistent workers in the pool, same flag name as the fulltext builder.
       if (flag === "--pool") options.poolSize = number;
+      // Batches a worker serves before being retired. 0 disables recycling, so
+      // unlike the flags above it is deliberately absent from the zero check.
+      if (flag === "--recycleBatches") options.recycleBatches = number;
     }
   }
   return options;
@@ -525,9 +545,11 @@ function runCitationGraphWorker(files, options = {}) {
 // needs before the parent's own merge phase.
 function runCitationGraphPool(batches, onShard, options = {}) {
   const poolSize = Math.max(1, Math.min(options.poolSize || DEFAULT_POOL_SIZE, batches.length));
+  const recycleAfter = options.recycleBatches ?? DEFAULT_RECYCLE_BATCHES;
   return new Promise((resolve) => {
     const queue = batches.slice();
     const inflight = new Map(); // worker -> batch
+    const batchesByWorker = new Map(); // worker -> batches completed since it spawned
     let settled = false;
 
     function maybeDone() {
@@ -558,8 +580,21 @@ function runCitationGraphPool(batches, onShard, options = {}) {
     function assign(worker) {
       if (queue.length === 0) {
         inflight.delete(worker);
+        batchesByWorker.delete(worker);
         worker.terminate().catch(() => {});
         maybeDone();
+        return;
+      }
+      // Retire before taking work, never mid-batch, so recycling can never lose
+      // a shard. The replacement starts at zero batches, so the recursive
+      // assign() below hands it the batch instead of retiring it again.
+      if (recycleAfter > 0 && (batchesByWorker.get(worker) || 0) >= recycleAfter) {
+        inflight.delete(worker);
+        batchesByWorker.delete(worker);
+        worker.terminate().catch(() => {});
+        const replacement = spawnCitationGraphWorker(options);
+        attach(replacement);
+        assign(replacement);
         return;
       }
       const batch = queue.shift();
@@ -570,6 +605,7 @@ function runCitationGraphPool(batches, onShard, options = {}) {
       worker.on("message", (message) => {
         const batch = inflight.get(worker);
         inflight.delete(worker);
+        batchesByWorker.set(worker, (batchesByWorker.get(worker) || 0) + 1);
         if (message?.ok) onShard(message.artifact, batch);
         else handleBatchFailure(batch, new Error(message?.error || "Citation graph worker failed"));
         assign(worker);
@@ -584,7 +620,9 @@ function runCitationGraphPool(batches, onShard, options = {}) {
     // A crashed worker loses its in-flight batch; split and re-queue it, record
     // single-law losses, and spawn a replacement so the pool stays at full strength.
     function handleWorkerLoss(batch, error) {
-      inflight.delete(workerForBatch(batch));
+      const lost = workerForBatch(batch);
+      inflight.delete(lost);
+      batchesByWorker.delete(lost);
       handleBatchFailure(batch, error);
       const replacement = spawnCitationGraphWorker(options);
       attach(replacement);
@@ -696,7 +734,8 @@ async function buildCitationGraphBatched(options = {}) {
     await runCitationGraphPool(batches, (shard, batch) => {
       shardSettled(shard, batch, shard.failures?.length ? new Error(shard.failures[0].error) : null);
     }, {
-      poolSize: options.poolSize, maxXmlBytes, maxHtmlBytes,
+      poolSize: options.poolSize, recycleBatches: options.recycleBatches,
+      maxXmlBytes, maxHtmlBytes,
       searchCachePath: options.searchCachePath, resolverIndex,
       workerHeapMb: options.workerHeapMb,
     });
@@ -774,7 +813,7 @@ if (require.main === module) {
 }
 
 module.exports = { DEFAULT_BATCH_SIZE, DEFAULT_CITATION_GRAPH_PATH, DEFAULT_CORPUS_DIR, DEFAULT_MAX_XML_BYTES,
-  DEFAULT_MAX_HTML_BYTES, DEFAULT_POOL_SIZE, GRAPH_VERSION, buildCitationGraph, buildCitationGraphBatched,
+  DEFAULT_MAX_HTML_BYTES, DEFAULT_POOL_SIZE, DEFAULT_RECYCLE_BATCHES, GRAPH_VERSION, buildCitationGraph, buildCitationGraphBatched,
   celexForCorpusFile,
   createReferenceResolver, loadReferenceIndex,
   countHtmlTreeSkipped, filterCorpusFiles, htmlCorpusDirFor, isHtmlCorpusFile,

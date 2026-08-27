@@ -393,3 +393,43 @@ test("batched builder's default pool parses a real corpus through persistent wor
   assert.deepEqual(counts, [...counts].sort((a, b) => a - b), "cumulative counts are reported in increasing order");
   assert.equal(counts[counts.length - 1], 5, "progress finishes at 5/5");
 });
+
+test("pool recycling retires workers between batches without losing or duplicating laws", async () => {
+  const fixture = await fsp.readFile(path.join(__dirname, "..", "shared", "__fixtures__", "corpus", "fmx-v4-2009-32009L0004.xml.gz"));
+  const dir = await fsp.mkdtemp(path.join(os.tmpdir(), "citation-recycle-"));
+  const files = [];
+  await fsp.mkdir(path.join(dir, "2010"), { recursive: true });
+  for (let index = 0; index < 6; index += 1) {
+    const file = path.join(dir, "2010", `32010L000${index + 1}.xml.gz`);
+    await fsp.writeFile(file, fixture);
+    files.push(file);
+  }
+  const messages = [];
+  // One law per batch and a worker retired after every batch: each of the six
+  // batches is served by a freshly spawned worker, so this exercises the
+  // retire-then-recursively-assign path on every single hand-off.
+  const artifact = await buildCitationGraphBatched({
+    files, batchSize: 1, recycleBatches: 1, poolSize: 2, outputPath: null, progress: true,
+    log: (message) => messages.push(message),
+    legalCache: {
+      isReady: () => true,
+      exportReferenceIndex: () => ({ officialRef: { "directive|2009|4": "32009L0004" }, celexTitle: {} }),
+    },
+    caseLawData: null,
+    now: () => new Date("2026-01-01T00:00:00.000Z"),
+  });
+  assert.equal(artifact.stats.corpusFiles, 6, "every law is accounted for exactly once");
+  assert.equal(artifact.stats.parsedLaws, 6);
+  assert.equal(artifact.stats.parseFailures, 0, "retiring a worker never strands its batch");
+  assert.equal(messages.length, 6, "one progress message per batch, none lost to recycling");
+  const counts = messages.map((message) => Number(message.match(/^\[citation-graph\] (\d+)\/6/)[1]));
+  assert.deepEqual(counts, [1, 2, 3, 4, 5, 6], "cumulative progress is unbroken across recycles");
+});
+
+test("recycling can be disabled with --recycleBatches 0", () => {
+  // Unlike --pool and --batchSize, zero is meaningful here rather than invalid.
+  assert.equal(parseCliArgs(["--recycleBatches", "0"]).recycleBatches, 0);
+  assert.equal(parseCliArgs(["--recycleBatches", "12"]).recycleBatches, 12);
+  assert.equal(parseCliArgs([]).recycleBatches, undefined, "absent flag leaves the builder default in force");
+  assert.throws(() => parseCliArgs(["--recycleBatches", "-1"]), /Invalid value for --recycleBatches/);
+});

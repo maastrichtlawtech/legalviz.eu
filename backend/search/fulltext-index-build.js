@@ -42,9 +42,15 @@ const FULLTEXT_SCHEMA_VERSION = 1;
 
 const DEFAULT_BATCH_SIZE = 20;
 const DEFAULT_POOL_SIZE = 2;
-// Retire a worker every 25 batches, i.e. every ~500 acts at the default batch
-// size -- the interval d6f0062 used here before 7766856 replaced it with
-// fmx-parser-node.js's shared-window recycling. That replacement only covers
+// Retire a worker every 10 batches, i.e. every ~200 acts at the default batch
+// size. d6f0062 used ~500 acts here before 7766856 replaced it with
+// fmx-parser-node.js's shared-window recycling, but the first full corpus run
+// measured after that removal (run 33077210787, 80,532 acts) shows why 500 is
+// too generous now: the worker peaked at 2001 MB against its 2048 MB cap, and
+// its mean heap drifted from ~400 MB over the first 30k acts to ~630 MB over
+// the last 10k. 200 acts costs ~400 respawns instead of ~160 across a full
+// build -- a few minutes on a run of over an hour -- to keep that drift from
+// eating the remaining 47 MB of headroom. That replacement only covers
 // the Formex path; eurlex-html-parser.js builds a fresh JSDOM per act whose
 // construction-time process.nextTick callback retains the document, so a
 // worker that streams tens of thousands of HTML acts still accumulates.
@@ -53,7 +59,7 @@ const DEFAULT_POOL_SIZE = 2;
 // short-lived caller for whom the respawn is not worth paying.
 // --recycleBatches 0 disables it; unlike --batchSize and --pool, zero is
 // meaningful here rather than invalid.
-const DEFAULT_RECYCLE_BATCHES = 25;
+const DEFAULT_RECYCLE_BATCHES = 10;
 const DEFAULT_WORKER_HEAP_MB = 640;
 // Same ceiling as the definition/citation-graph builders: definitions and
 // citations live in the operative text, and full-text units are extracted

@@ -44,8 +44,11 @@ const FIXTURE_LAW = {
   crossReferences: { 17: [{ type: 'article', target: '4' }] },
 };
 
+const ownedCacheDirs = new WeakMap();
+
 function makeDeps(overrides = {}) {
-  return {
+  const cacheDir = overrides.FMX_DIR ?? fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-test-'));
+  const deps = {
     legalCacheStore: {
       searchLaws: () => [{ celex: '32016R0679', title: 'GDPR', type: 'regulation', matchReason: 'title_exact' }],
       searchFulltextUnits: () => [],
@@ -55,7 +58,7 @@ function makeDeps(overrides = {}) {
     resolveEurlexUrl: async (url) => ({ sourceUrl: url, resolved: { celex: '32016R0679', source: 'search-cache' }, tried: [], fallback: null }),
     runSparqlQuery: async () => ({ results: { bindings: [] } }),
     resolveParsedLaw: async () => FIXTURE_LAW,
-    FMX_DIR: path.join(os.tmpdir(), 'mcp-test-nonexistent'),
+    FMX_DIR: cacheDir,
     analytics: { recordMcpTool: () => {} },
     citationGraphStore: {
       isReady: () => true,
@@ -64,19 +67,36 @@ function makeDeps(overrides = {}) {
     },
     ...overrides,
   };
+  if (overrides.FMX_DIR === undefined) ownedCacheDirs.set(deps, cacheDir);
+  return deps;
+}
+
+function cleanupDeps(deps) {
+  const cacheDir = ownedCacheDirs.get(deps);
+  if (cacheDir === undefined) return;
+  ownedCacheDirs.delete(deps);
+  fs.rmSync(cacheDir, { recursive: true, force: true });
 }
 
 async function withClient(deps, fn) {
   const server = new McpServer({ name: 'eurlex-test', version: '1.0.0' });
-  registerTools(server, deps);
-  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-  const client = new Client({ name: 'test', version: '1.0.0' });
-  await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+  let client;
   try {
+    registerTools(server, deps);
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    client = new Client({ name: 'test', version: '1.0.0' });
+    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
     return await fn(client);
   } finally {
-    await client.close();
-    await server.close();
+    try {
+      if (client) await client.close();
+    } finally {
+      try {
+        await server.close();
+      } finally {
+        cleanupDeps(deps);
+      }
+    }
   }
 }
 
@@ -441,10 +461,7 @@ test('get_law_part recital stays cached-only even when an OpenRouter key is conf
   const prevKey = process.env.OPENROUTER_API_KEY;
   const originalFetch = global.fetch;
   const fetched = [];
-  // A dedicated empty dir, not makeDeps' shared fixed path: this test drives a
-  // cache *miss* with a fetch stub that would succeed, so writing into the
-  // shared path would leave a generated title behind and break every later run
-  // on this machine.
+  // A dedicated empty dir keeps this cache-miss test isolated from other tests.
   const cacheDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-cached-only-'));
   process.env.OPENROUTER_API_KEY = 'test-key-should-be-ignored';
   global.fetch = async (url, options) => {
@@ -496,11 +513,15 @@ test('get_law_part structure surfaces cached recital titles', async () => {
   };
   fs.writeFileSync(path.join(cacheDir, 'recital-title-cache-v1.json'), JSON.stringify(cache));
 
-  await withClient(makeDeps({ FMX_DIR: cacheDir }), async (client) => {
-    const body = parseResult(await client.callTool({ name: 'get_law_part', arguments: { celex: '32016R0679', part: 'structure' } }));
-    const first = body.recitals.find((r) => r.number === '1');
-    assert.equal(first.title, 'Protection of natural persons');
-  });
+  try {
+    await withClient(makeDeps({ FMX_DIR: cacheDir }), async (client) => {
+      const body = parseResult(await client.callTool({ name: 'get_law_part', arguments: { celex: '32016R0679', part: 'structure' } }));
+      const first = body.recitals.find((r) => r.number === '1');
+      assert.equal(first.title, 'Protection of natural persons');
+    });
+  } finally {
+    fs.rmSync(cacheDir, { recursive: true, force: true });
+  }
 });
 
 test('get_law_relations merges amendments and implementing acts', async () => {

@@ -22,6 +22,7 @@ const {
   createParserPool,
   DEFAULT_PARSER_POOL_SIZE,
   DEFAULT_PARSER_WORKER_HEAP_MB,
+  DEFAULT_PARSER_WORKER_RECYCLE_TASKS,
 } = require("./parser-worker-pool");
 
 const FIXTURE = path.join(__dirname, "__fixtures__", "corpus", "fmx-v4-2009-32009L0004.xml.gz");
@@ -152,6 +153,43 @@ test("worker loss surfaces a 503 and never retries the parse inline", async () =
   await pool.close();
 });
 
+test("parser recycling is transparent to queued callers and does not disable the pool", async () => {
+  let starts = 0;
+  let inlineCalls = 0;
+  const workers = [];
+  const pool = createParserPool({
+    poolSize: 1,
+    recycleAfter: 1,
+    spawnWorker: () => {
+      starts += 1;
+      const worker = new FakeWorker((payload) => queueMicrotask(() => {
+        worker.emit("message", { ok: true, result: { kind: "worker", payload } });
+      }));
+      workers.push(worker);
+      return worker;
+    },
+    parseFmxXml: async () => {
+      inlineCalls += 1;
+      return { kind: "inline" };
+    },
+  });
+
+  try {
+    const results = await Promise.all(["one", "two", "three", "four"].map((input) => pool.parseFmxXml(input)));
+    assert.deepEqual(results, [
+      { kind: "worker", payload: { kind: "fmx", input: "one", lang: undefined } },
+      { kind: "worker", payload: { kind: "fmx", input: "two", lang: undefined } },
+      { kind: "worker", payload: { kind: "fmx", input: "three", lang: undefined } },
+      { kind: "worker", payload: { kind: "fmx", input: "four", lang: undefined } },
+    ]);
+    assert.equal(starts, 4, "each completed task retires before the next queued task");
+    assert.equal(inlineCalls, 0, "retirement is not classified as a startup or worker failure");
+    assert.ok(workers.slice(0, -1).every((worker) => worker.terminated));
+  } finally {
+    await pool.close();
+  }
+});
+
 test("never-replying workers are killed at the deadline and replaced", { timeout: 1000 }, async () => {
   assert.ok(DEFAULT_TASK_DEADLINE_MS > 1000, "the production deadline should cover real parse batches");
   let starts = 0;
@@ -237,6 +275,80 @@ test("worker pool rejects a task when its queue is full", { timeout: 1000 }, asy
   assert.equal((await queued).code, "worker_pool_closed");
 });
 
+test("opt-in recycling replaces idle workers before queued work and preserves every result", async () => {
+  const workers = [];
+  const pool = createWorkerPool({
+    poolSize: 1,
+    recycleAfter: 2,
+    workerFactory: () => {
+      const worker = new FakeWorker((payload) => queueMicrotask(() => {
+        worker.emit("message", { ok: true, result: payload });
+      }));
+      workers.push(worker);
+      return worker;
+    },
+  });
+
+  try {
+    const results = await Promise.all([1, 2, 3, 4, 5].map((payload) => pool.run(payload)));
+    assert.deepEqual(results.map((message) => message.result), [1, 2, 3, 4, 5]);
+    assert.equal(workers.length, 3, "one replacement per two completed tasks");
+    assert.equal(workers[0].posts, 2);
+    assert.equal(workers[1].posts, 2);
+    assert.equal(workers[2].posts, 1);
+    assert.equal(workers[0].terminated, true);
+    assert.equal(workers[1].terminated, true);
+  } finally {
+    await pool.close();
+  }
+});
+
+test("close() waits for workers already retired for recycling", async () => {
+  // A retired worker leaves `workers` the instant retirement starts, so close()
+  // could resolve while its thread is still alive and still holding the event
+  // loop open -- for the fulltext CLI that is a build that finishes and then
+  // hangs.
+  const workers = [];
+  const pool = createWorkerPool({
+    poolSize: 1,
+    recycleAfter: 1,
+    workerFactory: () => {
+      const worker = new FakeWorker((payload) => queueMicrotask(() => {
+        worker.emit("message", { ok: true, result: payload });
+      }));
+      // Each worker's termination is released individually, so the retired
+      // one can be left outstanding while the live one has already settled.
+      worker.terminate = () => {
+        worker.terminated = true;
+        return new Promise((resolve) => { worker.release = () => resolve(0); });
+      };
+      workers.push(worker);
+      return worker;
+    },
+  });
+
+  await pool.run(1);
+  await pool.run(2);
+  assert.equal(workers.length, 2, "the first worker retired after its single task");
+  const [retired, live] = workers;
+  assert.equal(retired.terminated, true, "the retired worker's termination is in flight");
+
+  let closed = false;
+  const closing = pool.close().then(() => { closed = true; });
+  live.release();
+  await new Promise((resolve) => setImmediate(resolve));
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(
+    closed,
+    false,
+    "close() must not resolve once the live worker is gone but a retired thread is still terminating",
+  );
+
+  retired.release();
+  await closing;
+  assert.equal(closed, true);
+});
+
 test("onResult errors propagate without bisecting into a skipped batch", async () => {
   let worker;
   let skipped = 0;
@@ -264,4 +376,5 @@ test("onResult errors propagate without bisecting into a skipped batch", async (
 test("parser pool defaults retain the builder-sized worker budget", () => {
   assert.equal(DEFAULT_PARSER_POOL_SIZE, 2);
   assert.equal(DEFAULT_PARSER_WORKER_HEAP_MB, 640);
+  assert.equal(DEFAULT_PARSER_WORKER_RECYCLE_TASKS, 40);
 });

@@ -42,6 +42,24 @@ const FULLTEXT_SCHEMA_VERSION = 1;
 
 const DEFAULT_BATCH_SIZE = 20;
 const DEFAULT_POOL_SIZE = 2;
+// Retire a worker every 10 batches, i.e. every ~200 acts at the default batch
+// size. d6f0062 used ~500 acts here before 7766856 replaced it with
+// fmx-parser-node.js's shared-window recycling, but the first full corpus run
+// measured after that removal (run 33077210787, 80,532 acts) shows why 500 is
+// too generous now: the worker peaked at 2001 MB against its 2048 MB cap, and
+// its mean heap drifted from ~400 MB over the first 30k acts to ~630 MB over
+// the last 10k. 200 acts costs ~400 respawns instead of ~160 across a full
+// build -- a few minutes on a run of over an hour -- to keep that drift from
+// eating the remaining 47 MB of headroom. That replacement only covers
+// the Formex path; eurlex-html-parser.js builds a fresh JSDOM per act whose
+// construction-time process.nextTick callback retains the document, so a
+// worker that streams tens of thousands of HTML acts still accumulates.
+// This builder only ever runs as a full-corpus job from
+// rederive-parser-assets.yml / refresh-fulltext.yml, so there is no
+// short-lived caller for whom the respawn is not worth paying.
+// --recycleBatches 0 disables it; unlike --batchSize and --pool, zero is
+// meaningful here rather than invalid.
+const DEFAULT_RECYCLE_BATCHES = 10;
 const DEFAULT_WORKER_HEAP_MB = 640;
 // Same ceiling as the definition/citation-graph builders: definitions and
 // citations live in the operative text, and full-text units are extracted
@@ -223,6 +241,12 @@ function walSizeMb(outputPath) {
 function runPool(initialBatches, onResult, options = {}) {
   const poolSize = options.poolSize || DEFAULT_POOL_SIZE;
   const workerHeapMb = options.workerHeapMb || DEFAULT_WORKER_HEAP_MB;
+  // ?? rather than ||: an explicit 0 disables recycling, it does not mean
+  // "use the default". Both spellings are accepted because buildFulltextIndex
+  // and the CLI speak `recycleBatches` (batches are this builder's unit) while
+  // the shared pool speaks `recycleAfter`; runPool is exported, so a caller
+  // reaching it directly should not have to know which side it is on.
+  const recycleAfter = options.recycleAfter ?? options.recycleBatches ?? DEFAULT_RECYCLE_BATCHES;
   const defaults = {
     initialTotals: {
       parsed: 0, htmlLaws: 0, oversized: 0, files: 0, failures: 0, filesDone: 0, batchesDone: 0,
@@ -265,6 +289,7 @@ function runPool(initialBatches, onResult, options = {}) {
     // behavior even though the shared runner accepts explicit sizes.
     poolSize,
     workerHeapMb,
+    recycleAfter,
     workerPath: options.workerPath || path.join(__dirname, "fulltext-index-worker.js"),
   });
 }
@@ -285,6 +310,7 @@ async function buildFulltextIndex(options = {}) {
   const batchSize = options.batchSize || DEFAULT_BATCH_SIZE;
   const poolSize = options.pool || DEFAULT_POOL_SIZE;
   const workerHeapMb = options.workerHeapMb || DEFAULT_WORKER_HEAP_MB;
+  const recycleAfter = options.recycleBatches ?? DEFAULT_RECYCLE_BATCHES;
   const log = options.progress ? (options.log || console.log) : null;
 
   const universe = options.universe || loadUniverseCelex(searchCachePath);
@@ -300,7 +326,7 @@ async function buildFulltextIndex(options = {}) {
     const pending = files.filter((file) => !doneCelex.has(celexForCorpusFile(file)));
     const batches = [];
     for (let i = 0; i < pending.length; i += batchSize) batches.push(pending.slice(i, i + batchSize));
-    if (log) log(`[fulltext] ${pending.length} remaining acts in ${batches.length} batches, pool=${poolSize}`);
+    if (log) log(`[fulltext] ${pending.length} remaining acts in ${batches.length} batches, pool=${poolSize}, recycle=${recycleAfter || "off"}`);
 
     const insertUnit = db.prepare("INSERT INTO units (celex, unit_type, number, heading, char_count, text) VALUES (?,?,?,?,?,?)");
     const insertFts = db.prepare("INSERT INTO units_fts (rowid, heading, text) VALUES (?,?,?)");
@@ -329,6 +355,7 @@ async function buildFulltextIndex(options = {}) {
     }, {
       poolSize,
       workerHeapMb,
+      recycleAfter,
       onProgress: log ? (running) => log(
         `[fulltext] ${running.filesDone}/${pending.length} acts, ${running.parsed} parsed, ${running.failures} failures`
         + `, worker heap ${running.workerHeapMb}/${workerHeapMb} MB (peak ${running.peakWorkerHeapMb})`
@@ -406,7 +433,7 @@ async function run(options = {}) {
 
 function parseCliArgs(argv) {
   const options = {};
-  const valueFlags = new Set(["--corpusDir", "--out", "--limit", "--fromYear", "--toYear", "--batchSize", "--pool", "--workerHeapMb"]);
+  const valueFlags = new Set(["--corpusDir", "--out", "--limit", "--fromYear", "--toYear", "--batchSize", "--pool", "--workerHeapMb", "--recycleBatches"]);
   for (let index = 0; index < argv.length; index += 1) {
     const flag = argv[index];
     if (!valueFlags.has(flag)) throw new Error(`Unknown argument: ${flag}`);
@@ -418,7 +445,7 @@ function parseCliArgs(argv) {
     if (!Number.isInteger(number) || number < 0 || (["--limit", "--batchSize", "--pool", "--workerHeapMb"].includes(flag) && number === 0)) {
       throw new Error(`Invalid value for ${flag}: ${value}`);
     }
-    options[{ "--limit": "limit", "--fromYear": "fromYear", "--toYear": "toYear", "--batchSize": "batchSize", "--pool": "pool", "--workerHeapMb": "workerHeapMb" }[flag]] = number;
+    options[{ "--limit": "limit", "--fromYear": "fromYear", "--toYear": "toYear", "--batchSize": "batchSize", "--pool": "pool", "--workerHeapMb": "workerHeapMb", "--recycleBatches": "recycleBatches" }[flag]] = number;
   }
   return options;
 }
@@ -433,6 +460,7 @@ if (require.main === module) {
 module.exports = {
   DEFAULT_CORPUS_DIR,
   DEFAULT_OUTPUT_PATH,
+  DEFAULT_RECYCLE_BATCHES,
   FULLTEXT_SCHEMA_VERSION,
   buildFulltextIndex,
   buildFulltextShard,

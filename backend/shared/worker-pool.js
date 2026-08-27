@@ -83,6 +83,7 @@ function createWorkerPool({
   workerFactory,
   taskDeadlineMs = DEFAULT_TASK_DEADLINE_MS,
   queueLimit = DEFAULT_QUEUE_LIMIT,
+  recycleAfter = 0,
 } = {}) {
   if (!Number.isInteger(poolSize) || poolSize < 1) {
     throw new Error(`Worker pool size must be a positive integer, got ${poolSize}`);
@@ -96,8 +97,15 @@ function createWorkerPool({
   if (!Number.isInteger(queueLimit) || queueLimit < 0) {
     throw new Error(`Worker pool queue limit must be a non-negative integer, got ${queueLimit}`);
   }
+  if (!Number.isInteger(recycleAfter) || recycleAfter < 0) {
+    throw new Error(`Worker recycle threshold must be a non-negative integer, got ${recycleAfter}`);
+  }
 
   const workers = new Set();
+  // Terminations of workers retired for recycling. They are out of `workers`
+  // the moment retirement starts, so close() would otherwise resolve while one
+  // of their threads is still alive and still holding the event loop open.
+  const retiringTerminations = new Set();
   const queue = [];
   let closed = false;
   let closePromise = null;
@@ -122,7 +130,7 @@ function createWorkerPool({
   }
 
   function attachWorker(thread) {
-    const record = { thread, job: null, dead: false };
+    const record = { thread, job: null, dead: false, retiring: false, completedTasks: 0 };
     workers.add(record);
 
     thread.on("message", (message) => {
@@ -139,6 +147,7 @@ function createWorkerPool({
           if (record.job !== job) return;
           clearJobTimer(job);
           record.job = null;
+          record.completedTasks += 1;
           job.resolve(message);
           dispatch();
         })
@@ -146,6 +155,7 @@ function createWorkerPool({
           if (record.job !== job) return;
           clearJobTimer(job);
           record.job = null;
+          record.completedTasks += 1;
           job.reject(new WorkerResultError(
             `Worker result callback failed: ${error?.message || error}`,
             error,
@@ -156,7 +166,7 @@ function createWorkerPool({
 
     thread.on("error", (error) => handleWorkerLoss(record, error));
     thread.on("exit", (code) => {
-      if (!record.dead) {
+      if (!record.dead && !record.retiring) {
         handleWorkerLoss(record, new Error(`Worker exited with code ${code}`));
       }
     });
@@ -187,7 +197,7 @@ function createWorkerPool({
   }
 
   function handleWorkerLoss(record, error, { terminate = false } = {}) {
-    if (record.dead) return;
+    if (record.dead || record.retiring) return;
     record.dead = true;
     workers.delete(record);
     const job = record.job;
@@ -213,10 +223,40 @@ function createWorkerPool({
     dispatch();
   }
 
+  function replaceForRecycle(record) {
+    // Start the replacement before retiring the idle worker. A transient
+    // factory failure therefore leaves the existing worker available for the
+    // queued task and is not misreported as a worker loss.
+    let replacement;
+    try {
+      replacement = startWorker();
+    } catch {
+      record.completedTasks = 0;
+      return record;
+    }
+
+    record.retiring = true;
+    workers.delete(record);
+    const termination = Promise.resolve(record.thread.terminate()).catch(() => {});
+    retiringTerminations.add(termination);
+    termination.then(() => retiringTerminations.delete(termination));
+    return replacement;
+  }
+
   function dispatch() {
     if (closed) return;
     for (const record of workers) {
       if (record.dead || record.job || queue.length === 0) continue;
+      if (recycleAfter > 0 && record.completedTasks >= recycleAfter) {
+        const replacement = replaceForRecycle(record);
+        if (replacement !== record) {
+          // The new record has no completed tasks. Re-enter dispatch so it can
+          // take the queued job without relying on Set iterator semantics for
+          // a record added during this iteration.
+          dispatch();
+          return;
+        }
+      }
       const job = queue.shift();
       record.job = job;
       job.timer = setTimeout(() => {
@@ -298,7 +338,10 @@ function createWorkerPool({
         job.reject(new WorkerPoolClosedError());
       }
     }
-    closePromise = Promise.allSettled(active.map(({ thread }) => thread.terminate())).then(() => undefined);
+    closePromise = Promise.allSettled([
+      ...active.map(({ thread }) => thread.terminate()),
+      ...retiringTerminations,
+    ]).then(() => undefined);
     return closePromise;
   }
 
@@ -328,6 +371,7 @@ async function runPool(initialBatches, onResult, options = {}) {
     workerFactory,
     taskDeadlineMs: options.taskDeadlineMs,
     queueLimit: options.queueLimit,
+    recycleAfter: options.recycleAfter,
   });
   const onProgress = options.onProgress || (() => {});
 

@@ -15,6 +15,8 @@ const {
   makeSingleFlight,
   loadCache,
   saveCacheEntry,
+  extractJsonObject,
+  celexLangKey,
 } = require('./ai-digest-utils');
 
 const CACHE_FILE = 'law-summary-cache-v1.json';
@@ -76,10 +78,6 @@ function clip(value, maxChars) {
   const lastSpace = window.lastIndexOf(' ');
   const cut = lastSpace > 0 ? window.slice(0, lastSpace) : window;
   return `${cut.trim()}…`;
-}
-
-function cacheKey(celex, lang) {
-  return `${String(celex || '').toUpperCase()}_${String(lang || 'ENG').toUpperCase()}`;
 }
 
 function rawSourceHash(text) {
@@ -165,16 +163,6 @@ function buildLawSummaryInput(parsedLaw) {
   };
 }
 
-function extractJsonObject(text) {
-  const trimmed = String(text || '').trim()
-    .replace(/^```(?:json)?\s*/i, '')
-    .replace(/```\s*$/i, '')
-    .trim();
-  const match = trimmed.match(/\{[\s\S]*\}/);
-  if (!match) throw new Error('Summary model did not return a JSON object');
-  return JSON.parse(match[0]);
-}
-
 function normalizeCitations(value, validArticles) {
   const values = Array.isArray(value) ? value : [];
   return Array.from(new Set(values
@@ -194,7 +182,7 @@ function normalizeCitedBlock(value, validArticles, { requireCitation = false } =
 }
 
 function parseLawSummaryJson(text, input) {
-  const parsed = extractJsonObject(text);
+  const parsed = extractJsonObject(text, { label: 'Summary model' });
   const validArticles = new Set([
     ...(input.articles || []).map((article) => String(article.number)),
     ...(input.skeleton || []).map((article) => String(article.number)),
@@ -289,7 +277,7 @@ async function ensureLawSummary({
   model,
   chatComplete: chatCompleteImpl = chatComplete,
 } = {}) {
-  const key = cacheKey(celex || parsedLaw?.celex, lang || parsedLaw?.lang);
+  const key = celexLangKey(celex || parsedLaw?.celex, lang || parsedLaw?.lang);
 
   return withSingleFlight(`law-summary:${key}:${model}`, async () => {
     const cache = cacheDir ? loadCache(cacheDir, CACHE_FILE) : {};

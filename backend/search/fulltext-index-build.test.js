@@ -4,12 +4,16 @@ const fs = require("node:fs/promises");
 const os = require("node:os");
 const path = require("node:path");
 
+const { EventEmitter } = require("node:events");
+
 const {
   buildFulltextIndex,
   buildFulltextShard,
   openFulltextDatabase,
   parseCliArgs,
+  runPool,
   writeManifest,
+  DEFAULT_RECYCLE_BATCHES,
   FULLTEXT_SCHEMA_VERSION,
 } = require("./fulltext-index-build");
 const { getCurrentParserVersion } = require("./parser-stamp");
@@ -411,4 +415,75 @@ test("progress line reports the worker's isolate heap against its cap, the WAL s
   } finally {
     await fs.rm(dir, { recursive: true, force: true });
   }
+});
+
+// A worker that streams the whole corpus accumulates the HTML parser's
+// per-act JSDOM retention, so this builder retires its workers periodically.
+// d6f0062 had exactly that and 7766856 removed it on the mistaken premise
+// that fmx-parser-node.js's shared-window recycling covered the HTML path;
+// these two tests are the guard against a third round of that.
+class RecycleFakeWorker extends EventEmitter {
+  constructor(onPostMessage) {
+    super();
+    this.onPostMessage = onPostMessage;
+    this.terminated = false;
+    this.posts = 0;
+  }
+
+  postMessage(payload) {
+    this.posts += 1;
+    this.onPostMessage(payload);
+  }
+
+  terminate() {
+    this.terminated = true;
+    return Promise.resolve(0);
+  }
+}
+
+function countWorkersOverBatches(batches, options) {
+  const workers = [];
+  const spawnWorker = () => {
+    const worker = new RecycleFakeWorker(() => queueMicrotask(() => {
+      worker.emit("message", { units: [], failures: [], stats: { parsed: 1, files: 1 } });
+    }));
+    workers.push(worker);
+    return worker;
+  };
+  return runPool(batches, () => {}, { poolSize: 1, spawnWorker, ...options })
+    .then(() => workers);
+}
+
+test("the fulltext builder recycles its workers by default", async () => {
+  assert.ok(
+    Number.isInteger(DEFAULT_RECYCLE_BATCHES) && DEFAULT_RECYCLE_BATCHES > 0,
+    "recycling must stay on by default: this builder only runs as a full-corpus job",
+  );
+
+  // No recycleAfter passed: the adapter has to supply its own default, which
+  // is the half 7766856 dropped.
+  const long = Array.from({ length: DEFAULT_RECYCLE_BATCHES * 2 + 1 }, (_, index) => [`file-${index}`]);
+  const defaulted = await countWorkersOverBatches(long, {});
+  assert.equal(defaulted.length, 3, "two replacements across two full recycle intervals");
+  assert.deepEqual(
+    defaulted.map((worker) => worker.posts),
+    [DEFAULT_RECYCLE_BATCHES, DEFAULT_RECYCLE_BATCHES, 1],
+  );
+
+  const batches = Array.from({ length: 6 }, (_, index) => [`file-${index}`]);
+  const workers = await countWorkersOverBatches(batches, { recycleAfter: 2 });
+  assert.equal(workers.length, 3, "one replacement per two completed batches");
+  assert.deepEqual(workers.map((worker) => worker.posts), [2, 2, 2]);
+  assert.deepEqual(workers.slice(0, -1).map((worker) => worker.terminated), [true, true]);
+});
+
+test("an explicit recycleBatches of 0 disables recycling rather than restoring the default", async () => {
+  const batches = Array.from({ length: 6 }, (_, index) => [`file-${index}`]);
+  const workers = await countWorkersOverBatches(batches, { recycleAfter: 0 });
+  assert.equal(workers.length, 1, "zero means off, not 'use the default'");
+  assert.equal(workers[0].posts, 6);
+
+  assert.deepEqual(parseCliArgs(["--recycleBatches", "0"]), { recycleBatches: 0 });
+  assert.deepEqual(parseCliArgs(["--recycleBatches", "10"]), { recycleBatches: 10 });
+  assert.throws(() => parseCliArgs(["--recycleBatches", "-1"]), /Invalid value/);
 });

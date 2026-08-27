@@ -1,7 +1,7 @@
 const crypto = require('crypto');
 
 const { chatComplete } = require('./openrouter-chat');
-const { loadCache, saveCacheEntry, makeSingleFlight } = require('./ai-digest-utils');
+const { loadCache, saveCacheEntry, makeSingleFlight, celexLangKey } = require('./ai-digest-utils');
 
 const CACHE_FILE = 'recital-title-cache-v1.json';
 const CACHE_VERSION = 2;
@@ -41,10 +41,6 @@ function contentHash(recitals) {
     hash.update('\0');
   }
   return hash.digest('hex');
-}
-
-function cacheKey(celex, lang) {
-  return `${String(celex || '').toUpperCase()}_${String(lang || 'ENG').toUpperCase()}`;
 }
 
 function hasTitles(titles) {
@@ -139,7 +135,7 @@ const withSingleFlight = makeSingleFlight();
 
 async function ensureRecitalTitles({ celex, lang, recitals, cacheDir, apiKey, model }) {
   const hash = contentHash(recitals);
-  const key = cacheKey(celex, lang);
+  const key = celexLangKey(celex, lang);
   // Coalesce concurrent misses onto one in-flight generation: without this, N
   // simultaneous requests for the same uncached law each paid the full batch
   // of model calls (this service predates the shared digest plumbing).
@@ -197,7 +193,7 @@ async function ensureRecitalTitles({ celex, lang, recitals, cacheDir, apiKey, mo
 function getCachedRecitalTitles({ celex, lang, recitals, cacheDir }) {
   if (!cacheDir) return { titles: {}, cached: false };
   const hash = contentHash(recitals);
-  const key = cacheKey(celex, lang);
+  const key = celexLangKey(celex, lang);
   const cache = loadCache(cacheDir, CACHE_FILE);
   const cached = cache[key];
 

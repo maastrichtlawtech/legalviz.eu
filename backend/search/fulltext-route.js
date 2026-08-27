@@ -1,4 +1,10 @@
 const { validateFulltextQuery } = require("./legal-cache-store");
+const {
+  FULLTEXT_INDEX_UNAVAILABLE,
+  FULLTEXT_INDEX_UNAVAILABLE_MESSAGE,
+  isFulltextIndexUnavailable,
+  isFulltextQueryError,
+} = require("./fulltext-errors");
 
 function createFulltextSearchHandler(store, { validateCelex } = {}) {
   return function fulltextSearchHandler(req, res) {
@@ -29,20 +35,16 @@ function createFulltextSearchHandler(store, { validateCelex } = {}) {
       });
       return res.json({ query, celex, count: results.length, results });
     } catch (error) {
-      if (error.code === "fulltext_index_unavailable") {
+      if (isFulltextIndexUnavailable(error)) {
         return res.status(503).json({
-          error: "Full-text index is not available",
-          code: error.code,
+          error: FULLTEXT_INDEX_UNAVAILABLE_MESSAGE,
+          code: FULLTEXT_INDEX_UNAVAILABLE,
           details: typeof store.getFulltextStatus === "function"
             ? store.getFulltextStatus()
             : undefined,
         });
       }
-      if (error.code === "fulltext_query_required"
-        || error.code === "fulltext_query_too_long"
-        || error.code === "fulltext_query_empty"
-        || error.code === "fulltext_query_too_short"
-        || error.code === "fulltext_query_too_many_terms") {
+      if (isFulltextQueryError(error)) {
         return res.status(400).json({ error: error.message, code: error.code });
       }
       console.error("[FulltextSearch] Failed to search law text:", error.message);

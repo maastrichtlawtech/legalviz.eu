@@ -6,6 +6,11 @@ const { validateCelex, parseReferenceText } = require('../shared/reference-utils
 const { fetchCaseLaw, fetchAmendments, fetchImplementing } = require('../shared/law-queries');
 const { getCachedRecitalTitles } = require('../shared/recital-title-service');
 const { validateFulltextQuery } = require('../search/legal-cache-store');
+const {
+  FULLTEXT_INDEX_UNAVAILABLE,
+  FULLTEXT_INDEX_UNAVAILABLE_MESSAGE,
+  isFulltextIndexUnavailable,
+} = require('../search/fulltext-errors');
 
 const BLOCK_TAGS = new Set([
   'P', 'DIV', 'LI', 'TR', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6',
@@ -239,11 +244,11 @@ function registerTools(server, deps) {
           limit,
         });
       } catch (err) {
-        if (err?.code === 'fulltext_index_unavailable') {
+        if (isFulltextIndexUnavailable(err)) {
           throw new ClientError(
-            'Body-text index unavailable; metadata/title/excerpt search_eu_law remains available but is not an equivalent fallback.',
+            FULLTEXT_INDEX_UNAVAILABLE_MESSAGE,
             503,
-            'fulltext_index_unavailable'
+            FULLTEXT_INDEX_UNAVAILABLE
           );
         }
         throw err;

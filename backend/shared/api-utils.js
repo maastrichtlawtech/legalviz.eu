@@ -103,6 +103,7 @@ function safeErrorResponse(res, err, fallbackMessage = 'Internal server error') 
 
 module.exports = {
   ClientError,
+  LANG_3_TO_2,
   VALID_LANGS,
   cacheGet,
   cacheSet,

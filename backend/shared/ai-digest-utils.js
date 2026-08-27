@@ -82,7 +82,11 @@ function saveCacheEntry(cacheDir, cacheFile, key, entry) {
   return cache;
 }
 
-function extractJsonObject(text) {
+// `label` names the feature in the error so a malformed model response is
+// attributable ("Digest model ..." vs "Summary model ..."). The 500-char
+// snippet is what makes that error diagnosable at all — a local copy of this
+// function had dropped it, which is why there is now only one.
+function extractJsonObject(text, { label = 'Digest model' } = {}) {
   const trimmed = String(text || '').trim()
     .replace(/^```(?:json)?\s*/i, '')
     .replace(/```\s*$/i, '')
@@ -90,9 +94,25 @@ function extractJsonObject(text) {
   const match = trimmed.match(/\{[\s\S]*\}/);
   if (!match) {
     const snippet = trimmed.replace(/\s+/g, ' ').slice(0, 500);
-    throw new Error(`Digest model did not return a JSON object; text=${snippet || '<empty>'}`);
+    throw new Error(`${label} did not return a JSON object; text=${snippet || '<empty>'}`);
   }
   return JSON.parse(match[0]);
+}
+
+// Cache keys for the per-law AI features. These strings are the on-disk cache
+// keys, so their exact shape is load-bearing: changing how a part is
+// normalised silently orphans every existing entry. Keep them here rather than
+// re-deriving them per service.
+function celexLangKey(celex, lang) {
+  return `${String(celex || '').toUpperCase()}_${String(lang || 'ENG').toUpperCase()}`;
+}
+
+function celexArticleLangKey(celex, articleNumber, lang) {
+  return [
+    String(celex || '').toUpperCase(),
+    String(articleNumber || '').trim(),
+    String(lang || 'ENG').toUpperCase(),
+  ].join('_');
 }
 
 // Index the case-law input by ECLI and CELEX so model-produced citations can be
@@ -150,6 +170,8 @@ module.exports = {
   saveCache,
   saveCacheEntry,
   extractJsonObject,
+  celexLangKey,
+  celexArticleLangKey,
   buildCitationIndex,
   normalizeCites,
 };

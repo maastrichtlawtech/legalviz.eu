@@ -1,95 +1,38 @@
 #!/usr/bin/env node
 
 /**
- * CLI tool to parse a Formex XML file and output structured JSON.
+ * parse-fmx — published alias for `eurlex parse` (see backend/README.md).
  *
- * Usage:
- *   parse-fmx <input.xml> [-o output.json]
- *   parse-fmx < input.xml > output.json
- *   cat input.xml | parse-fmx
- *   parse-fmx --help
+ * The parsing lives in bin/eurlex.js so there is exactly one implementation;
+ * this file only keeps the `parse-fmx` bin name working. It does still reject
+ * unknown options itself: eurlex's shared flag parser accepts any `--flag` and
+ * swallows the next token as its value, so `parse-fmx --bogus law.xml` would
+ * otherwise consume the filename and silently read stdin instead.
  */
 
-const fs = require('fs');
+const { spawnSync } = require('child_process');
 const path = require('path');
-const { parseFmxXml } = require('../shared/fmx-parser-node');
 
-function printHelp() {
-  console.log(`
-parse-fmx — Convert Formex XML to structured JSON
+const KNOWN_OPTIONS = new Set(['-o', '--output', '-h', '--help']);
 
-Usage:
-  parse-fmx <input.xml>                 Parse file, print JSON to stdout
-  parse-fmx <input.xml> -o out.json     Parse file, write JSON to out.json
-  parse-fmx < input.xml                 Read from stdin, print JSON to stdout
-  parse-fmx --help                      Show this help
-
-Output contains: title, langCode, articles, recitals, definitions, annexes, crossReferences
-`.trim());
-}
-
-async function readStdin() {
-  const chunks = [];
-  for await (const chunk of process.stdin) {
-    chunks.push(chunk);
-  }
-  return Buffer.concat(chunks).toString('utf8');
-}
-
-async function main() {
-  const args = process.argv.slice(2);
-
-  if (args.includes('--help') || args.includes('-h')) {
-    printHelp();
-    process.exit(0);
-  }
-
-  // Parse arguments
-  let inputPath = null;
-  let outputPath = null;
-
-  for (let i = 0; i < args.length; i++) {
-    if ((args[i] === '-o' || args[i] === '--output') && i + 1 < args.length) {
-      outputPath = args[++i];
-    } else if (!args[i].startsWith('-')) {
-      inputPath = args[i];
-    } else {
-      console.error(`Unknown option: ${args[i]}`);
-      process.exit(1);
-    }
-  }
-
-  // Read input
-  let xmlText;
-  if (inputPath) {
-    const resolved = path.resolve(inputPath);
-    if (!fs.existsSync(resolved)) {
-      console.error(`File not found: ${resolved}`);
-      process.exit(1);
-    }
-    xmlText = fs.readFileSync(resolved, 'utf8');
-  } else if (!process.stdin.isTTY) {
-    xmlText = await readStdin();
-  } else {
-    console.error('No input provided. Pass a file path or pipe XML via stdin.');
-    console.error('Run "parse-fmx --help" for usage.');
+const args = process.argv.slice(2);
+for (const arg of args) {
+  if (arg === '--') break;
+  if (arg.startsWith('-') && !KNOWN_OPTIONS.has(arg)) {
+    process.stderr.write(`Unknown option: ${arg}\n`);
     process.exit(1);
   }
-
-  // Parse
-  const result = await parseFmxXml(xmlText);
-  const json = JSON.stringify(result, null, 2);
-
-  // Write output
-  if (outputPath) {
-    fs.writeFileSync(path.resolve(outputPath), json, 'utf8');
-    console.error(`Written to ${outputPath}`);
-  } else {
-    process.stdout.write(json + '\n');
-  }
 }
 
-main().catch((err) => {
-  console.error(`Error: ${err.message}`);
-  process.exit(1);
-});
+const child = spawnSync(
+  process.execPath,
+  [path.join(__dirname, 'eurlex.js'), 'parse', ...args],
+  { stdio: 'inherit' },
+);
+
+// Terminate the same way the child did, so a Ctrl-C isn't reported as a plain
+// failure to whatever invoked us.
+if (child.signal) {
+  process.kill(process.pid, child.signal);
+}
+process.exit(child.status ?? 1);

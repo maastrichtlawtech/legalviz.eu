@@ -809,7 +809,7 @@ test("GET /api/laws/:celex/procedure rejects invalid CELEX before Cellar", async
   await handler({ params: { celex: "not-a-celex" }, query: {} }, res);
 
   assert.equal(res.statusCode, 400);
-  assert.deepEqual(res.payload, { error: "Invalid CELEX format" });
+  assert.deepEqual(res.payload, { error: "Invalid CELEX format", code: "invalid_celex" });
   assert.equal(sparqlCalls, 0);
 });
 

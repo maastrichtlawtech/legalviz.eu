@@ -9,6 +9,10 @@
 
 const fs = require('fs');
 const path = require('path');
+const {
+  resolveRecitalTitleModel,
+  getRecitalTitleApiKey,
+} = require('../shared/ai-model-config');
 
 // ---------------------------------------------------------------------------
 // Shared bootstrap (services, parser, search index)
@@ -20,11 +24,7 @@ const EURLEX_BASE = 'https://eur-lex.europa.eu';
 const TIMEOUT_MS = parseInt(process.env.TIMEOUT_MS) || 30_000;
 const STORAGE_LIMIT_MB = parseInt(process.env.STORAGE_LIMIT_MB) || 500;
 const RESOLUTION_CACHE_MS = 24 * 60 * 60 * 1000;
-const DEFAULT_RECITAL_TITLE_MODEL = process.env.RECITAL_TITLE_MODEL || process.env.ARTICLE_QA_PLANNER_MODEL || process.env.ARTICLE_QA_MODEL || 'google/gemini-3.5-flash-lite';
-
-function getRecitalTitleApiKey() {
-  return process.env.RECITAL_TITLE_OPENROUTER_API_KEY || process.env.OPENROUTER_API_KEY;
-}
+const DEFAULT_RECITAL_TITLE_MODEL = resolveRecitalTitleModel();
 
 function bootServices() {
   const { JsonLegalCacheStore, DEFAULT_SEARCH_CACHE_PATH } = require('../search/search-index');

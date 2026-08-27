@@ -1,14 +1,15 @@
 const { chatComplete } = require('./openrouter-chat');
 const {
   clip,
-  normalizeText,
   stableHash,
   makeSingleFlight,
-  loadCache,
-  saveCacheEntry,
-  extractJsonObject,
-  normalizeCites,
+  celexArticleLangKey,
 } = require('./ai-digest-utils');
+const {
+  ensureThemedDigest,
+  generateThemedDigest,
+  parseThemedDigestJson,
+} = require('./digest-service-core');
 
 const {
   caseLawCacheVersion: CASE_LAW_CACHE_VERSION,
@@ -46,14 +47,6 @@ Rules:
 - Do not cite judgment paragraph numbers; the input only contains operative declarations.
 - Prefer 2-5 themes.
 - If the input contains no matching cases, return {"summary":"","themes":[],"noCaseLaw":true}.`;
-
-function cacheKey(celex, articleNumber, lang) {
-  return [
-    String(celex || '').toUpperCase(),
-    String(articleNumber || '').trim(),
-    String(lang || 'ENG').toUpperCase(),
-  ].join('_');
-}
 
 function matchesArticle(c, celex, articleNumber) {
   if (!c?.articleRefs || !articleNumber) return false;
@@ -115,35 +108,7 @@ function buildArticleDigestInput(celex, articleNumber, parsedLaw, caseLawPayload
 }
 
 function parseArticleDigestJson(text, input) {
-  const parsed = extractJsonObject(text);
-  if (parsed.noCaseLaw === true || (input.cases || []).length === 0) {
-    return { summary: '', themes: [], noCaseLaw: true };
-  }
-
-  const summary = normalizeText(parsed.summary, 1200);
-  const themes = (Array.isArray(parsed.themes) ? parsed.themes : [])
-    .map((theme) => {
-      if (!theme || typeof theme !== 'object') return null;
-      const name = normalizeText(theme.name, 120);
-      const description = normalizeText(theme.description, 900);
-      const cites = normalizeCites(theme.cites, input);
-      if (!name || !description || cites.length === 0) return null;
-      return { name, description, cites };
-    })
-    .filter(Boolean)
-    .slice(0, 6);
-
-  // A well-formed response can still fail to ground anything, e.g. when the
-  // matching cases have no parsed operative-part declarations to cite (older
-  // judgment HTML formats often don't parse cleanly). Treat that the same as
-  // "no case law" rather than throwing, so the outcome gets cached instead of
-  // re-invoking the model on every request for an article that can never
-  // produce a groundable digest.
-  if (!summary || themes.length === 0) {
-    return { summary: '', themes: [], noCaseLaw: true };
-  }
-
-  return { summary, themes, noCaseLaw: false };
+  return parseThemedDigestJson(text, input);
 }
 
 function buildUserPrompt(input) {
@@ -163,34 +128,13 @@ async function generateArticleDigest(input, {
   model,
   chatComplete: chatCompleteImpl = chatComplete,
 } = {}) {
-  if ((input.cases || []).length === 0) {
-    return {
-      digest: { summary: '', themes: [], noCaseLaw: true },
-      model,
-      usage: null,
-      billed: false,
-    };
-  }
-
-  const response = await chatCompleteImpl({
-    model,
+  return generateThemedDigest(input, {
     apiKey,
-    temperature: 0.1,
-    maxTokens: 4000,
-    responseFormat: 'json_object',
-    reasoning: { max_tokens: 256, exclude: true },
-    messages: [
-      { role: 'system', content: SYSTEM_PROMPT },
-      { role: 'user', content: buildUserPrompt(input) },
-    ],
+    model,
+    chatComplete: chatCompleteImpl,
+    systemPrompt: SYSTEM_PROMPT,
+    userPrompt: buildUserPrompt(input),
   });
-
-  return {
-    digest: parseArticleDigestJson(response.text, input),
-    model: response.model || model,
-    usage: response.usage || null,
-    billed: true,
-  };
 }
 
 async function ensureArticleDigest({
@@ -209,59 +153,25 @@ async function ensureArticleDigest({
     throw new Error(`Article ${articleNumber} not found in ${celex}`);
   }
   const sourceHash = stableHash(input);
-  const key = cacheKey(celex, articleNumber, lang || input.lang);
+  const key = celexArticleLangKey(celex, articleNumber, lang || input.lang);
 
-  return withSingleFlight(`article-digest:${key}:${sourceHash}:${model}`, async () => {
-    const cache = cacheDir ? loadCache(cacheDir, CACHE_FILE) : {};
-    const cached = cache[key];
-    if (
-      cached?.version === CACHE_VERSION
-      && cached?.schemaVersion === SCHEMA_VERSION
-      && cached?.promptVersion === PROMPT_VERSION
-      && cached?.caseLawCacheVersion === CASE_LAW_CACHE_VERSION
-      && cached?.sourceHash === sourceHash
-      && (cached?.model === model || cached?.digest?.noCaseLaw === true)
-      && cached?.digest
-    ) {
-      return {
-        digest: cached.digest,
-        model: cached.model || model,
-        generatedAt: cached.generatedAt || null,
-        caseLawCacheVersion: cached.caseLawCacheVersion,
-        cached: true,
-        billed: false,
-      };
-    }
-
-    const generated = await generateArticleDigest(input, { apiKey, model, chatComplete: chatCompleteImpl });
-    let entry = null;
-    if (cacheDir) {
-      entry = {
-        version: CACHE_VERSION,
-        schemaVersion: SCHEMA_VERSION,
-        promptVersion: PROMPT_VERSION,
-        caseLawCacheVersion: CASE_LAW_CACHE_VERSION,
-        sourceHash,
-        model: generated.digest.noCaseLaw ? null : (generated.model || model),
-        generatedAt: new Date().toISOString(),
-        digest: generated.digest,
-      };
-      saveCacheEntry(cacheDir, CACHE_FILE, key, entry);
-    }
-
-    return {
-      digest: generated.digest,
-      model: generated.digest.noCaseLaw ? null : (generated.model || model),
-      usage: generated.usage || null,
-      generatedAt: entry?.generatedAt || null,
-      caseLawCacheVersion: CASE_LAW_CACHE_VERSION,
-      cached: false,
-      // Whether a real (billed) model call happened — distinct from `cached`:
-      // the zero-case short-circuit above also returns `cached: false` (there
-      // is no cache entry validated) but never calls the model.
-      billed: generated.billed === true,
-    };
-  });
+  return withSingleFlight(`article-digest:${key}:${sourceHash}:${model}`, () => ensureThemedDigest({
+    input,
+    key,
+    sourceHash,
+    cacheDir,
+    cacheFile: CACHE_FILE,
+    cacheVersion: CACHE_VERSION,
+    schemaVersion: SCHEMA_VERSION,
+    promptVersion: PROMPT_VERSION,
+    caseLawCacheVersion: CASE_LAW_CACHE_VERSION,
+    model,
+    generate: (digestInput) => generateArticleDigest(digestInput, {
+      apiKey,
+      model,
+      chatComplete: chatCompleteImpl,
+    }),
+  }));
 }
 
 module.exports = {

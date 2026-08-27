@@ -294,7 +294,7 @@ test('search_law_text rejects an invalid CELEX before retrieval', async () => {
   assert.equal(retrieved, false);
 });
 
-test('search_law_text reports an unavailable body-text index without an equivalent fallback', async () => {
+test('search_law_text reports an unavailable full-text index without an equivalent fallback', async () => {
   const deps = makeDeps({
     legalCacheStore: {
       searchFulltextUnits: () => {
@@ -307,8 +307,7 @@ test('search_law_text reports an unavailable body-text index without an equivale
   await withClient(deps, async (client) => {
     const res = await client.callTool({ name: 'search_law_text', arguments: { query: 'erasure' } });
     assert.equal(res.isError, true);
-    assert.match(res.content[0].text, /body-text index unavailable/i);
-    assert.match(res.content[0].text, /not an equivalent fallback/i);
+    assert.equal(res.content[0].text, 'Full-text index is not available; metadata/title/excerpt search remains available but is not an equivalent fallback.');
   });
 });
 

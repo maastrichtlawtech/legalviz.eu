@@ -49,10 +49,17 @@ export function useLawViewerSource({
     return getCanonicalLawRoute(currentLaw, kind, id, routeLocale || locale);
   }, [currentLaw, currentLawSlug, kind, id, routeLocale, locale]);
 
+  // `search` overrides the query string carried along with the jump. Callers
+  // that change a search param *and* the route in one gesture (reading the
+  // consolidated text, which sets `?version=current` and lands on the first
+  // article) must pass it: `locationSearch` is a render behind a
+  // `setSearchParams` in the same handler, so navigating without it would
+  // silently drop the param that was just set.
   const navigateToCanonical = useCallback((kindName, targetId, options = {}) => {
     if (!currentLawSlug) return;
+    const { search, ...navOptions } = options;
     const nextPath = getCanonicalLawRoute(currentLaw, kindName, targetId, routeLocale || locale);
-    navigate(`${nextPath}${locationSearch}`, options);
+    navigate(`${nextPath}${search ?? locationSearch}`, navOptions);
   }, [currentLaw, currentLawSlug, locale, locationSearch, navigate, routeLocale]);
 
   const retryLoad = useCallback(() => {

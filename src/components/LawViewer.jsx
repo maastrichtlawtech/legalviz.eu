@@ -50,6 +50,7 @@ import { LawOverviewPage } from "./law-viewer/LawOverviewPage.jsx";
 import { ConsolidatedFallbackNotice } from "./law-viewer/ConsolidatedFallbackNotice.jsx";
 import { DefinitionComparisonSheet } from "./law-viewer/DefinitionComparisonSheet.jsx";
 import { ConsolidationNotice } from "./ConsolidationNotice.jsx";
+import { buildVersionReadTarget } from "../utils/law-viewer/versionNavigation.js";
 
 export function LawViewer() {
   const { locale: routeLocale, slug, key, kind, id } = useParams();
@@ -209,6 +210,21 @@ export function LawViewer() {
     else nextParams.delete("version");
     setSearchParams(nextParams);
   }, [searchParams, setSearchParams]);
+
+  // The overview's version toggle: switch to the consolidated text *and*
+  // start reading it. `buildVersionReadTarget` explains why one gesture, not
+  // two, and returns null for the directions that are just a param change
+  // (clearing the version, or a document with nothing readable) — those fall
+  // through to `setVersion`. The search string is passed explicitly because
+  // `navigateToCanonical` would otherwise reuse the pre-toggle one.
+  const setVersionAndRead = React.useCallback((nextVersion) => {
+    const target = buildVersionReadTarget(primaryDocument.data, searchParams, nextVersion);
+    if (!target) {
+      setVersion(nextVersion);
+      return;
+    }
+    source.navigateToCanonical(target.kind, target.id, { search: target.search });
+  }, [primaryDocument.data, searchParams, setVersion, source]);
 
   const definitionComparison = definitionTerm ? {
     term: definitionTerm,
@@ -417,7 +433,7 @@ export function LawViewer() {
                   version={requestedVersion}
                   versionUnavailable={derived.versionUnavailable}
                   versionDate={derived.versionDate}
-                  onToggleVersion={setVersion}
+                  onToggleVersion={setVersionAndRead}
                   t={t}
                 />
               ) : (

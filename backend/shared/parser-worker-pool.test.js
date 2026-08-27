@@ -303,6 +303,52 @@ test("opt-in recycling replaces idle workers before queued work and preserves ev
   }
 });
 
+test("close() waits for workers already retired for recycling", async () => {
+  // A retired worker leaves `workers` the instant retirement starts, so close()
+  // could resolve while its thread is still alive and still holding the event
+  // loop open -- for the fulltext CLI that is a build that finishes and then
+  // hangs.
+  const workers = [];
+  const pool = createWorkerPool({
+    poolSize: 1,
+    recycleAfter: 1,
+    workerFactory: () => {
+      const worker = new FakeWorker((payload) => queueMicrotask(() => {
+        worker.emit("message", { ok: true, result: payload });
+      }));
+      // Each worker's termination is released individually, so the retired
+      // one can be left outstanding while the live one has already settled.
+      worker.terminate = () => {
+        worker.terminated = true;
+        return new Promise((resolve) => { worker.release = () => resolve(0); });
+      };
+      workers.push(worker);
+      return worker;
+    },
+  });
+
+  await pool.run(1);
+  await pool.run(2);
+  assert.equal(workers.length, 2, "the first worker retired after its single task");
+  const [retired, live] = workers;
+  assert.equal(retired.terminated, true, "the retired worker's termination is in flight");
+
+  let closed = false;
+  const closing = pool.close().then(() => { closed = true; });
+  live.release();
+  await new Promise((resolve) => setImmediate(resolve));
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(
+    closed,
+    false,
+    "close() must not resolve once the live worker is gone but a retired thread is still terminating",
+  );
+
+  retired.release();
+  await closing;
+  assert.equal(closed, true);
+});
+
 test("onResult errors propagate without bisecting into a skipped batch", async () => {
   let worker;
   let skipped = 0;

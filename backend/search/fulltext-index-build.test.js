@@ -210,6 +210,7 @@ test("buildFulltextIndex (real fixture, real worker pool) populates units + unit
   const outputPath = path.join(dir, "fulltext.sqlite");
   const file = await seedCorpusFile(dir, "fmx-v4-2009-32009L0004.xml.gz", "32009L0004", "xml");
 
+  const logged = [];
   const summary = await buildFulltextIndex({
     outputPath,
     files: [file],
@@ -217,7 +218,18 @@ test("buildFulltextIndex (real fixture, real worker pool) populates units + unit
     batchSize: 10,
     pool: 1,
     workerHeapMb: 256,
+    recycleBatches: 7,
+    progress: true,
+    log: (line) => logged.push(line),
   });
+
+  // buildFulltextIndex has no DI hook for the pool, so its own progress line is
+  // the observable proof that recycleBatches reaches it rather than being
+  // dropped between the two option names.
+  assert.ok(
+    logged.some((line) => line.includes("recycle=7")),
+    `expected a progress line reporting recycle=7, got: ${JSON.stringify(logged)}`,
+  );
 
   // Matches the fixture's frozen floor in corpus-fixtures.test.js
   // (minArticles: 4, minRecitals: 6).
@@ -477,11 +489,23 @@ test("the fulltext builder recycles its workers by default", async () => {
   assert.deepEqual(workers.slice(0, -1).map((worker) => worker.terminated), [true, true]);
 });
 
-test("an explicit recycleBatches of 0 disables recycling rather than restoring the default", async () => {
-  const batches = Array.from({ length: 6 }, (_, index) => [`file-${index}`]);
-  const workers = await countWorkersOverBatches(batches, { recycleAfter: 0 });
-  assert.equal(workers.length, 1, "zero means off, not 'use the default'");
-  assert.equal(workers[0].posts, 6);
+test("an explicit 0 disables recycling rather than restoring the default, under either option name", async () => {
+  const batches = () => Array.from({ length: 6 }, (_, index) => [`file-${index}`]);
+
+  // runPool is exported and speaks the shared pool's `recycleAfter`;
+  // buildFulltextIndex and the CLI speak `recycleBatches`. A caller reaching
+  // the adapter directly with the builder's spelling must not silently get the
+  // default instead of the "off" they asked for.
+  for (const name of ["recycleAfter", "recycleBatches"]) {
+    const workers = await countWorkersOverBatches(batches(), { [name]: 0 });
+    assert.equal(workers.length, 1, `${name}: zero means off, not 'use the default'`);
+    assert.equal(workers[0].posts, 6);
+  }
+
+  for (const name of ["recycleAfter", "recycleBatches"]) {
+    const workers = await countWorkersOverBatches(batches(), { [name]: 2 });
+    assert.equal(workers.length, 3, `${name}: honoured as an interval`);
+  }
 
   assert.deepEqual(parseCliArgs(["--recycleBatches", "0"]), { recycleBatches: 0 });
   assert.deepEqual(parseCliArgs(["--recycleBatches", "10"]), { recycleBatches: 10 });

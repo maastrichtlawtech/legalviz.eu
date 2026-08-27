@@ -102,6 +102,10 @@ function createWorkerPool({
   }
 
   const workers = new Set();
+  // Terminations of workers retired for recycling. They are out of `workers`
+  // the moment retirement starts, so close() would otherwise resolve while one
+  // of their threads is still alive and still holding the event loop open.
+  const retiringTerminations = new Set();
   const queue = [];
   let closed = false;
   let closePromise = null;
@@ -233,7 +237,9 @@ function createWorkerPool({
 
     record.retiring = true;
     workers.delete(record);
-    Promise.resolve(record.thread.terminate()).catch(() => {});
+    const termination = Promise.resolve(record.thread.terminate()).catch(() => {});
+    retiringTerminations.add(termination);
+    termination.then(() => retiringTerminations.delete(termination));
     return replacement;
   }
 
@@ -332,7 +338,10 @@ function createWorkerPool({
         job.reject(new WorkerPoolClosedError());
       }
     }
-    closePromise = Promise.allSettled(active.map(({ thread }) => thread.terminate())).then(() => undefined);
+    closePromise = Promise.allSettled([
+      ...active.map(({ thread }) => thread.terminate()),
+      ...retiringTerminations,
+    ]).then(() => undefined);
     return closePromise;
   }
 

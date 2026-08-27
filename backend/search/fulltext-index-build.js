@@ -236,8 +236,11 @@ function runPool(initialBatches, onResult, options = {}) {
   const poolSize = options.poolSize || DEFAULT_POOL_SIZE;
   const workerHeapMb = options.workerHeapMb || DEFAULT_WORKER_HEAP_MB;
   // ?? rather than ||: an explicit 0 disables recycling, it does not mean
-  // "use the default".
-  const recycleAfter = options.recycleAfter ?? DEFAULT_RECYCLE_BATCHES;
+  // "use the default". Both spellings are accepted because buildFulltextIndex
+  // and the CLI speak `recycleBatches` (batches are this builder's unit) while
+  // the shared pool speaks `recycleAfter`; runPool is exported, so a caller
+  // reaching it directly should not have to know which side it is on.
+  const recycleAfter = options.recycleAfter ?? options.recycleBatches ?? DEFAULT_RECYCLE_BATCHES;
   const defaults = {
     initialTotals: {
       parsed: 0, htmlLaws: 0, oversized: 0, files: 0, failures: 0, filesDone: 0, batchesDone: 0,

@@ -292,7 +292,7 @@ function createFmxService({
     const response = await fetchWithTimeout(url, {
       headers: { Accept: '*/*', 'Accept-Language': 'eng' }
     });
-    if (response.status === 404) throw new ClientError('Law not found in EUR-Lex Cellar', 404);
+    if (response.status === 404) throw new ClientError('Law not found in EUR-Lex Cellar', 404, 'celex_not_found');
     if (!response.ok) throw new Error(`HTTP ${response.status} for ${url}`);
     return response.text();
   }
@@ -334,7 +334,7 @@ function createFmxService({
       }
     }
 
-    if (!fmx4) throw new ClientError(`No Formex data available for this law in language ${lang}`, 404);
+    if (!fmx4) throw new ClientError(`No Formex data available for this law in language ${lang}`, 404, 'fmx_not_found');
     return fmx4;
   }
 
@@ -361,7 +361,7 @@ function createFmxService({
     const docXmls = uris.filter((uri) => uri.endsWith('.doc.xml'));
     if (docXmls.length) return { type: 'xml', urls: docXmls };
 
-    throw new ClientError('No downloadable Formex files found for this law', 404);
+    throw new ClientError('No downloadable Formex files found for this law', 404, 'fmx_not_found');
   }
 
   function combineZipToXml(zipPath) {

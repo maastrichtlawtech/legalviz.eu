@@ -1237,3 +1237,69 @@ test("GET /api/fulltext-search is registered with rate limiting and delegates bo
   assert.equal(res.payload.celex, "32016R0679");
   assert.deepEqual(calls, [{ query: "data", options: { limit: "1", celex: "32016R0679" } }]);
 });
+
+test("GET /api/laws/:celex/info reports Formex availability", async () => {
+  const { app } = registerTestRoutes({ CELEX_NAMES: { "32016R0679": "GDPR" } });
+  const handler = app.routes.get("/api/laws/:celex/info");
+  const res = createResponseRecorder();
+
+  await handler({ params: { celex: "32016R0679" }, query: {} }, res);
+
+  assert.equal(res.statusCode, 200);
+  assert.deepEqual(res.payload, {
+    celex: "32016R0679",
+    lang: "ENG",
+    name: "GDPR",
+    type: "xml",
+    formexAvailable: true,
+  });
+});
+
+test("GET /api/laws/:celex/info answers 200 with formexAvailable: false for an act served by the HTML fallback", async () => {
+  const { app } = registerTestRoutes({
+    findFmx4Uri: async () => {
+      throw new ClientError("No Formex data available for this law in language ENG", 404, "fmx_not_found");
+    },
+  });
+  const handler = app.routes.get("/api/laws/:celex/info");
+  const res = createResponseRecorder();
+
+  await handler({ params: { celex: "31987L0372" }, query: {} }, res);
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.payload.formexAvailable, false);
+  assert.equal(res.payload.type, null);
+  assert.equal(res.payload.celex, "31987L0372");
+});
+
+test("GET /api/laws/:celex/info answers 200 with formexAvailable: false when the manifestation lists no downloadable files", async () => {
+  const { app } = registerTestRoutes({
+    findDownloadUrls: async () => {
+      throw new ClientError("No downloadable Formex files found for this law", 404, "fmx_not_found");
+    },
+  });
+  const handler = app.routes.get("/api/laws/:celex/info");
+  const res = createResponseRecorder();
+
+  await handler({ params: { celex: "31987L0372" }, query: {} }, res);
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.payload.formexAvailable, false);
+  assert.equal(res.payload.type, null);
+});
+
+test("GET /api/laws/:celex/info still 404s when Cellar has no such CELEX", async () => {
+  const { app } = registerTestRoutes({
+    findFmx4Uri: async () => {
+      throw new ClientError("Law not found in EUR-Lex Cellar", 404, "celex_not_found");
+    },
+  });
+  const handler = app.routes.get("/api/laws/:celex/info");
+  const res = createResponseRecorder();
+
+  await handler({ params: { celex: "39999R9999" }, query: {} }, res);
+
+  assert.equal(res.statusCode, 404);
+  assert.equal(res.payload.error, "Law not found in EUR-Lex Cellar");
+  assert.equal(res.payload.code, "celex_not_found");
+});

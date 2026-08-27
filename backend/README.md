@@ -237,7 +237,7 @@ cat input.xml | parse-fmx > output.json
 | `GET` | `/api/laws` | List cached FMX files |
 | `GET` | `/api/laws/:celex?lang=ENG` | Download raw Formex XML by CELEX (falls back to EUR-Lex HTML when FMX isn't available) |
 | `GET` | `/api/laws/:celex/parsed?lang=ENG` | **Parsed law as structured JSON** |
-| `GET` | `/api/laws/:celex/info?lang=ENG` | Law type and format metadata |
+| `GET` | `/api/laws/:celex/info?lang=ENG` | Law type and format metadata. Returns `200` with `formexAvailable: false` (and `type: null`) for acts EUR-Lex publishes without Formex — those still parse via the HTML fallback. `404` means the CELEX itself is unknown to Cellar. |
 | `GET` | `/api/laws/:celex/metadata` | SPARQL metadata (entry into force, ELI, etc.) |
 | `GET` | `/api/laws/:celex/amendments` | Amendment and corrigendum history |
 | `GET` | `/api/laws/:celex/consolidated` | Consolidated ("as amended") versions EUR-Lex publishes for the act, oldest first. Future-dated versions are included — the caller decides which one is current. |

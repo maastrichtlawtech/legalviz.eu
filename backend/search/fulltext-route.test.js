@@ -71,5 +71,6 @@ test("fulltext route maps unavailable indexes to a detailed 503", () => {
 
   assert.equal(res.statusCode, 503);
   assert.equal(res.payload.code, "fulltext_index_unavailable");
+  assert.equal(res.payload.error, "Full-text index is not available; metadata/title/excerpt search remains available but is not an equivalent fallback.");
   assert.deepEqual(res.payload.details, { available: false, reason: "missing" });
 });

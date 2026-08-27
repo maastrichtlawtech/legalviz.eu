@@ -1,7 +1,7 @@
 const { JSDOM } = require("jsdom");
 const { createRequire } = require("module");
 
-const { ClientError } = require("./api-utils");
+const { ClientError, LANG_3_TO_2 } = require("./api-utils");
 const { referenceDedupeKey, enforceInternalReferenceIntegrity } = require("./legal-reference-core.mjs");
 // languages.mjs is pure data + regex builders with no DOM dependency, so it can
 // be require(esm)'d at load time — unlike fmxParser.mjs, which needs the
@@ -13,33 +13,6 @@ const {
   buildInlineDefRegex,
   buildColonDefRegex,
 } = require("./formex-parser/languages.mjs");
-
-const LANG_3_TO_2 = {
-  BUL: "BG",
-  CES: "CS",
-  DAN: "DA",
-  DEU: "DE",
-  ELL: "EL",
-  ENG: "EN",
-  EST: "ET",
-  FIN: "FI",
-  FRA: "FR",
-  GLE: "GA",
-  HRV: "HR",
-  HUN: "HU",
-  ITA: "IT",
-  LAV: "LV",
-  LIT: "LT",
-  MLT: "MT",
-  NLD: "NL",
-  POL: "PL",
-  POR: "PT",
-  RON: "RO",
-  SLK: "SK",
-  SLV: "SL",
-  SPA: "ES",
-  SWE: "SV",
-};
 
 let helperPromise = null;
 const requireFromHere = createRequire(__filename);

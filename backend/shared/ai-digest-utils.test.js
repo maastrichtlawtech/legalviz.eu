@@ -11,6 +11,8 @@ const {
   loadCache,
   saveCache,
   extractJsonObject,
+  celexLangKey,
+  celexArticleLangKey,
   normalizeCites,
 } = require('./ai-digest-utils');
 
@@ -46,6 +48,33 @@ test('makeSingleFlight coalesces concurrent calls and clears after settle', asyn
 test('extractJsonObject unwraps fenced JSON and throws on non-JSON', () => {
   assert.deepEqual(extractJsonObject('```json\n{"a":1}\n```'), { a: 1 });
   assert.throws(() => extractJsonObject('no json here'), /did not return a JSON object/);
+});
+
+test('extractJsonObject uses the default and custom error labels', () => {
+  assert.throws(() => extractJsonObject('no json here'), {
+    message: 'Digest model did not return a JSON object; text=no json here',
+  });
+  assert.throws(() => extractJsonObject('no json here', { label: 'Summary model' }), {
+    message: 'Summary model did not return a JSON object; text=no json here',
+  });
+});
+
+test('extractJsonObject reports empty text and truncates the snippet at 500 characters', () => {
+  assert.throws(() => extractJsonObject(''), {
+    message: 'Digest model did not return a JSON object; text=<empty>',
+  });
+
+  const snippet = 'x'.repeat(500);
+  assert.throws(() => extractJsonObject(`${snippet}y`), {
+    message: `Digest model did not return a JSON object; text=${snippet}`,
+  });
+});
+
+test('celex cache keys use exact normalized strings', () => {
+  assert.equal(celexLangKey('32016r0679', 'fra'), '32016R0679_FRA');
+  assert.equal(celexLangKey('', undefined), '_ENG');
+  assert.equal(celexArticleLangKey('32016r0679', '  2a  ', 'fra'), '32016R0679_2a_FRA');
+  assert.equal(celexArticleLangKey('', '  Article 1  ', undefined), '_Article 1_ENG');
 });
 
 test('normalizeCites drops ungrounded cites and honours the limit', () => {

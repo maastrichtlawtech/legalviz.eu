@@ -19,6 +19,10 @@ const {
 const { ChatProviderError } = require("../shared/openrouter-chat");
 const { ensureRecitalTitles } = require("../shared/recital-title-service");
 const {
+  resolveRecitalTitleModel,
+  getRecitalTitleApiKey,
+} = require("../shared/ai-model-config");
+const {
   CACHE_VERSION: LAW_SUMMARY_CACHE_VERSION,
   PROMPT_VERSION: LAW_SUMMARY_PROMPT_VERSION,
   SCHEMA_VERSION: LAW_SUMMARY_SCHEMA_VERSION,
@@ -30,16 +34,12 @@ const { ensureCaseLawDigest } = require("../shared/case-law-digest-service");
 const DEFAULT_STATIC_SUMMARY_MODEL = process.env.LAW_SUMMARY_MODEL || process.env.ARTICLE_QA_ANSWER_MODEL || process.env.ARTICLE_QA_MODEL || 'google/gemini-3.5-flash-lite';
 const DEFAULT_ARTICLE_DIGEST_MODEL = process.env.ARTICLE_DIGEST_MODEL || process.env.LAW_SUMMARY_MODEL || process.env.ARTICLE_QA_ANSWER_MODEL || process.env.ARTICLE_QA_MODEL || 'google/gemini-3.5-flash-lite';
 const DEFAULT_CASE_LAW_DIGEST_MODEL = process.env.CASE_LAW_DIGEST_MODEL || process.env.ARTICLE_DIGEST_MODEL || process.env.LAW_SUMMARY_MODEL || process.env.ARTICLE_QA_ANSWER_MODEL || process.env.ARTICLE_QA_MODEL || 'google/gemini-3.5-flash-lite';
-const DEFAULT_RECITAL_TITLE_MODEL = process.env.RECITAL_TITLE_MODEL || process.env.ARTICLE_QA_PLANNER_MODEL || process.env.ARTICLE_QA_MODEL || 'google/gemini-3.5-flash-lite';
+const DEFAULT_RECITAL_TITLE_MODEL = resolveRecitalTitleModel();
 
 function getStaticSummaryApiKey() {
   return process.env.LAW_SUMMARY_OPENROUTER_API_KEY
     || process.env.ARTICLE_QA_OPENROUTER_API_KEY
     || process.env.OPENROUTER_API_KEY;
-}
-
-function getRecitalTitleApiKey() {
-  return process.env.RECITAL_TITLE_OPENROUTER_API_KEY || process.env.OPENROUTER_API_KEY;
 }
 
 /**
@@ -115,6 +115,11 @@ function mapParserPoolError(err) {
 const CASE_LAW_ROUTE_CACHE_MS = 5 * 60 * 1000;
 const CELLAR_NO_END_OF_VALIDITY = '9999-12-31';
 const STORE_METADATA_FIELDS = ['inForce', 'endOfValidity', 'entryIntoForce', 'eli'];
+
+/** Canonical 400 for a CELEX that fails validateCelex(). */
+function rejectInvalidCelex(res) {
+  return res.status(400).json({ error: 'Invalid CELEX format', code: 'invalid_celex' });
+}
 
 // Presence, not key presence. `compactSqliteRecord` builds its whitelist as an
 // object literal, so a record predating a field still carries the key with an
@@ -288,7 +293,7 @@ function registerApiRoutes(app, deps) {
     try {
       const { celex, n } = req.params;
       if (!validateCelex(celex)) {
-        return res.status(400).json({ error: 'Invalid CELEX format', code: 'invalid_celex' });
+        return rejectInvalidCelex(res);
       }
       const article = String(n || '').trim();
       if (!article) {
@@ -306,7 +311,7 @@ function registerApiRoutes(app, deps) {
     try {
       const { celex } = req.params;
       if (!validateCelex(celex)) {
-        return res.status(400).json({ error: 'Invalid CELEX format', code: 'invalid_celex' });
+        return rejectInvalidCelex(res);
       }
       const citingLawsLimit = parsePaginationValue(req.query.citingLaws, 'citingLaws', { defaultValue: 10, min: 1, max: 50 });
       res.json(requireCitationGraph(citationGraphStore).getActCitations(celex, { citingLawsLimit }));
@@ -387,7 +392,7 @@ function registerApiRoutes(app, deps) {
       const rawLang = req.query.lang || 'ENG';
 
       if (!validateCelex(celex)) {
-        return res.status(400).json({ error: 'Invalid CELEX format. Expected: 32016R0679' });
+        return rejectInvalidCelex(res);
       }
 
       const lang = validateLang(rawLang);
@@ -411,7 +416,7 @@ function registerApiRoutes(app, deps) {
       const skipFmxProbe = req.query.skipFmxProbe === '1';
 
       if (!validateCelex(celex)) {
-        return res.status(400).json({ error: 'Invalid CELEX format. Expected: 32016R0679' });
+        return rejectInvalidCelex(res);
       }
 
       const lang = validateLang(rawLang);
@@ -445,7 +450,7 @@ function registerApiRoutes(app, deps) {
       const rawLang = req.query.lang || 'ENG';
 
       if (!validateCelex(celex)) {
-        return res.status(400).json({ error: 'Invalid CELEX format' });
+        return rejectInvalidCelex(res);
       }
 
       const lang = validateLang(rawLang);
@@ -490,7 +495,7 @@ function registerApiRoutes(app, deps) {
       const { celex } = req.params;
 
       if (!validateCelex(celex)) {
-        return res.status(400).json({ error: 'Invalid CELEX format' });
+        return rejectInvalidCelex(res);
       }
 
       const storePayload = metadataFromLegalCache(celex, legalCacheStore);
@@ -520,7 +525,7 @@ function registerApiRoutes(app, deps) {
       const { celex } = req.params;
 
       if (!validateCelex(celex)) {
-        return res.status(400).json({ error: 'Invalid CELEX format' });
+        return rejectInvalidCelex(res);
       }
 
       const cacheKey = `procedure:${celex}`;
@@ -542,7 +547,7 @@ function registerApiRoutes(app, deps) {
       const { celex } = req.params;
 
       if (!validateCelex(celex)) {
-        return res.status(400).json({ error: 'Invalid CELEX format' });
+        return rejectInvalidCelex(res);
       }
 
       const cacheKey = `amendments:${celex}`;
@@ -564,7 +569,7 @@ function registerApiRoutes(app, deps) {
       const { celex } = req.params;
 
       if (!validateCelex(celex)) {
-        return res.status(400).json({ error: 'Invalid CELEX format' });
+        return rejectInvalidCelex(res);
       }
 
       res.json(await fetchConsolidatedVersionsMemo(celex));
@@ -578,7 +583,7 @@ function registerApiRoutes(app, deps) {
       const { celex } = req.params;
 
       if (!validateCelex(celex)) {
-        return res.status(400).json({ error: 'Invalid CELEX format' });
+        return rejectInvalidCelex(res);
       }
 
       const cacheKey = `implementing:${celex}`;
@@ -615,7 +620,7 @@ function registerApiRoutes(app, deps) {
       const { celex } = req.params;
 
       if (!validateCelex(celex)) {
-        return res.status(400).json({ error: 'Invalid CELEX format' });
+        return rejectInvalidCelex(res);
       }
 
       res.json(await fetchCaseLawMemo(celex));
@@ -630,7 +635,7 @@ function registerApiRoutes(app, deps) {
       const rawLang = req.query.lang || 'ENG';
 
       if (!validateCelex(celex)) {
-        return res.status(400).json({ error: 'Invalid CELEX format' });
+        return rejectInvalidCelex(res);
       }
       const lang = validateLang(rawLang);
       if (!lang) {
@@ -677,7 +682,7 @@ function registerApiRoutes(app, deps) {
       const { celex } = req.params;
 
       if (!validateCelex(celex)) {
-        return res.status(400).json({ error: 'Invalid CELEX format' });
+        return rejectInvalidCelex(res);
       }
       // Summaries are generated in English only for now; the lang query
       // parameter is ignored so other languages cannot trigger generation.
@@ -760,7 +765,7 @@ function registerApiRoutes(app, deps) {
       const rawLang = req.query.lang || 'ENG';
 
       if (!validateCelex(celex)) {
-        return res.status(400).json({ error: 'Invalid CELEX format' });
+        return rejectInvalidCelex(res);
       }
       if (!articleNumber) {
         return res.status(400).json({ error: 'Article number is required' });
@@ -820,7 +825,7 @@ function registerApiRoutes(app, deps) {
       const rawLang = req.query.lang || 'ENG';
 
       if (!validateCelex(celex)) {
-        return res.status(400).json({ error: 'Invalid CELEX format' });
+        return rejectInvalidCelex(res);
       }
       const lang = validateLang(rawLang);
       if (!lang) {

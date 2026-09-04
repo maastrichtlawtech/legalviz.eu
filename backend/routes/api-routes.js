@@ -27,6 +27,7 @@ const {
   PROMPT_VERSION: LAW_SUMMARY_PROMPT_VERSION,
   SCHEMA_VERSION: LAW_SUMMARY_SCHEMA_VERSION,
   ensureLawSummary,
+  getCachedLawSummary,
 } = require("../shared/law-summary-service");
 const { ensureArticleDigest } = require("../shared/article-digest-service");
 const { ensureCaseLawDigest } = require("../shared/case-law-digest-service");
@@ -224,6 +225,7 @@ function registerApiRoutes(app, deps) {
     resolveEurlexUrl,
     resolveParsedLaw,
     ensureLawSummary: ensureLawSummaryImpl = ensureLawSummary,
+    getCachedLawSummary: getCachedLawSummaryImpl = getCachedLawSummary,
     resolveReference,
     runSparqlQuery,
     safeErrorResponse,
@@ -758,6 +760,42 @@ function registerApiRoutes(app, deps) {
     }
   });
 
+  app.get('/api/laws/:celex/summary-cached', rateLimitMiddleware, async (req, res) => {
+    try {
+      const { celex } = req.params;
+
+      if (!validateCelex(celex)) {
+        return rejectInvalidCelex(res);
+      }
+
+      const lang = 'ENG';
+      const result = await getCachedLawSummaryImpl({
+        celex,
+        lang,
+        cacheDir: FMX_DIR,
+        model: DEFAULT_STATIC_SUMMARY_MODEL,
+      });
+
+      if (!result) {
+        return res.status(404).json({ error: 'No cached summary is available', code: 'summary_not_cached' });
+      }
+
+      res.json({
+        celex,
+        lang,
+        cacheVersion: LAW_SUMMARY_CACHE_VERSION,
+        schemaVersion: LAW_SUMMARY_SCHEMA_VERSION,
+        promptVersion: LAW_SUMMARY_PROMPT_VERSION,
+        model: result.model,
+        cached: result.cached,
+        generatedAt: result.generatedAt,
+        summary: result.summary,
+      });
+    } catch (err) {
+      safeErrorResponse(res, err, 'Failed to fetch cached law summary');
+    }
+  });
+
   app.get('/api/laws/:celex/articles/:n/case-law-digest', rateLimitMiddleware, generationOriginMiddleware, generationLimitMiddleware, async (req, res) => {
     try {
       const { celex } = req.params;
@@ -961,6 +999,7 @@ function registerApiRoutes(app, deps) {
         'GET /api/laws/:celex/articles/:n/cited-by?limit=50&offset=0': 'List provisions and judgments citing an article',
         'GET /api/laws/:celex/recital-titles?lang=ENG': 'Get cached AI-generated short titles for recitals',
         'GET /api/laws/:celex/summary': 'Get cached static summary of what this law does (English only)',
+        'GET /api/laws/:celex/summary-cached': 'Get a cached static summary without generation (English only)',
         'GET /api/laws/:celex/case-law-digest?lang=ENG': 'Get cached static digest of CJEU case law interpreting this law as a whole',
         'GET /api/laws/:celex/articles/:n/case-law-digest?lang=ENG': 'Get cached static digest of CJEU case law interpreting one article',
         'GET /api/search?q=keyword&limit=10': 'Search cached primary-law metadata',

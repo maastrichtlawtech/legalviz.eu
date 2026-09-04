@@ -901,6 +901,103 @@ test("GET /api/laws/:celex/summary returns the cache version contract", async ()
   });
 });
 
+test("GET /api/laws/:celex/summary-cached returns the versioned cache contract without an API key", async () => {
+  await withOpenRouterEnv({}, async () => {
+    const rateLimitMiddleware = () => {};
+    const generationOriginMiddleware = () => { throw new Error("generation origin middleware should not run"); };
+    const generationLimitMiddleware = () => { throw new Error("generation limit middleware should not run"); };
+    const calls = [];
+    const { app } = registerTestRoutes({
+      rateLimitMiddleware,
+      generationOriginMiddleware,
+      generationLimitMiddleware,
+      getCachedLawSummary: async (args) => {
+        calls.push(args);
+        return {
+          model: "test-model",
+          cached: true,
+          generatedAt: "2026-07-16T00:00:00.000Z",
+          summary: { purpose: { text: "Test", citations: [] } },
+        };
+      },
+      resolveParsedLaw: async () => {
+        throw new Error("summary-cached must not resolve or parse a law");
+      },
+    });
+    const routePath = "/api/laws/:celex/summary-cached";
+    const handler = app.routes.get(routePath);
+    const res = createResponseRecorder();
+
+    assert.deepEqual(app.middleware.get(routePath), [rateLimitMiddleware]);
+    await handler({
+      params: { celex: "32016R0679" },
+      query: { lang: "FRA" },
+    }, res);
+
+    assert.equal(res.statusCode, 200);
+    assert.deepEqual(res.payload, {
+      celex: "32016R0679",
+      lang: "ENG",
+      cacheVersion: LAW_SUMMARY_CACHE_VERSION,
+      schemaVersion: LAW_SUMMARY_SCHEMA_VERSION,
+      promptVersion: LAW_SUMMARY_PROMPT_VERSION,
+      model: "test-model",
+      cached: true,
+      generatedAt: "2026-07-16T00:00:00.000Z",
+      summary: { purpose: { text: "Test", citations: [] } },
+    });
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].celex, "32016R0679");
+    assert.equal(calls[0].cacheDir, path.join(__dirname, "..", "fmx-downloads"));
+    assert.equal(typeof calls[0].model, "string");
+  });
+});
+
+test("GET /api/laws/:celex/summary-cached returns a stable 404 on a cache miss", async () => {
+  await withOpenRouterEnv({}, async () => {
+    let calls = 0;
+    const { app } = registerTestRoutes({
+      getCachedLawSummary: async () => {
+        calls += 1;
+        return null;
+      },
+      resolveParsedLaw: async () => {
+        throw new Error("summary-cached must not resolve or parse a law");
+      },
+    });
+    const handler = app.routes.get("/api/laws/:celex/summary-cached");
+    const res = createResponseRecorder();
+
+    await handler({ params: { celex: "32016R0679" }, query: {} }, res);
+
+    assert.equal(res.statusCode, 404);
+    assert.deepEqual(res.payload, {
+      error: "No cached summary is available",
+      code: "summary_not_cached",
+    });
+    assert.equal(calls, 1);
+  });
+});
+
+test("GET /api/laws/:celex/summary-cached rejects invalid CELEX before reading the cache", async () => {
+  let calls = 0;
+  const { app } = registerTestRoutes({
+    validateCelex: () => false,
+    getCachedLawSummary: async () => {
+      calls += 1;
+      return null;
+    },
+  });
+  const handler = app.routes.get("/api/laws/:celex/summary-cached");
+  const res = createResponseRecorder();
+
+  await handler({ params: { celex: "not-a-celex" }, query: {} }, res);
+
+  assert.equal(res.statusCode, 400);
+  assert.deepEqual(res.payload, { error: "Invalid CELEX format", code: "invalid_celex" });
+  assert.equal(calls, 0);
+});
+
 // These two tests exercise the *real* getSource/getParsedLaw closures wired
 // up inside the /api/laws/:celex/summary handler (unlike the "cache miss"
 // test above, which always passes skipFmxProbe=1 and therefore never calls

@@ -113,6 +113,23 @@ function cachedResult(entry) {
   };
 }
 
+/**
+ * Return a current cached summary without resolving or parsing the law.
+ *
+ * This read-only path intentionally validates only the versioned cache entry
+ * and requested model: it must never migrate or otherwise write cache state.
+ * Static summaries are currently English-only, so use the existing CELEX+ENG
+ * cache key regardless of any caller language state.
+ */
+function getCachedLawSummary({ celex, cacheDir, model } = {}) {
+  if (!cacheDir) return null;
+
+  const key = celexLangKey(celex, 'ENG');
+  const cache = loadCache(cacheDir, CACHE_FILE);
+  const entry = cache[key];
+  return isServableEntry(entry, model) ? cachedResult(entry) : null;
+}
+
 function buildSkeleton(articles) {
   return (articles || []).map((article) => ({
     number: String(article.article_number || '').trim(),
@@ -361,6 +378,7 @@ module.exports = {
   SCHEMA_VERSION,
   buildLawSummaryInput,
   ensureLawSummary,
+  getCachedLawSummary,
   generateLawSummary,
   parseLawSummaryJson,
   rawSourceHash,

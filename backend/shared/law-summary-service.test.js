@@ -7,7 +7,11 @@ const path = require('node:path');
 const {
   buildLawSummaryInput,
   ensureLawSummary,
+  getCachedLawSummary,
   parseLawSummaryJson,
+  CACHE_VERSION,
+  SCHEMA_VERSION,
+  PROMPT_VERSION,
 } = require('./law-summary-service');
 
 function sampleParsedLaw() {
@@ -34,6 +38,61 @@ function sampleParsedLaw() {
     definitions: [{ term: 'personal data', sourceArticle: '4' }],
   };
 }
+
+function writeSummaryCache(cacheDir, entry) {
+  fs.writeFileSync(path.join(cacheDir, 'law-summary-cache-v1.json'), JSON.stringify({
+    '32016R0679_ENG': entry,
+  }), 'utf8');
+}
+
+function validCachedSummaryEntry(overrides = {}) {
+  return {
+    version: CACHE_VERSION,
+    schemaVersion: SCHEMA_VERSION,
+    promptVersion: PROMPT_VERSION,
+    model: 'test-model',
+    generatedAt: '2026-07-16T00:00:00.000Z',
+    summary: { purpose: { text: 'Test', citations: [] } },
+    ...overrides,
+  };
+}
+
+test('getCachedLawSummary serves a current English summary without changing the cache', () => {
+  const cacheDir = fs.mkdtempSync(path.join(os.tmpdir(), 'law-summary-cache-read-'));
+  const entry = validCachedSummaryEntry();
+  writeSummaryCache(cacheDir, entry);
+  const before = fs.readFileSync(path.join(cacheDir, 'law-summary-cache-v1.json'), 'utf8');
+
+  assert.deepEqual(getCachedLawSummary({
+    celex: '32016r0679',
+    cacheDir,
+    model: 'test-model',
+  }), {
+    summary: entry.summary,
+    model: 'test-model',
+    generatedAt: entry.generatedAt,
+    cached: true,
+  });
+  assert.equal(fs.readFileSync(path.join(cacheDir, 'law-summary-cache-v1.json'), 'utf8'), before);
+});
+
+test('getCachedLawSummary returns null for an invalid cache version or requested model', () => {
+  const cacheDir = fs.mkdtempSync(path.join(os.tmpdir(), 'law-summary-cache-read-'));
+
+  for (const field of ['version', 'schemaVersion', 'promptVersion']) {
+    writeSummaryCache(cacheDir, validCachedSummaryEntry({ [field]: 'stale-version' }));
+    assert.equal(getCachedLawSummary({ celex: '32016R0679', cacheDir, model: 'test-model' }), null);
+  }
+
+  writeSummaryCache(cacheDir, validCachedSummaryEntry({ model: 'other-model' }));
+  assert.equal(getCachedLawSummary({ celex: '32016R0679', cacheDir, model: 'test-model' }), null);
+});
+
+test('getCachedLawSummary returns null when the cache entry is missing', () => {
+  const cacheDir = fs.mkdtempSync(path.join(os.tmpdir(), 'law-summary-cache-read-'));
+
+  assert.equal(getCachedLawSummary({ celex: '32016R0679', cacheDir, model: 'test-model' }), null);
+});
 
 test('parseLawSummaryJson keeps only valid article citations', () => {
   const input = buildLawSummaryInput(sampleParsedLaw());

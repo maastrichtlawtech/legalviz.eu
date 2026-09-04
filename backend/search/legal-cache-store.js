@@ -591,6 +591,7 @@ class JsonLegalCacheStore {
     this.fulltextSearchStatement = null;
     this.fulltextUnitSearchStatement = null;
     this.fulltextUnitScopedSearchStatement = null;
+    this.fulltextUnitCollectionSearchStatement = null;
     this.fulltextUnitSnippetStatement = null;
     this.fulltextAvailable = false;
     this.fulltextReason = null;
@@ -619,6 +620,7 @@ class JsonLegalCacheStore {
     this.fulltextSearchStatement = null;
     this.fulltextUnitSearchStatement = null;
     this.fulltextUnitScopedSearchStatement = null;
+    this.fulltextUnitCollectionSearchStatement = null;
     this.fulltextUnitSnippetStatement = null;
     this.fulltextAvailable = false;
     this.fulltextReason = null;
@@ -684,6 +686,18 @@ class JsonLegalCacheStore {
         ORDER BY rank, u.id
         LIMIT ${FULLTEXT_UNIT_CANDIDATE_CAP}
       `);
+      this.fulltextUnitCollectionSearchStatement = database.prepare(`
+        SELECT u.id AS id, u.celex AS celex, u.unit_type AS unitType,
+               u.number AS number, u.heading AS heading,
+               MIN(units_fts.rank) AS bestRank
+        FROM units_fts
+        JOIN units u ON u.id = units_fts.rowid
+        JOIN json_each(?) AS requested ON requested.value = u.celex
+        WHERE units_fts.text MATCH ?
+        GROUP BY u.celex
+        ORDER BY bestRank, u.id
+        LIMIT ${FULLTEXT_UNIT_CANDIDATE_CAP}
+      `);
       // Computing snippet() for the whole candidate window makes common-prefix
       // queries needlessly expensive. Rank/diversify first, then render only
       // the handful of units that cross the API boundary.
@@ -709,6 +723,7 @@ class JsonLegalCacheStore {
       this.fulltextSearchStatement = null;
       this.fulltextUnitSearchStatement = null;
       this.fulltextUnitScopedSearchStatement = null;
+      this.fulltextUnitCollectionSearchStatement = null;
       this.fulltextUnitSnippetStatement = null;
       this.fulltextAvailable = false;
       this.fulltextReason = error.message;
@@ -761,15 +776,39 @@ class JsonLegalCacheStore {
 
     const rawLimit = Number.parseInt(options.limit, 10);
     const limit = Math.max(1, Math.min(Number.isFinite(rawLimit) ? rawLimit : 10, FULLTEXT_RESULT_LIMIT));
-    const celex = options.celex ? normalizeCelexLookupKey(options.celex) : null;
-    const rows = celex
-      ? this.fulltextUnitScopedSearchStatement.all(expression, celex)
-      : this.fulltextUnitSearchStatement.all(expression);
+    const hasCelex = options.celex !== undefined && options.celex !== null && String(options.celex).trim() !== "";
+    const hasCelexes = Object.prototype.hasOwnProperty.call(options, "celexes")
+      && options.celexes !== undefined
+      && options.celexes !== null;
+    if (hasCelex && hasCelexes) {
+      const error = new Error('Specify either "celex" or "celexes", not both');
+      error.code = "fulltext_scope_ambiguous";
+      throw error;
+    }
+
+    const celex = hasCelex ? normalizeCelexLookupKey(options.celex) : null;
+    let rows;
+    if (hasCelexes) {
+      if (!Array.isArray(options.celexes)) {
+        const error = new Error('"celexes" must be an array');
+        error.code = "fulltext_celexes_required";
+        throw error;
+      }
+      const celexes = [...new Set(options.celexes.map(normalizeCelexLookupKey).filter(Boolean))];
+      rows = celexes.length === 0
+        ? []
+        : this.fulltextUnitCollectionSearchStatement.all(JSON.stringify(celexes), expression);
+    } else {
+      rows = celex
+        ? this.fulltextUnitScopedSearchStatement.all(expression, celex)
+        : this.fulltextUnitSearchStatement.all(expression);
+    }
     const seen = new Set();
     const selected = [];
     for (const row of rows) {
-      // Global discovery returns at most one best unit per act. A scoped query
-      // intentionally keeps multiple provisions from the requested act.
+      // Global and collection searches return one best unit per act. A
+      // single-CELEX query intentionally keeps multiple provisions from that
+      // requested act.
       if (!celex && seen.has(row.celex)) continue;
       seen.add(row.celex);
       selected.push(row);
@@ -1633,6 +1672,7 @@ class JsonLegalCacheStore {
       this.fulltextSearchStatement = null;
       this.fulltextUnitSearchStatement = null;
       this.fulltextUnitScopedSearchStatement = null;
+      this.fulltextUnitCollectionSearchStatement = null;
       this.fulltextUnitSnippetStatement = null;
       this.fulltextAvailable = false;
       this.fulltextReason = "Full-text index is closed";

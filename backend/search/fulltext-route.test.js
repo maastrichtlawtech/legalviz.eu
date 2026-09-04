@@ -61,7 +61,10 @@ test("fulltext POST route normalizes and deduplicates a CELEX collection", () =>
 test("fulltext POST route rejects malformed collections with stable codes", () => {
   const handler = createFulltextSearchHandler({
     searchFulltextUnits() { throw new Error("must not search invalid input"); },
-  }, { validateCelex: () => true, collection: true });
+  }, {
+    validateCelex: (value) => /^\d{5}[A-Z]{1,2}\d{4}(?:\([0-9]+\))?$/.test(value),
+    collection: true,
+  });
 
   for (const celexes of [undefined, null, "32016R0679", []]) {
     const res = response();

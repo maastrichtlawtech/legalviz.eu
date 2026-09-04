@@ -21,13 +21,17 @@ const gdprFmxPath = path.join(__dirname, "..", "..", "src", "__fixtures__", "gdp
 
 function createAppRecorder() {
   const routes = new Map();
+  const middleware = new Map();
   return {
     routes,
+    middleware,
     get(routePath, ...handlers) {
       routes.set(routePath, handlers[handlers.length - 1]);
+      middleware.set(routePath, handlers.slice(0, -1));
     },
     post(routePath, ...handlers) {
       routes.set(`POST ${routePath}`, handlers[handlers.length - 1]);
+      middleware.set(`POST ${routePath}`, handlers.slice(0, -1));
     },
   };
 }
@@ -1236,6 +1240,37 @@ test("GET /api/fulltext-search is registered with rate limiting and delegates bo
   assert.equal(res.payload.count, 1);
   assert.equal(res.payload.celex, "32016R0679");
   assert.deepEqual(calls, [{ query: "data", options: { limit: "1", celex: "32016R0679" } }]);
+});
+
+test("POST /api/fulltext-search is registered with the shared rate limiter and delegates collection search", () => {
+  const calls = [];
+  const rateLimitMiddleware = () => {};
+  const { app } = registerTestRoutes({
+    rateLimitMiddleware,
+    legalCacheStore: {
+      searchFulltextUnits: (query, options) => {
+        calls.push({ query, options });
+        return [{ celex: "32016R0679", title: "GDPR", unitType: "article", number: "5", snippet: "data", highlightRanges: [] }];
+      },
+      getFulltextStatus: () => ({ available: true }),
+    },
+    validateCelex: (value) => ["32016R0679", "32024R1689"].includes(value),
+  });
+  const routeKey = "POST /api/fulltext-search";
+  const handler = app.routes.get(routeKey);
+  const res = createResponseRecorder();
+
+  assert.equal(typeof handler, "function");
+  assert.deepEqual(app.middleware.get(routeKey), [rateLimitMiddleware]);
+  handler({ method: "POST", body: { q: " data ", celexes: ["32016r0679", "32024R1689", "32016R0679"], limit: 2 } }, res);
+
+  assert.equal(res.statusCode, 200);
+  assert.deepEqual(res.payload.celexes, ["32016R0679", "32024R1689"]);
+  assert.equal(res.payload.count, 1);
+  assert.deepEqual(calls, [{
+    query: "data",
+    options: { limit: 2, celexes: ["32016R0679", "32024R1689"] },
+  }]);
 });
 
 test("GET /api/laws/:celex/info reports Formex availability", async () => {

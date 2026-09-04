@@ -874,6 +874,7 @@ function registerApiRoutes(app, deps) {
   app.get('/api/search', rateLimitMiddleware, createSearchHandler(legalCacheStore));
 
   app.get('/api/fulltext-search', rateLimitMiddleware, createFulltextSearchHandler(legalCacheStore, { validateCelex }));
+  app.post('/api/fulltext-search', rateLimitMiddleware, createFulltextSearchHandler(legalCacheStore, { validateCelex, collection: true }));
 
   app.get('/api/definitions/search', rateLimitMiddleware, createDefinitionSearchHandler(legalCacheStore));
 
@@ -964,6 +965,7 @@ function registerApiRoutes(app, deps) {
         'GET /api/laws/:celex/articles/:n/case-law-digest?lang=ENG': 'Get cached static digest of CJEU case law interpreting one article',
         'GET /api/search?q=keyword&limit=10': 'Search cached primary-law metadata',
         'GET /api/fulltext-search?q=keyword&celex=32016R0679&limit=10': 'Search body text of cached law units (articles and recitals)',
+        'POST /api/fulltext-search': 'Search body text within a supplied CELEX collection',
         'GET /api/definitions/search?q=term&limit=10': 'Search definitions extracted from EU laws',
         'GET /api/definitions/compare?term=energy%20poverty': 'Compare how EU laws define a term',
         'GET /api/resolve-reference?actType=directive&year=2018&number=1972&lang=ENG': 'Resolve an FMX-derived legal reference to CELEX via cache-first lookup with Cellar fallback',

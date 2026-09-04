@@ -1062,6 +1062,72 @@ test("global fulltext diversification happens before the bounded result window",
   fs.rmSync(tempDir, { recursive: true, force: true });
 });
 
+test("collection fulltext search filters in SQLite before ranking and returns one unit per CELEX", () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "legal-cache-store-fulltext-collection-"));
+  const fulltextPath = path.join(tempDir, "fulltext.sqlite");
+  const crowdedCelex = "32022R0868";
+  const requestedCelex = "32024R1689";
+  const otherRequestedCelex = "32016R0679";
+  buildTestFulltextDb(fulltextPath, {
+    [crowdedCelex]: Array.from({ length: 500 }, (_, index) => ({
+      unit_type: "article",
+      number: String(index + 1),
+      text: "collectionprobe common wording.",
+    })),
+    [requestedCelex]: [
+      { unit_type: "article", number: "1", text: "collectionprobe requested wording." },
+      { unit_type: "article", number: "2", text: "collectionprobe requested wording continues." },
+    ],
+    [otherRequestedCelex]: [
+      { unit_type: "recital", number: "4", text: "collectionprobe other requested wording." },
+    ],
+  });
+  const store = new JsonLegalCacheStore(fixturePath, { preferJson: true, fulltextPath });
+  assert.equal(store.load(), true);
+
+  const results = store.searchFulltextUnits("collectionprobe", {
+    limit: 50,
+    celexes: [requestedCelex, requestedCelex.toLowerCase(), otherRequestedCelex],
+  });
+  assert.deepEqual(new Set(results.map((result) => result.celex)), new Set([requestedCelex, otherRequestedCelex]));
+  assert.equal(results.length, 2);
+  assert.equal(new Set(results.map((result) => result.celex)).size, results.length);
+  assert.equal(store.searchFulltextUnits("collectionprobe", { limit: 1, celexes: [requestedCelex, otherRequestedCelex] }).length, 1);
+  assert.throws(
+    () => store.searchFulltextUnits("collectionprobe", { celex: requestedCelex, celexes: [otherRequestedCelex] }),
+    (error) => error.code === "fulltext_scope_ambiguous",
+  );
+
+  store.close();
+  fs.rmSync(tempDir, { recursive: true, force: true });
+});
+
+test("collection fulltext search ranks only the requested CELEX values", () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "legal-cache-store-fulltext-collection-ranking-"));
+  const fulltextPath = path.join(tempDir, "fulltext.sqlite");
+  const strongerCelex = "32024R1689";
+  const weakerCelex = "32016R0679";
+  buildTestFulltextDb(fulltextPath, {
+    [weakerCelex]: [
+      { unit_type: "article", number: "1", text: "collectionrankingprobe." },
+    ],
+    [strongerCelex]: [
+      { unit_type: "article", number: "1", text: `${"collectionrankingprobe ".repeat(20)}.` },
+    ],
+  });
+  const store = new JsonLegalCacheStore(fixturePath, { preferJson: true, fulltextPath });
+  assert.equal(store.load(), true);
+
+  const results = store.searchFulltextUnits("collectionrankingprobe", {
+    limit: 50,
+    celexes: [weakerCelex, strongerCelex],
+  });
+  assert.deepEqual(results.map((result) => result.celex), [strongerCelex, weakerCelex]);
+
+  store.close();
+  fs.rmSync(tempDir, { recursive: true, force: true });
+});
+
 test("searchFulltextUnits reports an unavailable artifact with a stable code", () => {
   const store = new JsonLegalCacheStore(fixturePath, { preferJson: true, fulltextPath: path.join(os.tmpdir(), `missing-fulltext-${Date.now()}.sqlite`) });
   assert.equal(store.load(), true);

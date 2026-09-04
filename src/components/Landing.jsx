@@ -141,6 +141,7 @@ export function Landing({ forcedLocale = null }) {
           className="mt-10 flex flex-col items-center gap-2 text-center text-xs text-gray-500"
         >
           <p>{t("landing.builtBy")}</p>
+          <p>© Konrad Kollnig (Maastricht University)</p>
           <a
             href="https://github.com/maastrichtlawtech/eur-lex-visualiser"
             target="_blank"

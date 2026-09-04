@@ -246,6 +246,7 @@ cat input.xml | parse-fmx > output.json
 | `GET` | `/api/laws/:celex/case-law?lang=ENG` | CJEU judgments citing this act, with operative parts and structured `articleRefs` |
 | `GET` | `/api/laws/:celex/recital-titles?lang=ENG` | Cached AI-generated short titles for recitals. Requires `RECITAL_TITLE_OPENROUTER_API_KEY` or `OPENROUTER_API_KEY` on cache miss. |
 | `GET` | `/api/laws/:celex/summary?lang=ENG` | Cached static law overview with article citations. Requires `LAW_SUMMARY_OPENROUTER_API_KEY`, `ARTICLE_QA_OPENROUTER_API_KEY`, or `OPENROUTER_API_KEY` on cache miss. |
+| `GET` | `/api/laws/:celex/summary-cached` | Read-only English summary cache lookup. Never generates, resolves, or parses a law; returns `404 summary_not_cached` when no current model/version-matching entry exists. |
 | `GET` | `/api/laws/:celex/case-law-digest?lang=ENG` | Cached static digest of CJEU case law interpreting the whole act, grouped into doctrinal themes. Zero-case results are cached without an LLM call. |
 | `GET` | `/api/laws/:celex/articles/:n/case-law-digest?lang=ENG` | Cached static digest of CJEU case law interpreting one article. Zero-case results are cached without an LLM call. |
 | `GET` | `/api/laws/by-reference?actType=...&year=...&number=...` | Fetch law by official reference |
@@ -382,6 +383,12 @@ The backend stores titles in `recital-title-cache-v1.json` with a cache `version
   }
 }
 ```
+
+`GET /api/laws/:celex/summary-cached` is the read-only cache-only variant. It
+returns the same version fields and summary payload when a current English
+entry for the configured summary model exists, or `404` with
+`{ "error": "No cached summary is available", "code": "summary_not_cached" }`.
+It does not require an OpenRouter key.
 
 `GET /api/laws/:celex/articles/:n/case-law-digest?lang=ENG` returns a cached article-level digest:
 

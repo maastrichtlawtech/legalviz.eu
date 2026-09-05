@@ -62,7 +62,7 @@ ARG DATA_RELEASE_TAG=data-2026-08-27.01
 # The full-text index ships on its own release tag, decoupled from the data
 # train — see FULLTEXT_RELEASE_TAG in the root CLAUDE.md cache-invalidation
 # table.
-ARG FULLTEXT_RELEASE_TAG=fulltext-2026-08-27.01
+ARG FULLTEXT_RELEASE_TAG=fulltext-2026-09-05.01
 # Every asset comes from this one tag, so a new release must carry the full set —
 # re-upload the unchanged ones alongside the changed one or this fetch 404s.
 # citation-graph.json.gz is a *build input* like the others: it is folded into

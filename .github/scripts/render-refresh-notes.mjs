@@ -77,6 +77,20 @@ function celexSample(ids, label, limit = 100) {
   return `<details>\n<summary>${label}</summary>\n\n${shown.map((id) => `\`${id}\``).join(", ")}${tail}\n</details>`;
 }
 
+// Keep the notes readable when a refresh has several isolated parser errors,
+// while leaving the complete list in the published manifest for diagnosis.
+// Escape Markdown/HTML delimiters in the JSON representation because parser
+// messages are untrusted input (and can contain table pipes, backticks, or
+// closing tags).
+function parseFailureDetails(details, limit = 20) {
+  if (!Array.isArray(details) || details.length === 0) return "";
+  const shown = details.slice(0, limit);
+  const omitted = details.length - shown.length;
+  const safeJson = JSON.stringify(shown, null, 2).replace(/[&<>`]/g, (character) => `\\u${character.codePointAt(0).toString(16).padStart(4, "0")}`);
+  const omittedNote = omitted ? `\n\n${num(omitted)} additional failure details are retained in the manifest.` : "";
+  return `<details>\n<summary>Parse failure details (${num(details.length)})</summary>\n\n\`\`\`json\n${safeJson}\n\`\`\`${omittedNote}\n</details>`;
+}
+
 const sections = [];
 
 if (options.kind === "corpus") {
@@ -168,6 +182,7 @@ if (options.kind === "fulltext") {
       `| recitals | ${num(manifest.recitalCount)} |`,
     ].join("\n"),
     `Parse failures in this build: **${num(validation.failures)}**.`,
+    parseFailureDetails(manifest.parseFailures),
     assetSection(["fulltext.sqlite.gz"]),
   );
 }

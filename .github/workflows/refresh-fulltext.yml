@@ -317,6 +317,12 @@ jobs:
 
           const manifestPath = "refresh-output/fulltext.sqlite.manifest.json";
           const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+          if (!Array.isArray(manifest.parseFailures)) {
+            throw new Error("fulltext manifest parseFailures must be an array");
+          }
+          if (manifest.parseFailures.length !== failures) {
+            throw new Error(`fulltext manifest parseFailures length ${manifest.parseFailures.length} != build log failures ${failures}`);
+          }
           const stat = fs.statSync("refresh-output/fulltext.sqlite");
           // Hash in 1 MiB chunks: the index is already ~450 MB and grows with
           // every refresh, so buffering the whole file would add a matching

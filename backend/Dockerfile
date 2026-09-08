@@ -58,7 +58,7 @@ COPY search/build-sqlite-data.js search/search-ranking.js ./search/
 # still valid pins for the releases that already carry them, but the refresh
 # workflows never mint another one — see .github/scripts/release-tags.sh.
 ARG DATA_RELEASE_REPO=maastrichtlawtech/legalviz.eu
-ARG DATA_RELEASE_TAG=data-2026-08-27.01
+ARG DATA_RELEASE_TAG=data-2026-09-05.01
 # The full-text index ships on its own release tag, decoupled from the data
 # train — see FULLTEXT_RELEASE_TAG in the root CLAUDE.md cache-invalidation
 # table.

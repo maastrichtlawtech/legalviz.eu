@@ -779,6 +779,11 @@ jobs:
           const Database = require("better-sqlite3");
 
           const normalize = (value) => String(value || "").trim().toUpperCase();
+          // fulltext-index-build.js writes this manifest before this workflow
+          // adds the rederive-only coverage count. Carry the machine-readable
+          // parse diagnostics across that reconstruction rather than scraping
+          // the human progress log (and keep older manifests compatible).
+          const builtManifest = JSON.parse(fs.readFileSync("rederive-output/fulltext.sqlite.manifest.json", "utf8"));
           const db = new Database("rederive-output/fulltext.sqlite", { readonly: true });
           const rows = db.prepare("SELECT DISTINCT celex FROM units").all();
           const celex = new Set(rows.map((row) => normalize(row.celex)).filter(Boolean));
@@ -823,6 +828,7 @@ jobs:
           const manifest = {
             generatedAt: new Date().toISOString(),
             ...counts,
+            parseFailures: Array.isArray(builtManifest.parseFailures) ? builtManifest.parseFailures : [],
             bytes: stat.size,
             sha256,
             parserVersion: metadata.get("parser_version") || null,

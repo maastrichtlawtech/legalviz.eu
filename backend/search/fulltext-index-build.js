@@ -396,7 +396,12 @@ async function buildFulltextIndex(options = {}) {
     const summary = {
       unitCount, articleCount, recitalCount, actCount,
       parserVersion, generatedAt,
-      newlyParsed: totals.parsed, failures: allFailures.length,
+      newlyParsed: totals.parsed,
+      // Keep the numeric count stable for callers and persist the individual
+      // per-file diagnostics separately so a published manifest can explain
+      // exactly which acts were skipped.
+      failures: allFailures.length,
+      failureDetails: allFailures,
     };
     if (log) log(`[fulltext] done: ${unitCount} units (${articleCount} articles, ${recitalCount} recitals) across ${actCount} acts; ${allFailures.length} failures`);
     return summary;
@@ -415,6 +420,11 @@ async function writeManifest(outputPath, summary, manifestPath = `${outputPath}.
     articleCount: summary.articleCount,
     recitalCount: summary.recitalCount,
     actCount: summary.actCount,
+    // Diagnostic metadata is deliberately outside the SQLite schema. Older
+    // callers do not provide it, so an absent detail list remains an empty
+    // array in the manifest rather than changing the manifest shape by
+    // omission or turning the numeric `failures` count into an array.
+    parseFailures: Array.isArray(summary.failureDetails) ? summary.failureDetails : [],
     bytes: stat.size,
     sha256: sha256File(outputPath),
   };

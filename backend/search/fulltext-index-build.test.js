@@ -354,6 +354,7 @@ test("writeManifest writes sha256 + counts alongside the sqlite file", async () 
   assert.equal(manifest.parserVersion, 5);
   assert.equal(manifest.unitCount, 4);
   assert.equal(manifest.actCount, 2);
+  assert.deepEqual(manifest.parseFailures, []);
   assert.equal(typeof manifest.sha256, "string");
   assert.equal(manifest.sha256.length, 64);
   assert.equal(typeof manifest.bytes, "number");
@@ -363,6 +364,45 @@ test("writeManifest writes sha256 + counts alongside the sqlite file", async () 
   assert.deepEqual(onDisk, manifest);
 
   await fs.rm(dir, { recursive: true, force: true });
+});
+
+test("build summary and manifest retain per-file parse failure details", async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "fulltext-failure-details-"));
+  const outputPath = path.join(dir, "fulltext.sqlite");
+  const badFile = path.join(dir, "32024R0005.xml.gz");
+  const manifestPath = path.join(dir, "fulltext.sqlite.manifest.json");
+
+  // A directory with a corpus filename exercises the worker's real per-file
+  // read failure path without depending on a particular parser error message.
+  await fs.mkdir(badFile);
+
+  try {
+    const summary = await buildFulltextIndex({
+      outputPath,
+      files: [badFile],
+      universe: new Set(["32024R0005"]),
+      pool: 1,
+      workerHeapMb: 256,
+    });
+
+    assert.equal(summary.failures, 1, "the compatibility count remains numeric");
+    assert.equal(typeof summary.failures, "number");
+    assert.deepEqual(summary.failureDetails, [
+      { celex: "32024R0005", type: "parse", error: summary.failureDetails[0].error },
+    ]);
+    assert.match(summary.failureDetails[0].error, /directory|EISDIR/i);
+
+    const manifest = await writeManifest(outputPath, summary, manifestPath);
+    assert.deepEqual(manifest.parseFailures, summary.failureDetails);
+    const onDisk = JSON.parse(await fs.readFile(manifestPath, "utf8"));
+    assert.deepEqual(onDisk.parseFailures, [{
+      celex: "32024R0005",
+      type: "parse",
+      error: summary.failureDetails[0].error,
+    }]);
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
 });
 
 // The build decays badly within a dispatch and recovers across one (2,400 ->

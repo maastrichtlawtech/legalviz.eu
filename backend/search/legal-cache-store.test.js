@@ -1128,6 +1128,48 @@ test("collection fulltext search ranks only the requested CELEX values", () => {
   fs.rmSync(tempDir, { recursive: true, force: true });
 });
 
+test("collection fulltext search can return two ranked previews per selected act", () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "legal-cache-store-fulltext-collection-two-previews-"));
+  const fulltextPath = path.join(tempDir, "fulltext.sqlite");
+  const strongerCelex = "32024R1689";
+  const singlePreviewCelex = "32016R0679";
+  buildTestFulltextDb(fulltextPath, {
+    [strongerCelex]: [
+      { unit_type: "article", number: "1", text: `${"twopreviewprobe ".repeat(20)}first ranked provision.` },
+      { unit_type: "article", number: "2", text: `${"twopreviewprobe ".repeat(10)}second ranked provision.` },
+      { unit_type: "article", number: "3", text: "twopreviewprobe third provision." },
+    ],
+    [singlePreviewCelex]: [
+      { unit_type: "recital", number: "4", text: "twopreviewprobe only provision." },
+    ],
+  });
+  const store = new JsonLegalCacheStore(fixturePath, { preferJson: true, fulltextPath });
+  assert.equal(store.load(), true);
+
+  const results = store.searchFulltextUnits("twopreviewprobe", {
+    limit: 2,
+    celexes: [strongerCelex, singlePreviewCelex],
+    previewsPerAct: 2,
+  });
+  assert.deepEqual(results.map((result) => result.celex), [strongerCelex, strongerCelex, singlePreviewCelex]);
+  assert.deepEqual(results.slice(0, 2).map((result) => result.number), ["1", "2"]);
+  assert.equal(new Set(results.map((result) => `${result.celex}:${result.unitType}:${result.number}`)).size, results.length);
+
+  const oneAct = store.searchFulltextUnits("twopreviewprobe", {
+    limit: 1,
+    celexes: [strongerCelex, singlePreviewCelex],
+    previewsPerAct: 2,
+  });
+  assert.deepEqual(oneAct.map((result) => result.celex), [strongerCelex, strongerCelex]);
+  assert.throws(
+    () => store.searchFulltextUnits("twopreviewprobe", { celexes: [strongerCelex], previewsPerAct: 3 }),
+    (error) => error.code === "fulltext_previews_per_act_invalid",
+  );
+
+  store.close();
+  fs.rmSync(tempDir, { recursive: true, force: true });
+});
+
 test("getFulltextMatchCounts counts every matching unit in the requested scope", () => {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "legal-cache-store-fulltext-counts-"));
   const fulltextPath = path.join(tempDir, "fulltext.sqlite");
@@ -1152,29 +1194,86 @@ test("getFulltextMatchCounts counts every matching unit in the requested scope",
   assert.deepEqual(store.getFulltextMatchCounts("countprobe"), {
     totalMatchingPassages: 4,
     totalMatchingActs: 2,
+    totalMatchingArticles: 3,
+    totalMatchingRecitals: 1,
     matchCountsByCelex: { [firstCelex]: 3, [secondCelex]: 1 },
+    matchTypesByCelex: {
+      [firstCelex]: { articles: 2, recitals: 1 },
+      [secondCelex]: { articles: 1, recitals: 0 },
+    },
   });
   assert.deepEqual(store.getFulltextMatchCounts("countprobe", {
     celexes: [firstCelex, firstCelex.toLowerCase(), secondCelex],
   }), {
     totalMatchingPassages: 4,
     totalMatchingActs: 2,
+    totalMatchingArticles: 3,
+    totalMatchingRecitals: 1,
     matchCountsByCelex: { [firstCelex]: 3, [secondCelex]: 1 },
+    matchTypesByCelex: {
+      [firstCelex]: { articles: 2, recitals: 1 },
+      [secondCelex]: { articles: 1, recitals: 0 },
+    },
+  });
+  assert.deepEqual(store.getFulltextMatchCounts("countprobe", {
+    celexes: [firstCelex, secondCelex],
+  }), {
+    totalMatchingPassages: 4,
+    totalMatchingActs: 2,
+    totalMatchingArticles: 3,
+    totalMatchingRecitals: 1,
+    matchCountsByCelex: { [firstCelex]: 3, [secondCelex]: 1 },
+    matchTypesByCelex: {
+      [firstCelex]: { articles: 2, recitals: 1 },
+      [secondCelex]: { articles: 1, recitals: 0 },
+    },
   });
   assert.deepEqual(store.getFulltextMatchCounts("countprobe", { celex: firstCelex }), {
     totalMatchingPassages: 3,
     totalMatchingActs: 1,
+    totalMatchingArticles: 2,
+    totalMatchingRecitals: 1,
     matchCountsByCelex: { [firstCelex]: 3 },
+    matchTypesByCelex: { [firstCelex]: { articles: 2, recitals: 1 } },
   });
   assert.deepEqual(store.getFulltextMatchCounts("countprobe", { celexes: [firstCelex] }), {
     totalMatchingPassages: 3,
     totalMatchingActs: 1,
+    totalMatchingArticles: 2,
+    totalMatchingRecitals: 1,
     matchCountsByCelex: { [firstCelex]: 3 },
+    matchTypesByCelex: { [firstCelex]: { articles: 2, recitals: 1 } },
   });
   assert.deepEqual(store.getFulltextMatchCounts("notpresent", { celexes: [firstCelex] }), {
     totalMatchingPassages: 0,
     totalMatchingActs: 0,
+    totalMatchingArticles: 0,
+    totalMatchingRecitals: 0,
     matchCountsByCelex: {},
+    matchTypesByCelex: {},
+  });
+
+  store.close();
+  fs.rmSync(tempDir, { recursive: true, force: true });
+});
+
+test("getFulltextMatchCounts preserves future unit types without mislabelling them", () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "legal-cache-store-fulltext-unknown-count-type-"));
+  const fulltextPath = path.join(tempDir, "fulltext.sqlite");
+  const celex = "32016R0679";
+  buildTestFulltextDb(fulltextPath, {
+    [celex]: [{ unit_type: "annex", number: "I", text: "unknowncounttypeprobe annex wording." }],
+  });
+  const store = new JsonLegalCacheStore(fixturePath, { preferJson: true, fulltextPath });
+  assert.equal(store.load(), true);
+
+  assert.deepEqual(store.getFulltextMatchCounts("unknowncounttypeprobe", { celex }), {
+    totalMatchingPassages: 1,
+    totalMatchingActs: 1,
+    totalMatchingArticles: 0,
+    totalMatchingRecitals: 0,
+    matchCountsByCelex: { [celex]: 1 },
+    matchTypesByCelex: { [celex]: { articles: 0, recitals: 0 } },
   });
 
   store.close();

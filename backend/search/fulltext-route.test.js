@@ -58,6 +58,35 @@ test("fulltext POST route normalizes and deduplicates a CELEX collection", () =>
   }]);
 });
 
+test("fulltext POST route opts into two previews per selected act", () => {
+  const calls = [];
+  const handler = createFulltextSearchHandler({
+    searchFulltextUnits(query, options) {
+      calls.push({ query, options });
+      return [
+        { celex: "32016R0679", title: "GDPR", unitType: "article", number: "5", snippet: "data", highlightRanges: [] },
+        { celex: "32016R0679", title: "GDPR", unitType: "article", number: "6", snippet: "data", highlightRanges: [] },
+      ];
+    },
+  }, {
+    validateCelex: (value) => value === "32016R0679",
+    collection: true,
+  });
+  const res = response();
+
+  handler({
+    method: "POST",
+    body: { q: "data", celexes: ["32016R0679"], limit: 1, previewsPerAct: 2 },
+  }, res);
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.payload.count, 2);
+  assert.deepEqual(calls, [{
+    query: "data",
+    options: { limit: 1, celexes: ["32016R0679"], previewsPerAct: 2 },
+  }]);
+});
+
 test("fulltext route adds counts only for an explicit opt-in", () => {
   const calls = [];
   const handler = createFulltextSearchHandler({
@@ -70,7 +99,13 @@ test("fulltext route adds counts only for an explicit opt-in", () => {
       return {
         totalMatchingPassages: 3,
         totalMatchingActs: 2,
+        totalMatchingArticles: 2,
+        totalMatchingRecitals: 1,
         matchCountsByCelex: { "32016R0679": 2, "32024R1689": 1 },
+        matchTypesByCelex: {
+          "32016R0679": { articles: 2, recitals: 0 },
+          "32024R1689": { articles: 0, recitals: 1 },
+        },
       };
     },
   }, {
@@ -93,10 +128,59 @@ test("fulltext route adds counts only for an explicit opt-in", () => {
     handler({ method: "POST", body: { q: "data", celexes: ["32016R0679", "32024R1689"], includeCounts } }, res);
     assert.equal(res.payload.totalMatchingPassages, 3);
     assert.equal(res.payload.totalMatchingActs, 2);
+    assert.equal(res.payload.totalMatchingArticles, 2);
+    assert.equal(res.payload.totalMatchingRecitals, 1);
     assert.deepEqual(res.payload.matchCountsByCelex, { "32016R0679": 2, "32024R1689": 1 });
+    assert.deepEqual(res.payload.matchTypesByCelex, {
+      "32016R0679": { articles: 2, recitals: 0 },
+      "32024R1689": { articles: 0, recitals: 1 },
+    });
     assert.equal(res.payload.results[0].matchCount, 2);
+    assert.deepEqual(res.payload.results[0].matchTypes, { articles: 2, recitals: 0 });
   }
   assert.equal(calls.filter((call) => call.type === "counts").length, 4);
+});
+
+test("fulltext POST two previews retain exact count metadata for each result", () => {
+  const handler = createFulltextSearchHandler({
+    searchFulltextUnits() {
+      return [
+        { celex: "32016R0679", title: "GDPR", unitType: "article", number: "5", snippet: "data", highlightRanges: [] },
+        { celex: "32016R0679", title: "GDPR", unitType: "article", number: "6", snippet: "data", highlightRanges: [] },
+      ];
+    },
+    getFulltextMatchCounts() {
+      return {
+        totalMatchingPassages: 3,
+        totalMatchingActs: 1,
+        totalMatchingArticles: 2,
+        totalMatchingRecitals: 1,
+        matchCountsByCelex: { "32016R0679": 3 },
+        matchTypesByCelex: { "32016R0679": { articles: 2, recitals: 1 } },
+      };
+    },
+  }, {
+    validateCelex: (value) => value === "32016R0679",
+    collection: true,
+  });
+  const res = response();
+
+  handler({
+    method: "POST",
+    body: { q: "data", celexes: ["32016R0679"], previewsPerAct: 2, includeCounts: true },
+  }, res);
+
+  assert.equal(res.payload.totalMatchingPassages, 3);
+  assert.equal(res.payload.totalMatchingActs, 1);
+  assert.equal(res.payload.totalMatchingArticles, 2);
+  assert.equal(res.payload.totalMatchingRecitals, 1);
+  assert.deepEqual(res.payload.matchCountsByCelex, { "32016R0679": 3 });
+  assert.deepEqual(res.payload.matchTypesByCelex, { "32016R0679": { articles: 2, recitals: 1 } });
+  assert.deepEqual(res.payload.results.map((result) => result.matchCount), [3, 3]);
+  assert.deepEqual(res.payload.results.map((result) => result.matchTypes), [
+    { articles: 2, recitals: 1 },
+    { articles: 2, recitals: 1 },
+  ]);
 });
 
 test("unscoped GET omits the global count map while scoped GET includes it", () => {
@@ -108,12 +192,25 @@ test("unscoped GET omits the global count map while scoped GET includes it", () 
       assert.equal(query, "data");
       if (celex) {
         assert.equal(celex, "32016R0679");
-        return { totalMatchingPassages: 2, totalMatchingActs: 1, matchCountsByCelex: { [celex]: 2 } };
+        return {
+          totalMatchingPassages: 2,
+          totalMatchingActs: 1,
+          totalMatchingArticles: 1,
+          totalMatchingRecitals: 1,
+          matchCountsByCelex: { [celex]: 2 },
+          matchTypesByCelex: { [celex]: { articles: 1, recitals: 1 } },
+        };
       }
       return {
         totalMatchingPassages: 3,
         totalMatchingActs: 2,
+        totalMatchingArticles: 2,
+        totalMatchingRecitals: 1,
         matchCountsByCelex: { "32016R0679": 2, "32024R1689": 1 },
+        matchTypesByCelex: {
+          "32016R0679": { articles: 1, recitals: 1 },
+          "32024R1689": { articles: 1, recitals: 0 },
+        },
       };
     },
   }, { validateCelex: (value) => value === "32016R0679" });
@@ -121,11 +218,14 @@ test("unscoped GET omits the global count map while scoped GET includes it", () 
   const global = response();
   handler({ query: { q: "data", includeCounts: "true" } }, global);
   assert.equal(global.payload.matchCountsByCelex, undefined);
+  assert.equal(global.payload.matchTypesByCelex, undefined);
   assert.equal(global.payload.results[0].matchCount, 2);
+  assert.deepEqual(global.payload.results[0].matchTypes, { articles: 1, recitals: 1 });
 
   const scoped = response();
   handler({ query: { q: "data", celex: "32016R0679", includeCounts: "1" } }, scoped);
   assert.deepEqual(scoped.payload.matchCountsByCelex, { "32016R0679": 2 });
+  assert.deepEqual(scoped.payload.matchTypesByCelex, { "32016R0679": { articles: 1, recitals: 1 } });
   assert.equal(scoped.payload.totalMatchingPassages, 2);
 });
 
@@ -154,6 +254,14 @@ test("fulltext POST route rejects malformed collections with stable codes", () =
     handler({ method: "POST", body: { q: "data", celexes } }, res);
     assert.equal(res.statusCode, 400);
     assert.equal(res.payload.code, "invalid_celex");
+  }
+
+  for (const previewsPerAct of [0, 3, 1.5, "2", null, {}]) {
+    const res = response();
+    handler({ method: "POST", body: { q: "data", celexes: ["32016R0679"], previewsPerAct } }, res);
+    assert.equal(res.statusCode, 400);
+    assert.equal(res.payload.code, "fulltext_previews_per_act_invalid");
+    assert.equal(res.payload.error, 'Request body property "previewsPerAct" must be an integer from 1 to 2');
   }
 });
 

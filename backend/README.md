@@ -251,7 +251,7 @@ cat input.xml | parse-fmx > output.json
 | `GET` | `/api/laws/by-reference?actType=...&year=...&number=...` | Fetch law by official reference |
 | `GET` | `/api/search?q=keyword&limit=10` | Search law metadata |
 | `GET` | `/api/fulltext-search?q=keyword&celex=32016R0679&limit=10` | Strict AND search inside English body text (articles and recitals), with snippets and highlight ranges |
-| `POST` | `/api/fulltext-search` with `{ "q": "keyword", "celexes": ["32016R0679"], "limit": 10 }` | Strict AND search inside a supplied CELEX collection |
+| `POST` | `/api/fulltext-search` with `{ "q": "keyword", "celexes": ["32016R0679"], "limit": 10, "previewsPerAct": 2 }` | Strict AND search inside a supplied CELEX collection |
 | `GET` | `/api/definitions/search?q=term&limit=10&filter=different` | Search extracted legal definitions; omit `q` and use `filter=different` or `filter=reused` for discovery |
 | `GET` | `/api/definitions/compare?term=risk` | Compare a term's definitions across laws |
 | `GET` | `/api/topics?celex=32016R0679,32024R1689` | Bulk EuroVoc topics for up to 200 CELEX ids (`{ topics: { CELEX: string[] } }`) |
@@ -268,19 +268,26 @@ terms are prefix-matched and quoted segments are phrase-matched. Queries use
 strict AND semantics and punctuation-only input is rejected. Global results
 return at most one best unit per CELEX; GET requests scoped to one CELEX may
 include multiple matching units from that act. POST requests take
-`{ q, celexes, limit }`, require 1–200 valid CELEX values, and return one best
-unit per requested CELEX after normalising and deduplicating the collection.
+`{ q, celexes, limit, previewsPerAct }`, require 1–200 valid CELEX values, and
+return one best unit per requested CELEX after normalising and deduplicating the
+collection. `previewsPerAct` is a POST collection option, is optional, and
+must be the integer `1` or `2`; it defaults to `1`. With `2`, `limit` still
+bounds matching acts (not result units), and the response returns up to two
+FTS-ranked units for each selected act, ordered by each act's best match and
+then by the unit's rank.
 Each result contains `{ celex, title, unitType, number, heading, snippet,
 highlightRanges }`; the snippet is plain text and ranges use zero-based
 `{start, end}` offsets. If the optional artifact is missing or stale, the
 endpoint returns `503` with `code=fulltext_index_unavailable` and the
 full-text status details. Add `includeCounts=true` (or `1`) to a GET request,
 or `includeCounts: true` to a POST body, to receive exact
-`totalMatchingPassages`, `totalMatchingActs`, and a `matchCount` for every
-returned result; these counts cover all matching indexed units before the
-preview limit. Scoped GET and POST collection responses also include
-`matchCountsByCelex` for every matching act in scope. Unscoped GET omits that
-map to keep global responses bounded.
+`totalMatchingPassages`, `totalMatchingActs`, `totalMatchingArticles`,
+`totalMatchingRecitals`, and a `matchCount` plus
+`matchTypes: { articles, recitals }` for every returned result; these counts
+cover all matching indexed units before the preview limit. Scoped GET and POST
+collection responses also include `matchCountsByCelex` and
+`matchTypesByCelex` (each value is `{ articles, recitals }`) for every matching
+act in scope. Unscoped GET omits those maps to keep global responses bounded.
 
 ## MCP server
 

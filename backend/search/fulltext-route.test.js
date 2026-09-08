@@ -58,6 +58,77 @@ test("fulltext POST route normalizes and deduplicates a CELEX collection", () =>
   }]);
 });
 
+test("fulltext route adds counts only for an explicit opt-in", () => {
+  const calls = [];
+  const handler = createFulltextSearchHandler({
+    searchFulltextUnits(query, options) {
+      calls.push({ type: "results", query, options });
+      return [{ celex: "32016R0679", title: "GDPR", unitType: "article", number: "5", snippet: "data", highlightRanges: [] }];
+    },
+    getFulltextMatchCounts(query, options) {
+      calls.push({ type: "counts", query, options });
+      return {
+        totalMatchingPassages: 3,
+        totalMatchingActs: 2,
+        matchCountsByCelex: { "32016R0679": 2, "32024R1689": 1 },
+      };
+    },
+  }, {
+    validateCelex: (value) => ["32016R0679", "32024R1689"].includes(value),
+    collection: true,
+  });
+
+  const legacy = response();
+  handler({ method: "POST", body: { q: "data", celexes: ["32016R0679"] } }, legacy);
+  assert.deepEqual(legacy.payload, {
+    query: "data",
+    celexes: ["32016R0679"],
+    count: 1,
+    results: [{ celex: "32016R0679", title: "GDPR", unitType: "article", number: "5", snippet: "data", highlightRanges: [] }],
+  });
+  assert.equal(calls.filter((call) => call.type === "counts").length, 0);
+
+  for (const includeCounts of [true, "true", "1", 1]) {
+    const res = response();
+    handler({ method: "POST", body: { q: "data", celexes: ["32016R0679", "32024R1689"], includeCounts } }, res);
+    assert.equal(res.payload.totalMatchingPassages, 3);
+    assert.equal(res.payload.totalMatchingActs, 2);
+    assert.deepEqual(res.payload.matchCountsByCelex, { "32016R0679": 2, "32024R1689": 1 });
+    assert.equal(res.payload.results[0].matchCount, 2);
+  }
+  assert.equal(calls.filter((call) => call.type === "counts").length, 4);
+});
+
+test("unscoped GET omits the global count map while scoped GET includes it", () => {
+  const handler = createFulltextSearchHandler({
+    searchFulltextUnits() {
+      return [{ celex: "32016R0679", title: "GDPR", unitType: "article", number: "5", snippet: "data", highlightRanges: [] }];
+    },
+    getFulltextMatchCounts(query, { celex }) {
+      assert.equal(query, "data");
+      if (celex) {
+        assert.equal(celex, "32016R0679");
+        return { totalMatchingPassages: 2, totalMatchingActs: 1, matchCountsByCelex: { [celex]: 2 } };
+      }
+      return {
+        totalMatchingPassages: 3,
+        totalMatchingActs: 2,
+        matchCountsByCelex: { "32016R0679": 2, "32024R1689": 1 },
+      };
+    },
+  }, { validateCelex: (value) => value === "32016R0679" });
+
+  const global = response();
+  handler({ query: { q: "data", includeCounts: "true" } }, global);
+  assert.equal(global.payload.matchCountsByCelex, undefined);
+  assert.equal(global.payload.results[0].matchCount, 2);
+
+  const scoped = response();
+  handler({ query: { q: "data", celex: "32016R0679", includeCounts: "1" } }, scoped);
+  assert.deepEqual(scoped.payload.matchCountsByCelex, { "32016R0679": 2 });
+  assert.equal(scoped.payload.totalMatchingPassages, 2);
+});
+
 test("fulltext POST route rejects malformed collections with stable codes", () => {
   const handler = createFulltextSearchHandler({
     searchFulltextUnits() { throw new Error("must not search invalid input"); },

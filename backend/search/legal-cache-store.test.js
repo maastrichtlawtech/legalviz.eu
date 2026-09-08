@@ -1128,6 +1128,59 @@ test("collection fulltext search ranks only the requested CELEX values", () => {
   fs.rmSync(tempDir, { recursive: true, force: true });
 });
 
+test("getFulltextMatchCounts counts every matching unit in the requested scope", () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "legal-cache-store-fulltext-counts-"));
+  const fulltextPath = path.join(tempDir, "fulltext.sqlite");
+  const firstCelex = "32022R0868";
+  const secondCelex = "32024R1689";
+  buildTestFulltextDb(fulltextPath, {
+    [firstCelex]: [
+      { unit_type: "article", number: "1", text: "countprobe first passage." },
+      { unit_type: "article", number: "2", text: "countprobe second passage." },
+      { unit_type: "recital", number: "3", text: "countprobe third passage." },
+    ],
+    [secondCelex]: [
+      { unit_type: "article", number: "1", text: "countprobe other act." },
+    ],
+  });
+  const store = new JsonLegalCacheStore(fixturePath, { preferJson: true, fulltextPath });
+  assert.equal(store.load(), true);
+
+  // The bounded preview selects one best unit per act, but count metadata must
+  // retain every matching indexed article/recital.
+  assert.equal(store.searchFulltextUnits("countprobe", { limit: 1 }).length, 1);
+  assert.deepEqual(store.getFulltextMatchCounts("countprobe"), {
+    totalMatchingPassages: 4,
+    totalMatchingActs: 2,
+    matchCountsByCelex: { [firstCelex]: 3, [secondCelex]: 1 },
+  });
+  assert.deepEqual(store.getFulltextMatchCounts("countprobe", {
+    celexes: [firstCelex, firstCelex.toLowerCase(), secondCelex],
+  }), {
+    totalMatchingPassages: 4,
+    totalMatchingActs: 2,
+    matchCountsByCelex: { [firstCelex]: 3, [secondCelex]: 1 },
+  });
+  assert.deepEqual(store.getFulltextMatchCounts("countprobe", { celex: firstCelex }), {
+    totalMatchingPassages: 3,
+    totalMatchingActs: 1,
+    matchCountsByCelex: { [firstCelex]: 3 },
+  });
+  assert.deepEqual(store.getFulltextMatchCounts("countprobe", { celexes: [firstCelex] }), {
+    totalMatchingPassages: 3,
+    totalMatchingActs: 1,
+    matchCountsByCelex: { [firstCelex]: 3 },
+  });
+  assert.deepEqual(store.getFulltextMatchCounts("notpresent", { celexes: [firstCelex] }), {
+    totalMatchingPassages: 0,
+    totalMatchingActs: 0,
+    matchCountsByCelex: {},
+  });
+
+  store.close();
+  fs.rmSync(tempDir, { recursive: true, force: true });
+});
+
 test("searchFulltextUnits reports an unavailable artifact with a stable code", () => {
   const store = new JsonLegalCacheStore(fixturePath, { preferJson: true, fulltextPath: path.join(os.tmpdir(), `missing-fulltext-${Date.now()}.sqlite`) });
   assert.equal(store.load(), true);

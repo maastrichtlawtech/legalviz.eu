@@ -274,7 +274,13 @@ Each result contains `{ celex, title, unitType, number, heading, snippet,
 highlightRanges }`; the snippet is plain text and ranges use zero-based
 `{start, end}` offsets. If the optional artifact is missing or stale, the
 endpoint returns `503` with `code=fulltext_index_unavailable` and the
-full-text status details.
+full-text status details. Add `includeCounts=true` (or `1`) to a GET request,
+or `includeCounts: true` to a POST body, to receive exact
+`totalMatchingPassages`, `totalMatchingActs`, and a `matchCount` for every
+returned result; these counts cover all matching indexed units before the
+preview limit. Scoped GET and POST collection responses also include
+`matchCountsByCelex` for every matching act in scope. Unscoped GET omits that
+map to keep global responses bounded.
 
 ## MCP server
 

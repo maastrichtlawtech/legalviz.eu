@@ -593,6 +593,9 @@ class JsonLegalCacheStore {
     this.fulltextUnitScopedSearchStatement = null;
     this.fulltextUnitCollectionSearchStatement = null;
     this.fulltextUnitSnippetStatement = null;
+    this.fulltextMatchCountsStatement = null;
+    this.fulltextScopedMatchCountsStatement = null;
+    this.fulltextCollectionMatchCountsStatement = null;
     this.fulltextAvailable = false;
     this.fulltextReason = null;
     this.fulltextStats = { unitCount: 0, actCount: 0, version: null, generatedAt: null };
@@ -622,6 +625,9 @@ class JsonLegalCacheStore {
     this.fulltextUnitScopedSearchStatement = null;
     this.fulltextUnitCollectionSearchStatement = null;
     this.fulltextUnitSnippetStatement = null;
+    this.fulltextMatchCountsStatement = null;
+    this.fulltextScopedMatchCountsStatement = null;
+    this.fulltextCollectionMatchCountsStatement = null;
     this.fulltextAvailable = false;
     this.fulltextReason = null;
     this.fulltextStats = { unitCount: 0, actCount: 0, version: null, generatedAt: null };
@@ -698,6 +704,34 @@ class JsonLegalCacheStore {
         ORDER BY bestRank, u.id
         LIMIT ${FULLTEXT_UNIT_CANDIDATE_CAP}
       `);
+      // Counts deliberately have no result/candidate cap: they describe every
+      // matching body-text unit in the requested scope, while the search
+      // statements above choose a small ranked preview.
+      this.fulltextMatchCountsStatement = database.prepare(`
+        SELECT u.celex AS celex, COUNT(*) AS matchCount
+        FROM units_fts
+        JOIN units u ON u.id = units_fts.rowid
+        WHERE units_fts.text MATCH ?
+        GROUP BY u.celex
+        ORDER BY u.celex
+      `);
+      this.fulltextScopedMatchCountsStatement = database.prepare(`
+        SELECT u.celex AS celex, COUNT(*) AS matchCount
+        FROM units_fts
+        JOIN units u ON u.id = units_fts.rowid
+        WHERE units_fts.text MATCH ? AND u.celex = ?
+        GROUP BY u.celex
+        ORDER BY u.celex
+      `);
+      this.fulltextCollectionMatchCountsStatement = database.prepare(`
+        SELECT u.celex AS celex, COUNT(*) AS matchCount
+        FROM units_fts
+        JOIN units u ON u.id = units_fts.rowid
+        JOIN json_each(?) AS requested ON requested.value = u.celex
+        WHERE units_fts.text MATCH ?
+        GROUP BY u.celex
+        ORDER BY u.celex
+      `);
       // Computing snippet() for the whole candidate window makes common-prefix
       // queries needlessly expensive. Rank/diversify first, then render only
       // the handful of units that cross the API boundary.
@@ -725,6 +759,9 @@ class JsonLegalCacheStore {
       this.fulltextUnitScopedSearchStatement = null;
       this.fulltextUnitCollectionSearchStatement = null;
       this.fulltextUnitSnippetStatement = null;
+      this.fulltextMatchCountsStatement = null;
+      this.fulltextScopedMatchCountsStatement = null;
+      this.fulltextCollectionMatchCountsStatement = null;
       this.fulltextAvailable = false;
       this.fulltextReason = error.message;
     }
@@ -837,6 +874,59 @@ class JsonLegalCacheStore {
       });
     }
     return results;
+  }
+
+  getFulltextMatchCounts(query, options = {}) {
+    this.requireFulltext();
+    const queryError = fulltextQueryError(query);
+    if (queryError) throw queryError;
+    const expression = buildFulltextMatchExpression(query);
+    if (!expression) {
+      return { totalMatchingPassages: 0, totalMatchingActs: 0, matchCountsByCelex: {} };
+    }
+
+    const hasCelex = options.celex !== undefined && options.celex !== null && String(options.celex).trim() !== "";
+    const hasCelexes = Object.prototype.hasOwnProperty.call(options, "celexes")
+      && options.celexes !== undefined
+      && options.celexes !== null;
+    if (hasCelex && hasCelexes) {
+      const error = new Error('Specify either "celex" or "celexes", not both');
+      error.code = "fulltext_scope_ambiguous";
+      throw error;
+    }
+
+    const celex = hasCelex ? normalizeCelexLookupKey(options.celex) : null;
+    let rows;
+    if (hasCelexes) {
+      if (!Array.isArray(options.celexes)) {
+        const error = new Error('"celexes" must be an array');
+        error.code = "fulltext_celexes_required";
+        throw error;
+      }
+      const celexes = [...new Set(options.celexes.map(normalizeCelexLookupKey).filter(Boolean))];
+      rows = celexes.length === 0
+        ? []
+        : this.fulltextCollectionMatchCountsStatement.all(JSON.stringify(celexes), expression);
+    } else {
+      rows = celex
+        ? this.fulltextScopedMatchCountsStatement.all(expression, celex)
+        : this.fulltextMatchCountsStatement.all(expression);
+    }
+
+    const matchCountsByCelex = {};
+    let totalMatchingPassages = 0;
+    for (const row of rows) {
+      const key = normalizeCelexLookupKey(row.celex);
+      const matchCount = Number(row.matchCount) || 0;
+      if (!key || matchCount <= 0) continue;
+      matchCountsByCelex[key] = matchCount;
+      totalMatchingPassages += matchCount;
+    }
+    return {
+      totalMatchingPassages,
+      totalMatchingActs: Object.keys(matchCountsByCelex).length,
+      matchCountsByCelex,
+    };
   }
 
   resetIndexes() {
@@ -1674,6 +1764,9 @@ class JsonLegalCacheStore {
       this.fulltextUnitScopedSearchStatement = null;
       this.fulltextUnitCollectionSearchStatement = null;
       this.fulltextUnitSnippetStatement = null;
+      this.fulltextMatchCountsStatement = null;
+      this.fulltextScopedMatchCountsStatement = null;
+      this.fulltextCollectionMatchCountsStatement = null;
       this.fulltextAvailable = false;
       this.fulltextReason = "Full-text index is closed";
     }

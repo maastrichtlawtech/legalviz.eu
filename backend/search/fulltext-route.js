@@ -8,6 +8,25 @@ const {
 
 const FULLTEXT_COLLECTION_MAX_CELEXES = 200;
 
+function includesCounts(value) {
+  return value === true || value === 1 || value === "true" || value === "1";
+}
+
+function addCountMetadata(payload, results, metadata, { includeMatchCountsByCelex }) {
+  const matchCountsByCelex = metadata.matchCountsByCelex || {};
+  const countedResults = results.map((result) => ({
+    ...result,
+    matchCount: matchCountsByCelex[result.celex] || 0,
+  }));
+  return {
+    ...payload,
+    totalMatchingPassages: metadata.totalMatchingPassages || 0,
+    totalMatchingActs: metadata.totalMatchingActs || 0,
+    ...(includeMatchCountsByCelex ? { matchCountsByCelex } : {}),
+    results: countedResults,
+  };
+}
+
 function fulltextCelexesRequiredError() {
   return {
     error: 'Request body property "celexes" must be a non-empty array',
@@ -71,12 +90,15 @@ function createFulltextSearchHandler(store, { validateCelex, collection = false 
           limit: input.limit,
           celexes: normalized.celexes,
         });
-        return res.json({
+        const payload = {
           query,
           celexes: normalized.celexes,
           count: results.length,
           results,
-        });
+        };
+        if (!includesCounts(input.includeCounts)) return res.json(payload);
+        const metadata = store.getFulltextMatchCounts(query, { celexes: normalized.celexes });
+        return res.json(addCountMetadata(payload, results, metadata, { includeMatchCountsByCelex: true }));
       }
 
       let celex = null;
@@ -91,7 +113,12 @@ function createFulltextSearchHandler(store, { validateCelex, collection = false 
         limit: input.limit,
         celex,
       });
-      return res.json({ query, celex, count: results.length, results });
+      const payload = { query, celex, count: results.length, results };
+      if (!includesCounts(input.includeCounts)) return res.json(payload);
+      const metadata = store.getFulltextMatchCounts(query, { celex });
+      return res.json(addCountMetadata(payload, results, metadata, {
+        includeMatchCountsByCelex: Boolean(celex),
+      }));
     } catch (error) {
       if (isFulltextIndexUnavailable(error)) {
         return res.status(503).json({

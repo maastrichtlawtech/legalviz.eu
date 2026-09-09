@@ -50,7 +50,7 @@
     "tailwindcss": "^4.1.16",
     "vite": "^7.1.7",
     "vite-plugin-pwa": "^1.2.0",
-    "vitest": "^4.1.0"
+    "vitest": "^4.1.11"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

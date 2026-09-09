@@ -7,6 +7,7 @@ const {
 } = require("./fulltext-errors");
 
 const FULLTEXT_COLLECTION_MAX_CELEXES = 200;
+const FULLTEXT_COLLECTION_MAX_PREVIEWS_PER_ACT = 2;
 
 function includesCounts(value) {
   return value === true || value === 1 || value === "true" || value === "1";
@@ -14,15 +15,19 @@ function includesCounts(value) {
 
 function addCountMetadata(payload, results, metadata, { includeMatchCountsByCelex }) {
   const matchCountsByCelex = metadata.matchCountsByCelex || {};
+  const matchTypesByCelex = metadata.matchTypesByCelex || {};
   const countedResults = results.map((result) => ({
     ...result,
     matchCount: matchCountsByCelex[result.celex] || 0,
+    matchTypes: matchTypesByCelex[result.celex] || { articles: 0, recitals: 0 },
   }));
   return {
     ...payload,
     totalMatchingPassages: metadata.totalMatchingPassages || 0,
     totalMatchingActs: metadata.totalMatchingActs || 0,
-    ...(includeMatchCountsByCelex ? { matchCountsByCelex } : {}),
+    totalMatchingArticles: metadata.totalMatchingArticles || 0,
+    totalMatchingRecitals: metadata.totalMatchingRecitals || 0,
+    ...(includeMatchCountsByCelex ? { matchCountsByCelex, matchTypesByCelex } : {}),
     results: countedResults,
   };
 }
@@ -32,6 +37,21 @@ function fulltextCelexesRequiredError() {
     error: 'Request body property "celexes" must be a non-empty array',
     code: "fulltext_celexes_required",
   };
+}
+
+function fulltextPreviewsPerActInvalidError() {
+  return {
+    error: `Request body property "previewsPerAct" must be an integer from 1 to ${FULLTEXT_COLLECTION_MAX_PREVIEWS_PER_ACT}`,
+    code: "fulltext_previews_per_act_invalid",
+  };
+}
+
+function normalizeCollectionPreviewsPerAct(value) {
+  if (value === undefined) return { previewsPerAct: 1 };
+  if (!Number.isInteger(value) || value < 1 || value > FULLTEXT_COLLECTION_MAX_PREVIEWS_PER_ACT) {
+    return { error: fulltextPreviewsPerActInvalidError() };
+  }
+  return { previewsPerAct: value };
 }
 
 function normalizeCollectionCelexes(value, validateCelex) {
@@ -85,10 +105,13 @@ function createFulltextSearchHandler(store, { validateCelex, collection = false 
       if (isCollectionSearch) {
         const normalized = normalizeCollectionCelexes(input.celexes, validateCelex);
         if (normalized.error) return res.status(400).json(normalized.error);
+        const previews = normalizeCollectionPreviewsPerAct(input.previewsPerAct);
+        if (previews.error) return res.status(400).json(previews.error);
 
         const results = store.searchFulltextUnits(query, {
           limit: input.limit,
           celexes: normalized.celexes,
+          ...(previews.previewsPerAct === 1 ? {} : { previewsPerAct: previews.previewsPerAct }),
         });
         const payload = {
           query,

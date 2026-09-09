@@ -163,6 +163,8 @@ const FULLTEXT_QUERY_MAX_CHARS = 200;
 const FULLTEXT_MAX_TERMS = 12;
 const FULLTEXT_MIN_STANDALONE_TERM_CHARS = 2;
 const FULLTEXT_RESULT_LIMIT = 50;
+const FULLTEXT_COLLECTION_MAX_PREVIEWS_PER_ACT = 2;
+const FULLTEXT_COLLECTION_RESULT_LIMIT = FULLTEXT_RESULT_LIMIT * FULLTEXT_COLLECTION_MAX_PREVIEWS_PER_ACT;
 // Public full-text search deliberately scans a bounded, bm25-ordered window.
 // 500 units is large enough to diversify common terms across acts while
 // keeping short-prefix queries from walking the entire 382k-unit index.
@@ -592,6 +594,7 @@ class JsonLegalCacheStore {
     this.fulltextUnitSearchStatement = null;
     this.fulltextUnitScopedSearchStatement = null;
     this.fulltextUnitCollectionSearchStatement = null;
+    this.fulltextUnitCollectionTwoPreviewsSearchStatement = null;
     this.fulltextUnitSnippetStatement = null;
     this.fulltextMatchCountsStatement = null;
     this.fulltextScopedMatchCountsStatement = null;
@@ -624,6 +627,7 @@ class JsonLegalCacheStore {
     this.fulltextUnitSearchStatement = null;
     this.fulltextUnitScopedSearchStatement = null;
     this.fulltextUnitCollectionSearchStatement = null;
+    this.fulltextUnitCollectionTwoPreviewsSearchStatement = null;
     this.fulltextUnitSnippetStatement = null;
     this.fulltextMatchCountsStatement = null;
     this.fulltextScopedMatchCountsStatement = null;
@@ -704,38 +708,63 @@ class JsonLegalCacheStore {
         ORDER BY bestRank, u.id
         LIMIT ${FULLTEXT_UNIT_CANDIDATE_CAP}
       `);
+      this.fulltextUnitCollectionTwoPreviewsSearchStatement = database.prepare(`
+        WITH matched AS (
+          SELECT u.id AS id, u.celex AS celex, u.unit_type AS unitType,
+                 u.number AS number, u.heading AS heading,
+                 units_fts.rank AS unitRank,
+                 ROW_NUMBER() OVER (
+                   PARTITION BY u.celex
+                   ORDER BY units_fts.rank, u.id
+                 ) AS previewRank,
+                 MIN(units_fts.rank) OVER (PARTITION BY u.celex) AS bestActRank,
+                 FIRST_VALUE(u.id) OVER (
+                   PARTITION BY u.celex
+                   ORDER BY units_fts.rank, u.id
+                 ) AS firstActId
+          FROM units_fts
+          JOIN units u ON u.id = units_fts.rowid
+          JOIN json_each(?) AS requested ON requested.value = u.celex
+          WHERE units_fts.text MATCH ?
+        )
+        SELECT id, celex, unitType, number, heading, unitRank, previewRank, bestActRank, firstActId
+        FROM matched
+        WHERE previewRank <= ${FULLTEXT_COLLECTION_MAX_PREVIEWS_PER_ACT}
+        ORDER BY bestActRank, firstActId, previewRank, unitRank, id
+        LIMIT ${FULLTEXT_UNIT_CANDIDATE_CAP}
+      `);
       // Counts deliberately have no result/candidate cap: they describe every
       // matching body-text unit in the requested scope, while the search
       // statements above choose a small ranked preview.
       this.fulltextMatchCountsStatement = database.prepare(`
-        SELECT u.celex AS celex, COUNT(*) AS matchCount
+        SELECT u.celex AS celex, u.unit_type AS unitType, COUNT(*) AS matchCount
         FROM units_fts
         JOIN units u ON u.id = units_fts.rowid
         WHERE units_fts.text MATCH ?
-        GROUP BY u.celex
-        ORDER BY u.celex
+        GROUP BY u.celex, u.unit_type
+        ORDER BY u.celex, u.unit_type
       `);
       this.fulltextScopedMatchCountsStatement = database.prepare(`
-        SELECT u.celex AS celex, COUNT(*) AS matchCount
+        SELECT u.celex AS celex, u.unit_type AS unitType, COUNT(*) AS matchCount
         FROM units_fts
         JOIN units u ON u.id = units_fts.rowid
         WHERE units_fts.text MATCH ? AND u.celex = ?
-        GROUP BY u.celex
-        ORDER BY u.celex
+        GROUP BY u.celex, u.unit_type
+        ORDER BY u.celex, u.unit_type
       `);
       this.fulltextCollectionMatchCountsStatement = database.prepare(`
-        SELECT u.celex AS celex, COUNT(*) AS matchCount
+        SELECT u.celex AS celex, u.unit_type AS unitType, COUNT(*) AS matchCount
         FROM units_fts
         JOIN units u ON u.id = units_fts.rowid
         JOIN json_each(?) AS requested ON requested.value = u.celex
         WHERE units_fts.text MATCH ?
-        GROUP BY u.celex
-        ORDER BY u.celex
+        GROUP BY u.celex, u.unit_type
+        ORDER BY u.celex, u.unit_type
       `);
       // Computing snippet() for the whole candidate window makes common-prefix
       // queries needlessly expensive. Rank/diversify first, then render only
       // the handful of units that cross the API boundary.
-      const resultSlots = Array(FULLTEXT_RESULT_LIMIT).fill("?").join(", ");
+      const resultSlots = Array(FULLTEXT_COLLECTION_RESULT_LIMIT).fill("?").join(", ");
       this.fulltextUnitSnippetStatement = database.prepare(`
         SELECT units_fts.rowid AS id, ${snippet} AS snippet
         FROM units_fts
@@ -758,6 +787,7 @@ class JsonLegalCacheStore {
       this.fulltextUnitSearchStatement = null;
       this.fulltextUnitScopedSearchStatement = null;
       this.fulltextUnitCollectionSearchStatement = null;
+      this.fulltextUnitCollectionTwoPreviewsSearchStatement = null;
       this.fulltextUnitSnippetStatement = null;
       this.fulltextMatchCountsStatement = null;
       this.fulltextScopedMatchCountsStatement = null;
@@ -817,6 +847,16 @@ class JsonLegalCacheStore {
     const hasCelexes = Object.prototype.hasOwnProperty.call(options, "celexes")
       && options.celexes !== undefined
       && options.celexes !== null;
+    const previewsPerAct = options.previewsPerAct === undefined ? 1 : options.previewsPerAct;
+    if (!Number.isInteger(previewsPerAct)
+      || previewsPerAct < 1
+      || previewsPerAct > FULLTEXT_COLLECTION_MAX_PREVIEWS_PER_ACT) {
+      const error = new Error(
+        `"previewsPerAct" must be an integer from 1 to ${FULLTEXT_COLLECTION_MAX_PREVIEWS_PER_ACT}`
+      );
+      error.code = "fulltext_previews_per_act_invalid";
+      throw error;
+    }
     if (hasCelex && hasCelexes) {
       const error = new Error('Specify either "celex" or "celexes", not both');
       error.code = "fulltext_scope_ambiguous";
@@ -834,7 +874,9 @@ class JsonLegalCacheStore {
       const celexes = [...new Set(options.celexes.map(normalizeCelexLookupKey).filter(Boolean))];
       rows = celexes.length === 0
         ? []
-        : this.fulltextUnitCollectionSearchStatement.all(JSON.stringify(celexes), expression);
+        : previewsPerAct === FULLTEXT_COLLECTION_MAX_PREVIEWS_PER_ACT
+          ? this.fulltextUnitCollectionTwoPreviewsSearchStatement.all(JSON.stringify(celexes), expression)
+          : this.fulltextUnitCollectionSearchStatement.all(JSON.stringify(celexes), expression);
     } else {
       rows = celex
         ? this.fulltextUnitScopedSearchStatement.all(expression, celex)
@@ -843,17 +885,19 @@ class JsonLegalCacheStore {
     const seen = new Set();
     const selected = [];
     for (const row of rows) {
-      // Global and collection searches return one best unit per act. A
-      // single-CELEX query intentionally keeps multiple provisions from that
-      // requested act.
-      if (!celex && seen.has(row.celex)) continue;
+      // Global and legacy collection searches return one best unit per act. A
+      // two-preview collection retains up to two ranked units from each of its
+      // selected acts; a single-CELEX query keeps multiple provisions.
+      const collectionPreviews = hasCelexes && previewsPerAct === FULLTEXT_COLLECTION_MAX_PREVIEWS_PER_ACT;
+      if (!celex && !collectionPreviews && seen.has(row.celex)) continue;
+      if (!seen.has(row.celex) && seen.size >= limit) break;
       seen.add(row.celex);
       selected.push(row);
-      if (selected.length >= limit) break;
+      if (!collectionPreviews && selected.length >= limit) break;
     }
     if (selected.length === 0) return [];
     const snippetArgs = selected.map((row) => row.id);
-    while (snippetArgs.length < FULLTEXT_RESULT_LIMIT) snippetArgs.push(-1);
+    while (snippetArgs.length < FULLTEXT_COLLECTION_RESULT_LIMIT) snippetArgs.push(-1);
     const snippets = new Map(
       this.fulltextUnitSnippetStatement.all(...snippetArgs, expression)
         .map((row) => [Number(row.id), row.snippet])
@@ -882,7 +926,14 @@ class JsonLegalCacheStore {
     if (queryError) throw queryError;
     const expression = buildFulltextMatchExpression(query);
     if (!expression) {
-      return { totalMatchingPassages: 0, totalMatchingActs: 0, matchCountsByCelex: {} };
+      return {
+        totalMatchingPassages: 0,
+        totalMatchingActs: 0,
+        totalMatchingArticles: 0,
+        totalMatchingRecitals: 0,
+        matchCountsByCelex: {},
+        matchTypesByCelex: {},
+      };
     }
 
     const hasCelex = options.celex !== undefined && options.celex !== null && String(options.celex).trim() !== "";
@@ -914,18 +965,40 @@ class JsonLegalCacheStore {
     }
 
     const matchCountsByCelex = {};
+    const matchTypesByCelex = {};
     let totalMatchingPassages = 0;
+    let totalMatchingArticles = 0;
+    let totalMatchingRecitals = 0;
     for (const row of rows) {
       const key = normalizeCelexLookupKey(row.celex);
       const matchCount = Number(row.matchCount) || 0;
       if (!key || matchCount <= 0) continue;
-      matchCountsByCelex[key] = matchCount;
+      matchCountsByCelex[key] = (matchCountsByCelex[key] || 0) + matchCount;
+      const matchTypes = matchTypesByCelex[key] || { articles: 0, recitals: 0 };
+      matchTypesByCelex[key] = matchTypes;
+      switch (String(row.unitType || "").toLowerCase()) {
+        case "article":
+          matchTypes.articles += matchCount;
+          totalMatchingArticles += matchCount;
+          break;
+        case "recital":
+          matchTypes.recitals += matchCount;
+          totalMatchingRecitals += matchCount;
+          break;
+        default:
+          // Preserve the all-unit passage count for a future indexed unit
+          // type without falsely assigning it to articles or recitals.
+          break;
+      }
       totalMatchingPassages += matchCount;
     }
     return {
       totalMatchingPassages,
       totalMatchingActs: Object.keys(matchCountsByCelex).length,
+      totalMatchingArticles,
+      totalMatchingRecitals,
       matchCountsByCelex,
+      matchTypesByCelex,
     };
   }
 
@@ -1763,6 +1836,7 @@ class JsonLegalCacheStore {
       this.fulltextUnitSearchStatement = null;
       this.fulltextUnitScopedSearchStatement = null;
       this.fulltextUnitCollectionSearchStatement = null;
+      this.fulltextUnitCollectionTwoPreviewsSearchStatement = null;
       this.fulltextUnitSnippetStatement = null;
       this.fulltextMatchCountsStatement = null;
       this.fulltextScopedMatchCountsStatement = null;

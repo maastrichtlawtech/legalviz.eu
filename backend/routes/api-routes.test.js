@@ -1262,14 +1262,14 @@ test("POST /api/fulltext-search is registered with the shared rate limiter and d
 
   assert.equal(typeof handler, "function");
   assert.deepEqual(app.middleware.get(routeKey), [rateLimitMiddleware]);
-  handler({ method: "POST", body: { q: " data ", celexes: ["32016r0679", "32024R1689", "32016R0679"], limit: 2 } }, res);
+  handler({ method: "POST", body: { q: " data ", celexes: ["32016r0679", "32024R1689", "32016R0679"], limit: 2, previewsPerAct: 2 } }, res);
 
   assert.equal(res.statusCode, 200);
   assert.deepEqual(res.payload.celexes, ["32016R0679", "32024R1689"]);
   assert.equal(res.payload.count, 1);
   assert.deepEqual(calls, [{
     query: "data",
-    options: { limit: 2, celexes: ["32016R0679", "32024R1689"] },
+    options: { limit: 2, celexes: ["32016R0679", "32024R1689"], previewsPerAct: 2 },
   }]);
 });
 

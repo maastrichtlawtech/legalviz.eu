@@ -42,7 +42,7 @@
     "zod": "^4.4.3"
   },
   "optionalDependencies": {
-    "adm-zip": "^0.6.0"
+    "adm-zip": "^0.6.1"
   },
   "engines": {
     "node": ">=22.12"

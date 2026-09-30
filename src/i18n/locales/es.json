@@ -123,6 +123,7 @@
     "never": "Nunca",
     "sourceCode": "Código fuente y soporte en GitHub",
     "builtBy": "Desarrollado por Konrad Kollnig en el Law & Tech Lab de la Maastricht University.",
+    "projectNote": "LegalViz.EU es un proyecto de investigación académica sin fines comerciales con sede en la Facultad de Derecho de la Universidad de Maastricht.",
     "addLawDialogEyebrow": "Añadir norma",
     "addLawCta": "Añada otra norma a su biblioteca",
     "addLawDescription": "Abra una norma por su referencia oficial o añádala directamente desde EUR-Lex.",

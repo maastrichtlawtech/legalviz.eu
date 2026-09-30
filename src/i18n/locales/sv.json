@@ -123,6 +123,7 @@
     "never": "Aldrig",
     "sourceCode": "Källkod och support på GitHub",
     "builtBy": "Byggd av Konrad Kollnig vid Law & Tech Lab, Maastricht University.",
+    "projectNote": "LegalViz.EU är ett icke-kommersiellt akademiskt forskningsprojekt vid juridiska fakulteten vid Maastricht University.",
     "addLawDialogEyebrow": "Lägg till rättsakt",
     "addLawCta": "Lägg till en rättsakt till i ditt bibliotek",
     "addLawDescription": "Öppna en rättsakt via dess officiella hänvisning eller lägg till den direkt från EUR-Lex.",

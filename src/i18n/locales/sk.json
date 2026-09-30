@@ -123,6 +123,7 @@
     "never": "Nikdy",
     "sourceCode": "Zdrojový kód a podpora na GitHube",
     "builtBy": "Vytvoril Konrad Kollnig v Law & Tech Lab, Maastricht University.",
+    "projectNote": "LegalViz.EU je nekomerčný akademický výskumný projekt Právnickej fakulty Maastrichtskej univerzity.",
     "addLawDialogEyebrow": "Pridať predpis",
     "addLawCta": "Pridajte ďalší predpis do svojej knižnice",
     "addLawDescription": "Otvorte predpis podľa oficiálnej referencie alebo ho pridajte priamo z EUR-Lexu.",

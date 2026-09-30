@@ -123,6 +123,7 @@
     "never": "Никога",
     "sourceCode": "Изходен код и поддръжка в GitHub",
     "builtBy": "Създадено от Konrad Kollnig в Law & Tech Lab, Maastricht University.",
+    "projectNote": "LegalViz.EU е нетърговски академичен изследователски проект към Юридическия факултет на Университета в Маастрихт.",
     "addLawDialogEyebrow": "Добавяне на акт",
     "addLawCta": "Добавете още един акт в библиотеката си",
     "addLawDescription": "Отворете акт по официално позоваване или го добавете директно от EUR-Lex.",

@@ -123,6 +123,7 @@
     "never": "Ei koskaan",
     "sourceCode": "Lähdekoodi ja tuki GitHubissa",
     "builtBy": "Rakentanut Konrad Kollnig Maastricht Universityn Law & Tech Labissa.",
+    "projectNote": "LegalViz.EU on ei-kaupallinen akateeminen tutkimushanke Maastrichtin yliopiston oikeustieteellisessä tiedekunnassa.",
     "addLawDialogEyebrow": "Lisää säädös",
     "addLawCta": "Lisää toinen säädös kirjastoosi",
     "addLawDescription": "Avaa säädös virallisen viitteen perusteella tai lisää se suoraan EUR-Lexistä.",

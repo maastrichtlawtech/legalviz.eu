@@ -123,6 +123,7 @@
     "never": "Mitte kunagi",
     "sourceCode": "Lähtekood ja tugi GitHubis",
     "builtBy": "Loonud Konrad Kollnig Law & Tech Labis, Maastrichti Ülikoolis.",
+    "projectNote": "LegalViz.EU on mitteäriline akadeemiline uurimisprojekt Maastrichti Ülikooli õigusteaduskonnas.",
     "addLawDialogEyebrow": "Lisa õigusakt",
     "addLawCta": "Lisa oma kogusse veel üks õigusakt",
     "addLawDescription": "Avage õigusakt ametliku viite järgi või lisage see otse EUR-Lexist.",

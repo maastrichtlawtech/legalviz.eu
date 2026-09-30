@@ -123,6 +123,7 @@
     "never": "Soha",
     "sourceCode": "Forráskód és támogatás a GitHubon",
     "builtBy": "Készítette Konrad Kollnig a Maastricht University Law & Tech Labjében.",
+    "projectNote": "A LegalViz.EU a Maastrichti Egyetem Jogi Karán működő, nem kereskedelmi célú tudományos kutatási projekt.",
     "addLawDialogEyebrow": "Jogszabály hozzáadása",
     "addLawCta": "Adjon hozzá még egy jogszabályt a könyvtárához",
     "addLawDescription": "Nyisson meg egy jogszabályt hivatalos hivatkozás alapján, vagy adja hozzá közvetlenül az EUR-Lexből.",

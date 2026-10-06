@@ -12,6 +12,7 @@ const { createFmxService } = require('./shared/fmx-service');
 const { fetchEurlexHtmlLaw, closeSharedPlaywrightBrowser } = require('./shared/eurlex-html-parser');
 const { createParserPool } = require('./shared/parser-worker-pool');
 const { createHtmlCacheService } = require('./shared/html-cache-service');
+const { createLawMirror, isUpstreamFailure } = require('./shared/law-mirror');
 const { createPersistentCache } = require('./shared/resolution-cache-store');
 const { createGenerationLimitMiddleware, createRateLimitMiddleware } = require('./shared/rate-limit');
 const { createOriginAllowlistMiddleware } = require('./shared/origin-guard');
@@ -93,14 +94,24 @@ citationGraphStore.load();
 const analytics = createAnalytics({ cacheDir: CACHE_DIR, dataStore: legalCacheStore });
 
 // Middleware
-app.use(cors());
+// Expose X-Law-Source so the web app can tell a corpus-mirror copy (#246)
+// apart and keep it out of its long-lived IndexedDB cache.
+app.use(cors({ exposedHeaders: ['X-Law-Source'] }));
 app.use(express.json());
 app.use(analytics.middleware);
+// English raw-law corpus baked into the Docker image from the
+// CORPUS_RELEASE_TAG release, served only when EUR-Lex/Cellar is unreachable
+// (#246). Defaults to search/data, where a local checkout extracts the corpus.
+const lawMirror = createLawMirror({
+  dir: process.env.LAW_MIRROR_DIR || path.join(__dirname, 'search', 'data'),
+});
+
 const { findDownloadUrls, findFmx4Uri, prepareLawPayload, sendLawResponse } = createFmxService({
   CELLAR_BASE,
   FMX_DIR: CACHE_DIR,
   STORAGE_LIMIT_MB,
   TIMEOUT_MS,
+  mirror: lawMirror,
 });
 
 const htmlCache = createHtmlCacheService({
@@ -185,13 +196,16 @@ const emptyHtmlParseCache = new Map(); // celex -> { servedLang, parsed }
  *
  * 1. Check disk cache for raw HTML (keyed by the language actually served, always English)
  * 2. If miss, fetch from EUR-Lex (plain fetch first, Playwright on WAF challenge)
- * 3. Store raw HTML to disk cache (same served-language key)
+ *    and, if EUR-Lex is unreachable, read the corpus mirror instead (#246)
+ * 3. Store raw HTML to disk cache (same served-language key), unless it came
+ *    from the mirror, so the next request tries EUR-Lex again
  * 4. Parse and return, including the requested `lang` and the honest `servedLang`
  */
 async function loadHtmlLaw(celex, lang) {
   let servedLang = HTML_FALLBACK_SERVED_LANG;
   let rawHtml = await htmlCache.get(celex, servedLang);
   let fromCache = Boolean(rawHtml);
+  let fromMirror = false;
 
   async function fetchFreshHtml() {
     let fetched;
@@ -219,7 +233,16 @@ async function loadHtmlLaw(celex, lang) {
   }
 
   if (!rawHtml) {
-    rawHtml = await fetchFreshHtml();
+    try {
+      rawHtml = await fetchFreshHtml();
+    } catch (err) {
+      const mirrored = isUpstreamFailure(err) ? await lawMirror.readHtml(celex) : null;
+      if (!mirrored) throw err;
+      console.warn(`[API] EUR-Lex unavailable for ${celex} (${err.message}); serving corpus mirror`);
+      rawHtml = mirrored;
+      servedLang = lawMirror.lang;
+      fromMirror = true;
+    }
     fromCache = false;
   }
 
@@ -227,7 +250,7 @@ async function loadHtmlLaw(celex, lang) {
   try {
     parsed = await parserPool.parseEurlexHtmlToCombined(rawHtml, servedLang);
   } catch (err) {
-    if (fromCache && err?.code === 'law_not_found') {
+    if (fromCache && !fromMirror && err?.code === 'law_not_found') {
       htmlCache.remove(celex, servedLang);
       rawHtml = await fetchFreshHtml();
       fromCache = false;
@@ -238,7 +261,9 @@ async function loadHtmlLaw(celex, lang) {
   }
 
   const hasContent = hasParsedLawContent(parsed);
-  if (!fromCache && hasContent) {
+  if (fromMirror) {
+    // Never persist the mirror copy: it may be a month old.
+  } else if (!fromCache && hasContent) {
     htmlCache.put(celex, servedLang, rawHtml).catch((err) => {
       console.error(`[HtmlCache] Failed to cache ${celex}_${servedLang}:`, err.message);
     });
@@ -246,11 +271,11 @@ async function loadHtmlLaw(celex, lang) {
     console.warn(`[HtmlCache] Skipping cache for ${celex}_${servedLang}: parsed HTML did not yield law content`);
   }
 
-  return { servedLang, parsed, empty: !hasContent };
+  return { servedLang, parsed, empty: !hasContent, mirror: fromMirror };
 }
 
 async function fetchAndParseHtmlLawCached(celex, lang) {
-  function withRequestedLang({ servedLang, parsed }) {
+  function withRequestedLang({ servedLang, parsed, mirror }) {
     return {
       celex,
       lang,
@@ -258,6 +283,7 @@ async function fetchAndParseHtmlLawCached(celex, lang) {
       source: 'eurlex-html',
       format: 'combined-v1',
       ...parsed,
+      ...(mirror ? { mirror: true } : {}),
     };
   }
 
@@ -275,7 +301,7 @@ async function fetchAndParseHtmlLawCached(celex, lang) {
   inFlightHtmlLoads.set(celex, promise);
 
   const result = await promise;
-  if (result.empty) {
+  if (result.empty && !result.mirror) {
     cacheSet(
       emptyHtmlParseCache,
       celex,
@@ -381,6 +407,7 @@ const server = app.listen(PORT, () => {
   console.log(`EUR-Lex FMX API running on port ${PORT}`);
   console.log(`MCP endpoint: POST /mcp (Streamable HTTP)`);
   console.log(`Cache directory: ${CACHE_DIR} (FMX: ${STORAGE_LIMIT_MB} MB, HTML: ${HTML_CACHE_LIMIT_MB} MB)`);
+  console.log(`Law mirror: ${lawMirror.enabled ? lawMirror.dir : 'not available'}`);
   console.log(`Rate limit: ${RATE_LIMIT_MAX} req/15min per IP`);
   console.log(`Search cache: ${legalCacheStore.getStatus().ready ? 'loaded' : 'not loaded'} (${legalCacheStore.activePath})`);
   console.log(`Citation graph: ${citationGraphStore.getStatus().ready ? 'loaded' : 'not loaded'} (${citationGraphStore.graphPath})`);

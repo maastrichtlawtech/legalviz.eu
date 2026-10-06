@@ -769,6 +769,9 @@ export async function fetchFormex(celex, lang = "EN") {
     }
 
     const contentType = res.headers.get("content-type") || "";
+    // The backend's corpus copy, served while EUR-Lex is down (#246). It may
+    // be a month old, so it must not be pinned in IndexedDB.
+    const fromMirror = res.headers.get("x-law-source") === "mirror";
 
     let xmlText;
     if (contentType.includes("application/json")) {
@@ -812,7 +815,7 @@ export async function fetchFormex(celex, lang = "EN") {
       // ignore — isFmxDocument already validated the shape above
     }
 
-    if (hasContent) {
+    if (hasContent && !fromMirror) {
       await cacheSet(cacheKey, xmlText);
       await upsertLawMeta(celex, { cachedAt: Date.now() }).catch((err) => {
         console.warn(`[FormexAPI] Failed to persist library metadata for ${celex}:`, err);
@@ -1281,9 +1284,12 @@ export async function fetchParsedLaw(celex, lang = "EN", { version = null } = {}
     const payload = await res.json();
     // A requested current version that fell back to the as-adopted text is
     // deliberately not persisted: a transient outage must not poison this
-    // mutable selector until the user clears site data.
-    const cacheablePayload = version !== "current"
-      || (payload.version === "current" && !payload.versionUnavailable);
+    // mutable selector until the user clears site data. The same goes for the
+    // backend's corpus copy served during an EUR-Lex outage (#246).
+    const cacheablePayload = !payload.mirror && (
+      version !== "current"
+      || (payload.version === "current" && !payload.versionUnavailable)
+    );
     if (payloadHasContent(payload) && cacheablePayload) {
       await cacheSet(cacheKey, createCombinedLawEnvelope(payload));
       await upsertLawMeta(celex, { cachedAt: Date.now() }).catch((err) => {

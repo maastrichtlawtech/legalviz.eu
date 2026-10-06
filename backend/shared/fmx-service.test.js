@@ -4,7 +4,11 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 
+const zlib = require('node:zlib');
+
 const { createFmxService } = require('./fmx-service');
+const { ClientError } = require('./api-utils');
+const { createLawMirror } = require('./law-mirror');
 
 const CELLAR_BASE = 'http://publications.europa.eu/resource';
 
@@ -24,13 +28,29 @@ function ageFile(filePath, ageMs = 2 * 60 * 60 * 1000) {
   fs.utimesSync(filePath, old, old);
 }
 
-function makeService(dir = makeCacheDir(), storageLimitMB = 100) {
+function makeService(dir = makeCacheDir(), storageLimitMB = 100, mirror = null) {
   return createFmxService({
     CELLAR_BASE,
     FMX_DIR: dir,
     STORAGE_LIMIT_MB: storageLimitMB,
     TIMEOUT_MS: 5000,
+    mirror,
   });
+}
+
+/** A corpus mirror directory holding `files` ({ 'laws/2016/X.xml.gz': text }). */
+function makeMirror(files) {
+  const dir = makeCacheDir();
+  for (const [relativePath, text] of Object.entries(files)) {
+    const filePath = path.join(dir, relativePath);
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    fs.writeFileSync(filePath, zlib.gzipSync(text));
+  }
+  return createLawMirror({ dir });
+}
+
+async function cellarDown() {
+  throw new TypeError('fetch failed');
 }
 
 test.after(() => {
@@ -410,3 +430,100 @@ for (const [label, invalidate] of [
     assert.equal(fs.readFileSync(second.servePath, 'utf8'), '<?xml version="1.0"?><FMX><ARTICLE>2</ARTICLE></FMX>');
   });
 }
+
+test('an expired serve-path memo is served when Cellar is unreachable', async () => {
+  const dir = makeCacheDir();
+  const fmx4Uri = `${CELLAR_BASE}/oj/L_202401689.ENG.fmx4`;
+  const firstFetch = prepareFetch({
+    fmx4Uri,
+    downloadUrls: [`${CELLAR_BASE}/oj/L_202401689.ENG.fmx4.1.xml`],
+    xml: '<?xml version="1.0"?><FMX><ARTICLE>cached</ARTICLE></FMX>',
+  });
+  const first = await withMockFetch(firstFetch.fetchImpl, () => (
+    makeService(dir).prepareLawPayload('32024R1689', 'ENG')
+  ));
+
+  const memoPath = path.join(dir, 'fmx-paths-v1.json');
+  const memo = JSON.parse(fs.readFileSync(memoPath, 'utf8'));
+  memo.entries['32024R1689\u0000ENG'].writtenAt = Date.now() - (7 * 60 * 60 * 1000);
+  fs.writeFileSync(memoPath, JSON.stringify(memo));
+
+  const result = await withMockFetch(cellarDown, () => (
+    makeService(dir).prepareLawPayload('32024R1689', 'ENG')
+  ));
+  assert.equal(result.servePath, first.servePath);
+  assert.equal(result.source, undefined);
+});
+
+test('the corpus mirror serves English Formex when Cellar is unreachable', async () => {
+  const dir = makeCacheDir();
+  const mirror = makeMirror({
+    'laws/2016/32016R0679.xml.gz': '<?xml version="1.0"?><ACT><ARTICLE>mirror</ARTICLE></ACT>\n<ANNEX>a</ANNEX>',
+  });
+  const service = makeService(dir, 100, mirror);
+
+  const result = await withMockFetch(cellarDown, () => service.prepareLawPayload('32016R0679', 'ENG'));
+  assert.equal(result.source, 'mirror');
+  const xml = fs.readFileSync(result.servePath, 'utf8');
+  assert.match(xml, /^<\?xml[^>]*\?>\n<COMBINED\.FMX>\n<ACT>/);
+  assert.match(xml, /<ANNEX>a<\/ANNEX>\n<\/COMBINED\.FMX>$/);
+  assert.equal(xml.match(/<\?xml/g).length, 1);
+
+  // Not memoised: the next request goes back to Cellar.
+  const liveFetch = prepareFetch({
+    fmx4Uri: `${CELLAR_BASE}/oj/JOL_2016_119_R_0001.ENG.fmx4`,
+    downloadUrls: [`${CELLAR_BASE}/oj/JOL_2016_119_R_0001.ENG.fmx4.1.xml`],
+    xml: '<?xml version="1.0"?><ACT><ARTICLE>live</ARTICLE></ACT>',
+  });
+  const live = await withMockFetch(liveFetch.fetchImpl, () => service.prepareLawPayload('32016R0679', 'ENG'));
+  assert.equal(live.source, undefined);
+  assert.match(fs.readFileSync(live.servePath, 'utf8'), /live/);
+
+  const headers = {};
+  const res = {
+    setHeader: (name, value) => { headers[name] = value; },
+    on() {},
+    once() {},
+    emit() {},
+    write() { return true; },
+    end() {},
+  };
+  service.sendLawResponse(res, result.servePath);
+  assert.equal(headers['X-Law-Source'], 'mirror');
+});
+
+test('the corpus mirror is not used for a definite Cellar 404', async () => {
+  const mirror = makeMirror({ 'laws/2016/32016R0679.xml.gz': '<ACT>mirror</ACT>' });
+  const service = makeService(makeCacheDir(), 100, mirror);
+  await assert.rejects(
+    withMockFetch(async () => ({ ok: false, status: 404 }), () => service.prepareLawPayload('32016R0679', 'ENG')),
+    (err) => err instanceof ClientError && err.statusCode === 404,
+  );
+});
+
+test('the corpus mirror is not used for other languages', async () => {
+  const mirror = makeMirror({ 'laws/2016/32016R0679.xml.gz': '<ACT>mirror</ACT>' });
+  const service = makeService(makeCacheDir(), 100, mirror);
+  await assert.rejects(
+    withMockFetch(cellarDown, () => service.prepareLawPayload('32016R0679', 'FRA')),
+    /fetch failed/,
+  );
+});
+
+test('an HTML-only mirror act answers 404 so the resolver takes the HTML path', async () => {
+  const mirror = makeMirror({ 'laws-html/1987/31987L0372.html.gz': '<html></html>' });
+  const service = makeService(makeCacheDir(), 100, mirror);
+  await assert.rejects(
+    withMockFetch(cellarDown, () => service.prepareLawPayload('31987L0372', 'ENG')),
+    (err) => err instanceof ClientError && err.statusCode === 404 && err.code === 'fmx_not_found',
+  );
+});
+
+test('an act missing from the mirror keeps the original Cellar error', async () => {
+  const mirror = makeMirror({ 'laws/2016/32016R0679.xml.gz': '<ACT>mirror</ACT>' });
+  const service = makeService(makeCacheDir(), 100, mirror);
+  await assert.rejects(
+    withMockFetch(cellarDown, () => service.prepareLawPayload('32024R1689', 'ENG')),
+    /fetch failed/,
+  );
+});

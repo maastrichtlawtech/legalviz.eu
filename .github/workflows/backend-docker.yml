@@ -53,6 +53,9 @@ jobs:
             const fs = require("node:fs");
             if (!fs.existsSync("search/data/data.sqlite")) throw new Error("SQLite artifact missing");
             if (!fs.existsSync("search/data/data.sqlite.manifest.json")) throw new Error("manifest missing");
+            // The corpus mirror (#246) must reach the image, or an EUR-Lex outage takes law pages down.
+            if (!fs.existsSync("/app/corpus/laws/2016/32016R0679.xml.gz")) throw new Error("law mirror FMX missing");
+            if (!fs.existsSync("/app/corpus/laws-html")) throw new Error("law mirror HTML missing");
             if (fs.readdirSync("search/data").some((name) => name.endsWith(".json.gz"))) {
               throw new Error("source JSON assets leaked into final image");
             }

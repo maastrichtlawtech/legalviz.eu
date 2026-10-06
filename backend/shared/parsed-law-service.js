@@ -77,10 +77,15 @@ function createParsedLawResolver({
 
     let parsed = null;
     let source = 'fmx';
+    // True when the text came from the bundled corpus mirror because EUR-Lex
+    // or Cellar was unreachable (#246), so the reader can flag it as possibly
+    // out of date. The HTML path reports it on `parsed.mirror` itself.
+    let fromMirror = false;
 
     if (!skipFmxProbe) {
       try {
-        const { servePath } = await prepareLawPayload(celex, lang);
+        const { servePath, source: payloadSource } = await prepareLawPayload(celex, lang);
+        fromMirror = payloadSource === 'mirror';
         const xmlText = await fs.promises.readFile(servePath, 'utf8');
         parsed = await parseFmxXmlImpl(xmlText);
       } catch (err) {
@@ -216,6 +221,7 @@ function createParsedLawResolver({
     result.hasContent = hasParsedLawContent(parsed);
     if (consolidatedVersion) result.consolidatedVersion = consolidatedVersion;
     if (versionUnavailable) result.versionUnavailable = true;
+    if (fromMirror && !consolidatedVersion) result.mirror = true;
 
     cacheSet(parsedCache, cacheKey, result, PARSED_LAW_CACHE_MS, MAX_PARSED_CACHE_ENTRIES);
     return result;

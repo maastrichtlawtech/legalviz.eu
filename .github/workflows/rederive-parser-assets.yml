@@ -1315,6 +1315,8 @@ jobs:
           set -euo pipefail
           data_tag="${{ steps.tags.outputs.data_tag }}"
           fulltext_tag="${{ steps.tags.outputs.fulltext_tag }}"
+          corpus_tag="${{ needs.resolve.outputs.corpus_tag }}"
+          .github/scripts/release-tags.sh validate corpus "$corpus_tag"
           branch="automation/rederive-$data_tag"
           if git ls-remote --exit-code origin "refs/heads/$branch" >/dev/null 2>&1; then
             git fetch origin "$branch"
@@ -1325,8 +1327,11 @@ jobs:
           fi
           sed -i "s/^ARG DATA_RELEASE_TAG=.*/ARG DATA_RELEASE_TAG=$data_tag/" backend/Dockerfile
           sed -i "s/^ARG FULLTEXT_RELEASE_TAG=.*/ARG FULLTEXT_RELEASE_TAG=$fulltext_tag/" backend/Dockerfile
+          # Keep the baked-in outage mirror (#246) on the corpus these assets were derived from.
+          sed -i "s/^ARG CORPUS_RELEASE_TAG=.*/ARG CORPUS_RELEASE_TAG=$corpus_tag/" backend/Dockerfile
           test "$(sed -n 's/^ARG DATA_RELEASE_TAG=//p' backend/Dockerfile)" = "$data_tag"
           test "$(sed -n 's/^ARG FULLTEXT_RELEASE_TAG=//p' backend/Dockerfile)" = "$fulltext_tag"
+          test "$(sed -n 's/^ARG CORPUS_RELEASE_TAG=//p' backend/Dockerfile)" = "$corpus_tag"
           git add backend/Dockerfile
           changed_files=$(git diff --cached --name-only)
           test -z "$changed_files" || test "$changed_files" = "backend/Dockerfile" || {

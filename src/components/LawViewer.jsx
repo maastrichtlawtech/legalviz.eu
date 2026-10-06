@@ -478,6 +478,15 @@ export function LawViewer() {
                     </div>
                   ) : null}
 
+                  {primaryDocument.data.mirror ? (
+                    <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/20 dark:text-amber-100">
+                      <div className="font-medium">{t("lawViewer.mirrorFallbackTitle")}</div>
+                      <p className="mt-1 leading-6">
+                        {t("lawViewer.mirrorFallbackMessage")}
+                      </p>
+                    </div>
+                  ) : null}
+
                   {derived.isLegacyHtmlFallback ? (
                     <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/20 dark:text-amber-100">
                       <div className="font-medium">{t("lawViewer.legacyHtmlFallbackTitle")}</div>

@@ -47,6 +47,8 @@ Subtree-specific guidance lives in nested agent files: [backend/AGENTS.md](backe
 
 **Routing/state**: the current reader position (law, article, recital, language) is synced to the URL (`src/utils/lawRouting.js`, `src/utils/url.js`) so every view is bookmarkable/shareable — treat URL state as the source of truth for navigation, not component state.
 
+**EUR-Lex outage mirror** (#246): the backend image carries the English raw-law corpus (`laws.tar` + `laws-html.tar` from the `CORPUS_RELEASE_TAG` release, ~540 MB) at `LAW_MIRROR_DIR`. It is a fallback only: `shared/fmx-service.js` and the HTML loader in `server.js` try EUR-Lex/Cellar first, then a stale cached copy, then the mirror, and only on an outage (network error, timeout, 5xx, 403/429), never on a definite 404 or for other languages. Mirror responses carry `mirror: true` (parsed JSON) or `X-Law-Source: mirror` (raw XML); the web app shows a notice and keeps them out of IndexedDB. Logic lives in `backend/shared/law-mirror.js`.
+
 **`extension/`** is a small Chrome/Firefox launcher package, not built by the root `npm run build`. It sends the current EUR-Lex URL through the app's general `/import` flow when the user clicks its icon.
 
 **`scripts/`** contains build-time Node scripts (prerendering law pages, sitemap generation, 404 copy, `dev.js` which runs frontend + backend concurrently) — not application code.
@@ -72,6 +74,7 @@ Nearly every expensive operation — Formex parsing, TF‑IDF recital mapping, C
 | Full-text `units` schema / builder output shape | `FULLTEXT_SCHEMA_VERSION` | `backend/search/fulltext-index-build.js`, with a lock-step copy in `backend/search/legal-cache-store.js` |
 | Precomputed data republished as a new GitHub Release | `DATA_RELEASE_TAG` → `data-YYYY-MM-DD.NN` | `backend/Dockerfile` |
 | Full-text index republished as a new GitHub Release | `FULLTEXT_RELEASE_TAG` → `fulltext-YYYY-MM-DD.NN` | `backend/Dockerfile` |
+| Raw-law corpus baked into the image as the EUR-Lex outage mirror | `CORPUS_RELEASE_TAG` → `corpus-YYYY-MM-DD.NN` (`refresh-data.yml` sets it to the corpus each data release was built from) | `backend/Dockerfile` |
 
 The data caches are the one entry above that isn't a code constant: they ship as **GitHub Release assets** (they're far too large to commit), so republishing them means creating a new data release **and** bumping `DATA_RELEASE_TAG` in `backend/Dockerfile` in the same commit. Skip the bump and every deploy keeps fetching the old data no matter what you rebuilt. The Dockerfile fetches **every** asset from that one tag, so a new release must carry the full set — re-upload the unchanged ones alongside the changed one, or the Docker build 404s. Every release asset is compressed: the built `data.sqlite` ships as **`data.sqlite.gz`** (~280 MB → ~4x smaller) beside its uncompressed `data.sqlite.manifest.json`, which still describes the *unzipped* file. Docker never fetches it — it rebuilds the DB from the `*.json.gz` inputs — so it exists for recovery and inspection. The corpus `*.tar` archives stay uncompressed on purpose: their members are already gzipped.
 

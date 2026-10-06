@@ -394,6 +394,8 @@
     "resolvingLinkedLawFallback": "linked law",
     "legacyHtmlFallbackTitle": "Older EUR-Lex format",
     "legacyHtmlFallbackMessage": "This law is being shown from an older EUR-Lex HTML format rather than structured Formex data. The layout may be rough, and LegalViz.EU has switched the document language back to English for reliability.",
+    "mirrorFallbackTitle": "EUR-Lex is unavailable",
+    "mirrorFallbackMessage": "EUR-Lex could not be reached, so LegalViz.EU is showing its own copy of this law. The copy is refreshed monthly, so a very recent correction or amendment may be missing.",
     "consolidatedFallbackTitle": "No original text published for this act",
     "consolidatedFallbackMessage": "EUR-Lex does not publish a structured text of this act as originally adopted. LegalViz.EU is showing the current consolidated (as amended) version instead.",
     "consolidatedFallbackMessageWithDate": "EUR-Lex does not publish a structured text of this act as originally adopted. LegalViz.EU is showing the consolidated (as amended) version dated {date} instead.",

@@ -99,7 +99,34 @@ RUN mkdir -p search/data \
     && node search/build-sqlite-data.js \
     && ls -lh search/data/data.sqlite search/data/data.sqlite.manifest.json
 
+# English raw-law corpus (FMX + EUR-Lex HTML), served by the API only when
+# EUR-Lex/Cellar is unreachable (#246; see shared/law-mirror.js). It ships on
+# the corpus release train, separate from the derived data assets, so it is
+# pinned on its own; refresh-data.yml bumps it to the corpus each data release
+# was built from. The tar members are already gzipped per law, so the
+# extracted tree (~540 MB) is the size of the downloads. AppleDouble sidecars
+# (`._*`) in older corpus releases are Finder metadata, not laws.
+FROM runtime AS corpus-fetcher
+
+ARG DATA_RELEASE_REPO=maastrichtlawtech/legalviz.eu
+ARG CORPUS_RELEASE_TAG=corpus-2026-10-05.01
+RUN mkdir -p /corpus \
+    && for asset in laws.tar laws-html.tar; do \
+         echo "Fetching corpus asset: $asset ($CORPUS_RELEASE_TAG)" \
+         && curl -fSL --retry 6 --retry-all-errors --retry-max-time 600 \
+              -o "/tmp/$asset" \
+              "https://github.com/${DATA_RELEASE_REPO}/releases/download/${CORPUS_RELEASE_TAG}/$asset" \
+         && tar -xf "/tmp/$asset" -C /corpus --exclude='._*' \
+         && rm -f "/tmp/$asset"; \
+       done \
+    && test -d /corpus/laws && test -d /corpus/laws-html \
+    && du -sh /corpus/laws /corpus/laws-html
+
 FROM dependencies AS final
+
+# Before `COPY . .` so code changes reuse this large layer.
+COPY --from=corpus-fetcher /corpus /app/corpus
+ENV LAW_MIRROR_DIR=/app/corpus
 
 COPY . .
 COPY --from=data-builder /app/search/data/data.sqlite ./search/data/data.sqlite

@@ -14,6 +14,7 @@ const {
   writeArtifactAtomic,
 } = require("./citation-graph-build");
 const { getCurrentParserVersion, normalizeParserStamp } = require("./parser-stamp");
+const { operativeHtmlWithinLimit } = require("./html-annex-cut");
 
 const gunzip = promisify(zlib.gunzip);
 const INDEX_VERSION = 2;
@@ -23,6 +24,8 @@ const DEFAULT_WORKER_HEAP_MB = 768;
 // the operative text and many substantive acts exceed 1 MiB without being giant
 // tariff-table documents. Above 6 MiB we still try the safe annex-stripping path.
 const DEFAULT_MAX_XML_BYTES = 6 * 1024 * 1024;
+// Oversized HTML is cut at its first annex (html-annex-cut.js) and parsed only
+// if the operative part fits.
 const DEFAULT_MAX_HTML_BYTES = 4 * 1024 * 1024;
 const DEFAULT_CORPUS_DIR = path.join(__dirname, "data", "laws");
 const DEFAULT_OUTPUT_PATH = path.join(__dirname, "data", "definitions.json");
@@ -222,7 +225,7 @@ async function buildDefinitionShard(options = {}) {
       const bytes = Buffer.byteLength(source, "utf8");
       let parsed;
       if (isHtmlCorpusFile(file)) {
-        if (bytes > maxHtmlBytes) throw Object.assign(new Error(`Decompressed HTML exceeds ${maxHtmlBytes} bytes`), { oversized: true });
+        if (bytes > maxHtmlBytes) source = operativeHtmlWithinLimit(source, maxHtmlBytes);
         parsed = await parseHtml(source);
         stats.htmlLaws += 1;
       } else {

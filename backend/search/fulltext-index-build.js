@@ -29,6 +29,7 @@ const { readJsonAsset, sha256File } = require("./build-sqlite-data");
 const { DEFAULT_SEARCH_CACHE_PATH } = require("./search-index");
 const { stripXmlTags, wrapForParsing } = require("./search-build");
 const { normalizeParserStamp } = require("./parser-stamp");
+const { operativeHtmlWithinLimit } = require("./html-annex-cut");
 const { WorkerLossError, runPool: runWorkerPool } = require("../shared/worker-pool");
 
 const gunzip = promisify(zlib.gunzip);
@@ -64,7 +65,8 @@ const DEFAULT_WORKER_HEAP_MB = 640;
 // Same ceiling as the definition/citation-graph builders: definitions and
 // citations live in the operative text, and full-text units are extracted
 // from the very same parsed document, so oversized inputs need the same
-// annex-stripping fallback and failure accounting.
+// annex-stripping fallback and failure accounting. Oversized HTML is cut at
+// its first annex instead (html-annex-cut.js).
 const DEFAULT_MAX_XML_BYTES = 6 * 1024 * 1024;
 const DEFAULT_MAX_HTML_BYTES = 4 * 1024 * 1024;
 const DEFAULT_CORPUS_DIR = path.join(__dirname, "data", "laws");
@@ -111,7 +113,7 @@ async function buildFulltextShard(options = {}) {
       stats.bytes += bytes;
       let parsed;
       if (isHtmlCorpusFile(file)) {
-        if (bytes > maxHtmlBytes) throw Object.assign(new Error(`Decompressed HTML exceeds ${maxHtmlBytes} bytes`), { oversized: true });
+        if (bytes > maxHtmlBytes) source = operativeHtmlWithinLimit(source, maxHtmlBytes);
         parsed = await parseHtml(source);
         stats.htmlLaws += 1;
       } else {

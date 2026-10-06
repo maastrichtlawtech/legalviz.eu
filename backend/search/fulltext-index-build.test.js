@@ -161,6 +161,36 @@ test("oversized XML falls back to the stripped operative text when the fallback 
   assert.equal(accepted.units[0].text, "Recovered operative text.");
 });
 
+test("oversized HTML is cut at its first annex and parsed when the operative part fits", async () => {
+  const operative = '<p class="oj-ti-art">Article 1</p><p class="oj-normal">Recovered operative text.</p>';
+  const html = `${operative}<div id="anx_1">${"y".repeat(500)}</div>`;
+  const accepted = await buildFulltextShard({
+    files: ["/laws-html/2009/32009D0850.html.gz"],
+    readFile: async () => html,
+    maxHtmlBytes: 200,
+    parseHtml: async (source) => {
+      assert.equal(source, operative);
+      return {
+        parserVersion: 1,
+        articles: [{ article_number: "1", article_title: "", article_html: "<p>Recovered operative text.</p>" }],
+        recitals: [],
+      };
+    },
+  });
+  assert.equal(accepted.failures.length, 0);
+  assert.equal(accepted.stats.htmlLaws, 1);
+  assert.equal(accepted.units[0].text, "Recovered operative text.");
+
+  const rejected = await buildFulltextShard({
+    files: ["/laws-html/2009/32009D0851.html.gz"],
+    readFile: async () => operative + "z".repeat(500),
+    maxHtmlBytes: 200,
+    parseHtml: async () => { throw new Error("must not parse an oversized act without a safe cut"); },
+  });
+  assert.equal(rejected.failures[0].type, "oversized");
+  assert.equal(rejected.stats.oversized, 1);
+});
+
 test("openFulltextDatabase creates the units/units_fts/fulltext_metadata schema", async () => {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "fulltext-db-"));
   const outputPath = path.join(dir, "fulltext.sqlite");

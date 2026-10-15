@@ -23,6 +23,7 @@ const {
   DEFAULT_PARSER_POOL_SIZE,
   DEFAULT_PARSER_WORKER_HEAP_MB,
   DEFAULT_PARSER_WORKER_RECYCLE_TASKS,
+  DEFAULT_PARSER_WORKER_IDLE_MS,
 } = require("./parser-worker-pool");
 
 const FIXTURE = path.join(__dirname, "__fixtures__", "corpus", "fmx-v4-2009-32009L0004.xml.gz");
@@ -377,4 +378,73 @@ test("parser pool defaults retain the builder-sized worker budget", () => {
   assert.equal(DEFAULT_PARSER_POOL_SIZE, 2);
   assert.equal(DEFAULT_PARSER_WORKER_HEAP_MB, 640);
   assert.equal(DEFAULT_PARSER_WORKER_RECYCLE_TASKS, 40);
+  assert.equal(DEFAULT_PARSER_WORKER_IDLE_MS, 60_000);
+});
+
+test("idle workers are retired and replaced on the next task", async () => {
+  const workers = [];
+  const pool = createWorkerPool({
+    poolSize: 1,
+    idleTimeoutMs: 20,
+    workerFactory: () => {
+      const worker = new FakeWorker((payload) => queueMicrotask(() => {
+        worker.emit("message", { ok: true, result: payload });
+      }));
+      workers.push(worker);
+      return worker;
+    },
+  });
+
+  try {
+    assert.equal((await pool.run(1)).result, 1);
+    assert.equal((await pool.run(2)).result, 2);
+    assert.equal(workers.length, 1, "back-to-back tasks reuse the worker");
+    assert.equal(workers[0].terminated, false);
+
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    assert.equal(workers[0].terminated, true, "the idle worker is retired");
+
+    assert.equal((await pool.run(3)).result, 3);
+    assert.equal(workers.length, 2, "the next task starts a fresh worker");
+    assert.equal(workers[1].posts, 1);
+  } finally {
+    await pool.close();
+  }
+});
+
+test("a busy worker is never retired for idleness", async () => {
+  const workers = [];
+  const pool = createWorkerPool({
+    poolSize: 1,
+    idleTimeoutMs: 20,
+    workerFactory: () => {
+      const worker = new FakeWorker((payload) => setTimeout(() => {
+        worker.emit("message", { ok: true, result: payload });
+      }, 80));
+      workers.push(worker);
+      return worker;
+    },
+  });
+
+  try {
+    assert.equal((await pool.run("slow")).result, "slow");
+    assert.equal(workers.length, 1);
+    assert.equal(workers[0].terminated, false, "the timer only starts once the task finishes");
+  } finally {
+    await pool.close();
+  }
+});
+
+test("idle retirement is off by default for build-side pools", async () => {
+  const worker = new FakeWorker((payload) => queueMicrotask(() => {
+    worker.emit("message", { ok: true, result: payload });
+  }));
+  const pool = createWorkerPool({ poolSize: 1, workerFactory: () => worker });
+  try {
+    await pool.run(1);
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    assert.equal(worker.terminated, false);
+  } finally {
+    await pool.close();
+  }
 });

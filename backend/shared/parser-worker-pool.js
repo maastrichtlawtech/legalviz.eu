@@ -30,6 +30,13 @@ const DEFAULT_PARSER_WORKER_HEAP_MB = 640;
 // Set PARSER_WORKER_RECYCLE_TASKS=0 to disable; the generic pool remains off by
 // default so build-side callers keep their existing lifetime behavior.
 const DEFAULT_PARSER_WORKER_RECYCLE_TASKS = 40;
+// An idle worker never collects the garbage its last parse left behind, and
+// on a quiet server that was most of the process's resident memory: after a
+// run of large acts one idle worker still held ~850 MB of heap. Retiring a
+// worker after a minute idle hands that back; the next parse pays the roughly
+// one-second worker startup again. Set PARSER_WORKER_IDLE_MS=0 to keep
+// workers for the life of the process.
+const DEFAULT_PARSER_WORKER_IDLE_MS = 60_000;
 const MAX_CONSECUTIVE_POOL_FAILURES = 3;
 
 function envInteger(name, fallback, { min = 0 } = {}) {
@@ -47,6 +54,9 @@ function createParserPool(options = {}) {
   const recycleAfter = options.recycleAfter === undefined
     ? envInteger("PARSER_WORKER_RECYCLE_TASKS", DEFAULT_PARSER_WORKER_RECYCLE_TASKS)
     : options.recycleAfter;
+  const idleTimeoutMs = options.idleTimeoutMs === undefined
+    ? envInteger("PARSER_WORKER_IDLE_MS", DEFAULT_PARSER_WORKER_IDLE_MS)
+    : options.idleTimeoutMs;
   const parseFmxXmlInline = options.parseFmxXml || defaultParseFmxXml;
   const parseEurlexHtmlToCombinedInline = options.parseEurlexHtmlToCombined || defaultParseEurlexHtmlToCombined;
 
@@ -80,6 +90,7 @@ function createParserPool(options = {}) {
     queueLimit: options.queueLimit === undefined ? DEFAULT_QUEUE_LIMIT : options.queueLimit,
     taskDeadlineMs: options.taskDeadlineMs === undefined ? DEFAULT_TASK_DEADLINE_MS : options.taskDeadlineMs,
     recycleAfter,
+    idleTimeoutMs,
     workerFactory: options.spawnWorker || (() => new Worker(path.join(__dirname, "parser-worker.js"), {
       resourceLimits: { maxOldGenerationSizeMb: workerHeapMb },
     })),
@@ -150,6 +161,7 @@ module.exports = {
   DEFAULT_PARSER_POOL_SIZE,
   DEFAULT_PARSER_WORKER_HEAP_MB,
   DEFAULT_PARSER_WORKER_RECYCLE_TASKS,
+  DEFAULT_PARSER_WORKER_IDLE_MS,
   DEFAULT_PARSER_QUEUE_LIMIT: DEFAULT_QUEUE_LIMIT,
   DEFAULT_PARSER_TASK_DEADLINE_MS: DEFAULT_TASK_DEADLINE_MS,
   createParserPool,

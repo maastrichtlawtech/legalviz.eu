@@ -6,7 +6,13 @@ const zlib = require("node:zlib");
 const crypto = require("node:crypto");
 const Database = require("better-sqlite3");
 
+const { SEARCH_INDEX_SCHEMA, writeSearchIndex } = require("./persisted-search-index");
 const { enrichSearchRecord } = require("./search-ranking");
+const {
+  buildEurovocSearch,
+  buildMiniSearch,
+  sqliteSearchRecords,
+} = require("./title-index");
 const DEFAULT_SEARCH_CACHE_PATH = path.join(__dirname, "data", "search-cache.json");
 const DEFAULT_SQLITE_DATA_PATH = path.join(__dirname, "data", "data.sqlite");
 // Unversioned on purpose: the data-vN release tag already pins which build this
@@ -17,7 +23,7 @@ const DEFAULT_CASE_LAW_CACHE_PATH = path.join(__dirname, "data", "case-law-cache
 const DEFAULT_CITATION_GRAPH_PATH = path.join(__dirname, "data", "citation-graph.json");
 const DEFAULT_DEFINITIONS_PATH = path.join(__dirname, "data", "definitions.json");
 // Keep in lock-step with SQLITE_SCHEMA_VERSION in legal-cache-store.js.
-const SQLITE_SCHEMA_VERSION = 4;
+const SQLITE_SCHEMA_VERSION = 5;
 
 // Normalized form of a cited article, matching how the store compares them, so the
 // (target_celex, target_article_key) index can serve the lookup directly rather than
@@ -227,6 +233,7 @@ function buildSqliteData({
         key TEXT PRIMARY KEY,
         value TEXT NOT NULL
       ) STRICT;
+      ${SEARCH_INDEX_SCHEMA}
       CREATE TABLE laws (
         ordinal INTEGER PRIMARY KEY,
         celex TEXT,
@@ -353,6 +360,8 @@ function buildSqliteData({
     `);
 
     let expectedExcerptCount = 0;
+    const storedRecords = [];
+    let searchIndexes = null;
     let skippedCitationEdges = 0;
     database.exec("BEGIN IMMEDIATE");
     try {
@@ -379,7 +388,9 @@ function buildSqliteData({
           delete withoutExcerpt[derivedKey];
         }
         const celex = String(withoutExcerpt.celex || "").trim().toUpperCase() || null;
-        insertLaw.run(ordinal, celex, JSON.stringify(withoutExcerpt));
+        const recordJson = JSON.stringify(withoutExcerpt);
+        insertLaw.run(ordinal, celex, recordJson);
+        storedRecords.push(recordJson);
 
         if (celex && excerpt && enrichSearchRecord(record).isPrimaryAct) {
           const rowid = ordinal + 1;
@@ -388,6 +399,20 @@ function buildSqliteData({
           expectedExcerptCount += 1;
         }
       });
+
+      // The title/alias and EuroVoc indexes the server would otherwise build in
+      // memory at boot, built here from the records it will load (the stored
+      // JSON, parsed back exactly as the server parses it) and persisted.
+      const indexRecords = sqliteSearchRecords(storedRecords.map((json) => JSON.parse(json)));
+      storedRecords.length = 0;
+      searchIndexes = {
+        title: writeSearchIndex(
+          database,
+          "title",
+          buildMiniSearch(indexRecords, { includeExcerpt: false, includeEurovoc: false }),
+        ),
+        eurovoc: writeSearchIndex(database, "eurovoc", buildEurovocSearch(indexRecords)),
+      };
 
       for (const [rawCelex, details] of caseLawEntries) {
         const celex = String(rawCelex || "").trim().toUpperCase();
@@ -488,6 +513,13 @@ function buildSqliteData({
       );
     }
 
+    for (const [name, written] of Object.entries(searchIndexes)) {
+      const terms = database.prepare("SELECT COUNT(*) AS count FROM search_index_terms WHERE name = ?").get(name).count;
+      if (terms !== written.terms) {
+        throw new Error(`SQLite ${name} search index term count mismatch: wrote ${terms}, expected ${written.terms}`);
+      }
+    }
+
     const citationCount = database.prepare("SELECT COUNT(*) AS count FROM citations").get().count;
     const citationSourceCount = database.prepare("SELECT COUNT(*) AS count FROM citation_sources").get().count;
     const definitionTermCount = database.prepare("SELECT COUNT(*) AS count FROM definition_terms").get().count;
@@ -576,6 +608,7 @@ function buildSqliteData({
         definitionOccurrences: definitionOccurrenceCount,
         definitionUsageEdges: definitionUsageEdgeCount,
       },
+      searchIndexes,
       integrity: {
         sqlite: integrity,
         orphanLawMappings,

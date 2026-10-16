@@ -41,8 +41,10 @@ FROM dependencies AS data-builder
 
 # Only these converter sources participate in the expensive data layer's cache
 # key. Normal application changes do not force the release assets to be fetched
-# and converted again.
-COPY search/build-sqlite-data.js search/search-ranking.js ./search/
+# and converted again. title-index.js and persisted-search-index.js are here
+# because the converter also builds and persists the title/EuroVoc search
+# indexes the server reads back.
+COPY search/build-sqlite-data.js search/search-ranking.js search/title-index.js search/persisted-search-index.js ./search/
 
 # Precomputed data caches are NOT committed to git — a ~48 MB blob would bloat
 # history permanently. They ship as GitHub Release assets (public repo, no auth)

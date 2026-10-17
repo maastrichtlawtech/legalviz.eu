@@ -5,6 +5,7 @@ function getIp(req) {
 function createRateLimitMiddleware(options = {}) {
   const windowMs = options.windowMs || 15 * 60 * 1000;
   const max = options.max || 500;
+  const maxTrackedIps = options.maxTrackedIps || 50000;
   const ipRequests = new Map();
 
   function middleware(req, res, next) {
@@ -13,6 +14,9 @@ function createRateLimitMiddleware(options = {}) {
 
     let record = ipRequests.get(ip);
     if (!record || now > record.resetAt) {
+      if (!ipRequests.has(ip) && ipRequests.size >= maxTrackedIps) {
+        ipRequests.delete(ipRequests.keys().next().value);
+      }
       record = { count: 0, resetAt: now + windowMs };
       ipRequests.set(ip, record);
     }
@@ -50,6 +54,7 @@ function createRateLimitMiddleware(options = {}) {
 function createGenerationLimitMiddleware(options = {}) {
   const windowMs = options.windowMs || 60 * 60 * 1000; // 1 hour
   const max = options.max || 10;
+  const maxTrackedIps = options.maxTrackedIps || 50000;
   const generations = new Map();
 
   function middleware(req, res, next) {
@@ -58,6 +63,9 @@ function createGenerationLimitMiddleware(options = {}) {
 
     let record = generations.get(ip);
     if (!record || now > record.resetAt) {
+      if (!generations.has(ip) && generations.size >= maxTrackedIps) {
+        generations.delete(generations.keys().next().value);
+      }
       record = { count: 0, resetAt: now + windowMs };
       generations.set(ip, record);
     }

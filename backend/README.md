@@ -622,15 +622,23 @@ integrity results. Runtime opens the result read-only through
 `node:sqlite` API.
 
 The revised search keeps deterministic CELEX, official-reference, and exact
-alias matches first. Broad queries retrieve independent candidate lists from an
-in-memory title/alias MiniSearch index, an in-memory EuroVoc MiniSearch index,
-and the contentless SQLite FTS5 excerpt index. Weighted reciprocal-rank fusion
-combines those lists, then applies bounded act-type, in-force-status, and
-log-damped citation priors. The JSON path uses a separate excerpt MiniSearch
-index as its development fallback; production serves SQLite.
+alias matches first. Broad queries retrieve independent candidate lists from a
+title/alias index, a EuroVoc index, and the contentless SQLite FTS5 excerpt
+index. Weighted reciprocal-rank fusion combines those lists, then applies
+bounded act-type, in-force-status, and log-damped citation priors.
 
-This costs roughly 385 MB V8 heap / 675 MB process RSS for data-v9 before a
-browser is launched. Provision at least 1.5 GiB for the backend process so law
+The title/alias and EuroVoc indexes are MiniSearch indexes, but on the SQLite
+path they are not held in memory: `build-sqlite-data.js` builds them from the
+same records the server loads (`search/title-index.js`) and writes MiniSearch's
+serialised index into `data.sqlite`, and `search/persisted-search-index.js`
+answers queries from it with MiniSearch's own scoring, reading only the postings
+of the terms a query expands to. Its results are MiniSearch's exactly, scores
+and tie order included; `search/persisted-search-index.test.js` enforces that.
+The JSON path builds all three indexes in memory with MiniSearch (including a
+separate excerpt index) as its development fallback; production serves SQLite.
+
+On `data-2026-10-05.01` this costs roughly 200 MB V8 heap / 330 MB process RSS
+after load, before a law is parsed or a browser is launched. Provision at least 1.5 GiB for the backend process so law
 fetching and parsing have headroom. Re-run `search/eval/run.js` after changing
 the data release or Node runtime; see `search/eval/README.md` for the quality,
 latency, memory, signal-coverage, and paired-comparison gates.

@@ -2,65 +2,37 @@ const fs = require("fs");
 const path = require("path");
 const zlib = require("zlib");
 const Database = require("better-sqlite3");
-const MiniSearch = require("minisearch");
 
+const { PersistedSearchIndex } = require("./persisted-search-index");
 const {
   determineMatchReason,
   enrichSearchRecord,
   parseStructuredQuery,
 } = require("./search-ranking");
+const {
+  EUROVOC_INDEX_OPTIONS,
+  buildEurovocSearch,
+  buildExcerptMiniSearch,
+  buildMiniSearch,
+  isNotYetInForce,
+  mergeSupplementalRecords,
+  normalizeCelexLookupKey,
+  sqliteSearchRecords,
+  titleIndexOptions,
+  titleIndexStoredFields,
+  todayIso,
+} = require("./title-index");
 
 const BUILTIN_SEARCH_CACHE_PATH = path.join(__dirname, "data", "search-cache.json");
 const DEFAULT_SEARCH_CACHE_PATH = process.env.SEARCH_CACHE_PATH || BUILTIN_SEARCH_CACHE_PATH;
 const DEFAULT_SQLITE_DATA_PATH = path.join(__dirname, "data", "data.sqlite");
 const DEFAULT_DEFINITIONS_PATH = path.join(__dirname, "data", "definitions.json");
 const DEFAULT_FULLTEXT_SQLITE_PATH = path.join(__dirname, "data", "fulltext.sqlite");
-const SQLITE_SCHEMA_VERSION = 4;
+const SQLITE_SCHEMA_VERSION = 5;
 // Own copy of the version stamped by fulltext-index-build.js (FULLTEXT_SCHEMA_VERSION
 // there) — citation-graph-store.js style: a separate optional artifact keeps its own
 // lock-step constant rather than importing across files. Bump both together.
 const FULLTEXT_SCHEMA_VERSION = 1;
-
-const SUPPLEMENTAL_RECORDS = [
-  {
-    celex: "32000L0031",
-    title: "Directive 2000/31/EC of the European Parliament and of the Council of 8 June 2000 on certain legal aspects of information society services, in particular electronic commerce, in the Internal Market (Directive on electronic commerce)",
-    type: "directive",
-    date: "2000-06-08",
-    eli: "http://data.europa.eu/eli/dir/2000/31/oj",
-    fmxAvailable: false,
-    fmxUnavailable: false,
-  },
-  {
-    celex: "32002L0058",
-    title: "Directive 2002/58/EC of the European Parliament and of the Council of 12 July 2002 concerning the processing of personal data and the protection of privacy in the electronic communications sector (Directive on privacy and electronic communications)",
-    type: "directive",
-    date: "2002-07-12",
-    eli: "http://data.europa.eu/eli/dir/2002/58/oj",
-    fmxAvailable: false,
-    fmxUnavailable: false,
-  },
-];
-
-function mergeSupplementalRecords(records) {
-  const merged = Array.isArray(records) ? [...records] : [];
-  const seen = new Set(merged.map((record) => normalizeCelexLookupKey(record?.celex)).filter(Boolean));
-
-  for (const record of SUPPLEMENTAL_RECORDS) {
-    const celexKey = normalizeCelexLookupKey(record.celex);
-    if (celexKey && !seen.has(celexKey)) {
-      merged.push(record);
-      seen.add(celexKey);
-    }
-  }
-
-  return merged;
-}
-
-function normalizeCelexLookupKey(celex) {
-  const normalized = String(celex || "").trim().toUpperCase();
-  return normalized || null;
-}
 
 function normalizeDefinitionTerm(value) {
   return String(value || "")
@@ -128,30 +100,6 @@ function getDeterministicMatch(index, key) {
   return matches.length === 1 ? matches[0] : null;
 }
 
-// MiniSearch throws on a duplicate id, so a single duplicated CELEX would
-// otherwise take down the whole search index. Keep one record per CELEX and
-// drop records without a usable CELEX (they can't be indexed). The other
-// lookup maps intentionally keep duplicates so they can flag ambiguity.
-function dedupeByCelex(records) {
-  const seen = new Set();
-  const unique = [];
-  for (const record of records) {
-    const key = normalizeCelexLookupKey(record.celex);
-    if (!key || seen.has(key)) continue;
-    seen.add(key);
-    unique.push(record);
-  }
-  return unique;
-}
-
-// excerpt (recitals + Art. 1/2 body text, see search-build.js) exists purely
-// to add recall for conceptual queries that never hit a title/alias term
-// (e.g. "automated decision-making"). It is long, unstructured body text, so
-// it gets a boost an order of magnitude below title/aliases: enough to
-// surface a law that free text alone would otherwise miss entirely, but not
-// enough for body-text noise to outrank a genuine title/alias match.
-const EXCERPT_BOOST = 0.3;
-const EUROVOC_BOOST = 0.8;
 const IN_FORCE_BOOST = 1.08;
 const NO_LONGER_IN_FORCE_BOOST = 0.9;
 const MAX_CITATION_BOOST = 1.2;
@@ -192,142 +140,6 @@ function citationBoost(count, {
 function requestsHistoricalLaw(parsed) {
   return /\b(?:former|historic|historical|old|repealed|repeal|expired|obsolete|superseded|no longer in force)\b/i
     .test(String(parsed.originalQuery || ""));
-}
-
-function todayIso() {
-  return new Date().toISOString().slice(0, 10);
-}
-
-// `inForce: false` covers two opposite situations, and only an entry-into-force
-// date separates them: an act that has fallen out of force, and one that is
-// published but has not entered into force yet. Acts are harvested when
-// published, normally before entry into force, so every new act spends its
-// first weeks reading `false` — and without this it was ranked, and labelled,
-// as though it had expired.
-function isNotYetInForce(record, today = todayIso()) {
-  return record?.inForce === false
-    && typeof record?.entryIntoForce === "string"
-    && record.entryIntoForce > today;
-}
-
-function buildMiniSearch(records, { includeExcerpt = true, includeEurovoc = true } = {}) {
-  const fields = ["title", "aliases"];
-  if (includeEurovoc) fields.push("eurovoc");
-  if (includeExcerpt) fields.push("excerpt");
-  const boost = { aliases: 3, title: 1 };
-  if (includeEurovoc) boost.eurovoc = EUROVOC_BOOST;
-  if (includeExcerpt) boost.excerpt = EXCERPT_BOOST;
-  const miniSearch = new MiniSearch({
-    idField: "celex",
-    fields,
-    storeFields: ["type", "inForce", "notYetInForce"],
-    searchOptions: {
-      boost,
-      fuzzy: 0.2,
-      prefix: true,
-      combineWith: "AND",
-    },
-  });
-
-  const today = todayIso();
-  miniSearch.addAll(dedupeByCelex(records).map((record) => ({
-    celex: record.celex,
-    title: record.title || "",
-    // Exact CELEX/type aliases are handled by deterministic maps before
-    // MiniSearch. Excluding them here avoids ~80k unique CELEX terms and huge
-    // low-value postings for the three act-type words, while retaining named
-    // aliases/acronyms for fuzzy and prefix matching.
-    aliases: searchableAliases(record).join(" "),
-    eurovoc: (record.eurovoc || []).join(" "),
-    excerpt: record.excerpt || "",
-    type: record.type,
-    inForce: record.inForce,
-    // Resolved once here rather than per query hit: "in the future" is relative
-    // to index-build time, which moves when the store is rebuilt.
-    notYetInForce: isNotYetInForce(record, today),
-  })));
-
-  return miniSearch;
-}
-
-function buildEurovocSearch(records) {
-  const miniSearch = new MiniSearch({
-    idField: "celex",
-    fields: ["eurovoc"],
-    searchOptions: {
-      fuzzy: false,
-      prefix: true,
-      combineWith: "AND",
-    },
-  });
-  miniSearch.addAll(dedupeByCelex(records).map((record) => ({
-    celex: record.celex,
-    eurovoc: (record.eurovoc || []).join(" "),
-  })));
-  return miniSearch;
-}
-
-function buildExcerptMiniSearch(records) {
-  const miniSearch = new MiniSearch({
-    idField: "celex",
-    fields: ["excerpt"],
-    searchOptions: {
-      fuzzy: false,
-      prefix: true,
-      combineWith: "AND",
-    },
-  });
-  miniSearch.addAll(dedupeByCelex(records).map((record) => ({
-    celex: record.celex,
-    excerpt: record.excerpt || "",
-  })));
-  return miniSearch;
-}
-
-function searchableAliases(record) {
-  const celex = normalizeCelexLookupKey(record.celex)?.toLowerCase() || "";
-  const type = String(record.type || "").toLowerCase();
-  const structural = new Set([
-    celex,
-    type,
-    `${type} ${celex}`.trim(),
-    `${type}${celex}`,
-  ]);
-  return (record.aliases || []).filter((alias) => !structural.has(alias));
-}
-
-// NOTE: this is an explicit whitelist, not a projection — a field added to the
-// cache records upstream is dropped here unless it is named below, and nothing
-// errors when that happens. enrichSearchRecord spreads `{...record}`, so new
-// fields survive *it* and appear to flow through end to end in a JSON-cache dev
-// checkout, then silently vanish in production, which loads from SQLite. Add the
-// field here and to the result mapping in searchLaws() below, or it will not
-// reach the client.
-function compactSqliteRecord(record) {
-  const enriched = enrichSearchRecord(record);
-  if (!enriched.isPrimaryAct) return null;
-  return {
-    celex: enriched.celex,
-    title: enriched.title,
-    date: enriched.date || null,
-    eli: enriched.eli || null,
-    type: enriched.type,
-    fmxAvailable: enriched.fmxAvailable,
-    fmxUnavailable: enriched.fmxUnavailable,
-    enrichError: enriched.enrichError,
-    eurovoc: enriched.eurovoc,
-    // Passed through undefined-and-all, like eurovoc above: JSON.stringify drops
-    // an undefined key, so a record predating the field hydrates identically
-    // from JSON and from SQLite. Coercing to null here instead would store an
-    // explicit null and break that parity. Normalisation belongs at the wire
-    // boundary (searchLaws), not here.
-    inForce: enriched.inForce,
-    endOfValidity: enriched.endOfValidity,
-    entryIntoForce: enriched.entryIntoForce,
-    celexYear: enriched.celexYear,
-    celexNumber: enriched.celexNumber,
-    aliases: enriched.aliases,
-  };
 }
 
 function buildFtsExpression(terms, operator) {
@@ -1026,7 +838,9 @@ class JsonLegalCacheStore {
     return false;
   }
 
-  indexRecords(records, { includeExcerpt }) {
+  // `persisted` carries the title/alias and EuroVoc indexes read from
+  // data.sqlite; without it they are built in memory with MiniSearch.
+  indexRecords(records, { includeExcerpt, persisted = null }) {
     this.records = records;
     this.byCelex = new Map();
     this.byEli = new Map();
@@ -1065,11 +879,13 @@ class JsonLegalCacheStore {
     }
 
     const revised = this.rankingProfile !== "baseline";
-    this.miniSearch = buildMiniSearch(records, {
+    // `miniSearch` and `eurovocSearch` are either MiniSearch instances or
+    // PersistedSearchIndex readers; searchLaws uses only search() on them.
+    this.miniSearch = persisted ? persisted.title : buildMiniSearch(records, {
       includeExcerpt: includeExcerpt && !revised,
       includeEurovoc: false,
     });
-    this.eurovocSearch = revised ? buildEurovocSearch(records) : null;
+    this.eurovocSearch = revised ? (persisted ? persisted.eurovoc : buildEurovocSearch(records)) : null;
     this.excerptMiniSearch = revised && includeExcerpt ? buildExcerptMiniSearch(records) : null;
     this.loadedAt = new Date().toISOString();
     this.loadError = null;
@@ -1086,25 +902,42 @@ class JsonLegalCacheStore {
         );
       }
 
-      const records = [];
-      const seen = new Set();
-      for (const row of database.prepare("SELECT record_json FROM laws ORDER BY ordinal").iterate()) {
-        const record = compactSqliteRecord(JSON.parse(row.record_json));
-        if (!record) continue;
-        records.push(record);
-        const key = normalizeCelexLookupKey(record.celex);
-        if (key) seen.add(key);
-      }
-      for (const supplemental of SUPPLEMENTAL_RECORDS) {
-        const key = normalizeCelexLookupKey(supplemental.celex);
-        if (!key || seen.has(key)) continue;
-        // Same guard as the row loop above: compactSqliteRecord returns null
-        // for a record it can't compact, and a null in `records` crashes every
-        // consumer that reads `.celex` off it.
-        const record = compactSqliteRecord(supplemental);
-        if (!record) continue;
-        records.push(record);
-        seen.add(key);
+      // build-sqlite-data.js indexes exactly these records, through the same
+      // sqliteSearchRecords, so the persisted indexes' ids resolve here.
+      const records = sqliteSearchRecords((function* lawRows() {
+        for (const row of database.prepare("SELECT record_json FROM laws ORDER BY ordinal").iterate()) {
+          yield JSON.parse(row.record_json);
+        }
+      })());
+      // Stored fields only feed boostDocument, which only the baseline ranking
+      // profile passes, so the lookup is built on first use. Like MiniSearch,
+      // the index resolves "not yet in force" against the day it was loaded,
+      // and keeps the first record of a duplicated CELEX.
+      const today = todayIso();
+      let storedFieldsByCelex = null;
+      const storedFields = (celex) => {
+        if (!storedFieldsByCelex) {
+          storedFieldsByCelex = new Map();
+          for (const record of records) {
+            if (!storedFieldsByCelex.has(record.celex)) {
+              storedFieldsByCelex.set(record.celex, titleIndexStoredFields(record, today));
+            }
+          }
+        }
+        return storedFieldsByCelex.get(celex) || {};
+      };
+      const persisted = {
+        title: PersistedSearchIndex.open(
+          database,
+          "title",
+          titleIndexOptions({ includeExcerpt: false, includeEurovoc: false }),
+          { storedFields },
+        ),
+        eurovoc: PersistedSearchIndex.open(database, "eurovoc", EUROVOC_INDEX_OPTIONS),
+      };
+      if (!persisted.title || !persisted.eurovoc) {
+        database.close();
+        return this.failLoad("SQLite data has no persisted title/EuroVoc search index");
       }
 
       this.database = database;
@@ -1157,7 +990,7 @@ class JsonLegalCacheStore {
         "SELECT value FROM metadata WHERE key = 'definitions_available'"
       ).get()?.value === "1";
       this.payload = null;
-      this.indexRecords(records, { includeExcerpt: false });
+      this.indexRecords(records, { includeExcerpt: false, persisted });
       // indexRecords resets only law indexes; preserve the SQLite availability
       // discovered above after it has initialized common store state.
       this.definitionsAvailable = database.prepare(

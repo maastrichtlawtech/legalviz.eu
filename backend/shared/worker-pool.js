@@ -84,6 +84,7 @@ function createWorkerPool({
   taskDeadlineMs = DEFAULT_TASK_DEADLINE_MS,
   queueLimit = DEFAULT_QUEUE_LIMIT,
   recycleAfter = 0,
+  idleTimeoutMs = 0,
 } = {}) {
   if (!Number.isInteger(poolSize) || poolSize < 1) {
     throw new Error(`Worker pool size must be a positive integer, got ${poolSize}`);
@@ -99,6 +100,9 @@ function createWorkerPool({
   }
   if (!Number.isInteger(recycleAfter) || recycleAfter < 0) {
     throw new Error(`Worker recycle threshold must be a non-negative integer, got ${recycleAfter}`);
+  }
+  if (!Number.isFinite(idleTimeoutMs) || idleTimeoutMs < 0) {
+    throw new Error(`Worker idle timeout must be a non-negative number, got ${idleTimeoutMs}`);
   }
 
   const workers = new Set();
@@ -130,7 +134,7 @@ function createWorkerPool({
   }
 
   function attachWorker(thread) {
-    const record = { thread, job: null, dead: false, retiring: false, completedTasks: 0 };
+    const record = { thread, job: null, dead: false, retiring: false, completedTasks: 0, idleTimer: null };
     workers.add(record);
 
     thread.on("message", (message) => {
@@ -199,6 +203,7 @@ function createWorkerPool({
   function handleWorkerLoss(record, error, { terminate = false } = {}) {
     if (record.dead || record.retiring) return;
     record.dead = true;
+    clearIdleTimer(record);
     workers.delete(record);
     const job = record.job;
     record.job = null;
@@ -223,6 +228,39 @@ function createWorkerPool({
     dispatch();
   }
 
+  function clearIdleTimer(record) {
+    if (record.idleTimer) {
+      clearTimeout(record.idleTimer);
+      record.idleTimer = null;
+    }
+  }
+
+  function retire(record) {
+    clearIdleTimer(record);
+    record.retiring = true;
+    workers.delete(record);
+    const termination = Promise.resolve(record.thread.terminate()).catch(() => {});
+    retiringTerminations.add(termination);
+    termination.then(() => retiringTerminations.delete(termination));
+  }
+
+  // An idle worker keeps whatever its last parse left on its heap: V8 only
+  // collects when the thread allocates, and an idle thread allocates nothing.
+  // After one large act that was ~850 MB of garbage held indefinitely, so the
+  // serving pool retires idle workers and run() starts fresh ones on demand.
+  function armIdleTimers() {
+    if (idleTimeoutMs <= 0 || closed) return;
+    for (const record of workers) {
+      if (record.dead || record.job || record.idleTimer) continue;
+      record.idleTimer = setTimeout(() => {
+        record.idleTimer = null;
+        if (closed || record.dead || record.retiring || record.job) return;
+        retire(record);
+      }, idleTimeoutMs);
+      record.idleTimer.unref?.();
+    }
+  }
+
   function replaceForRecycle(record) {
     // Start the replacement before retiring the idle worker. A transient
     // factory failure therefore leaves the existing worker available for the
@@ -235,11 +273,7 @@ function createWorkerPool({
       return record;
     }
 
-    record.retiring = true;
-    workers.delete(record);
-    const termination = Promise.resolve(record.thread.terminate()).catch(() => {});
-    retiringTerminations.add(termination);
-    termination.then(() => retiringTerminations.delete(termination));
+    retire(record);
     return replacement;
   }
 
@@ -258,6 +292,7 @@ function createWorkerPool({
         }
       }
       const job = queue.shift();
+      clearIdleTimer(record);
       record.job = job;
       job.timer = setTimeout(() => {
         if (record.job !== job || record.dead) return;
@@ -293,6 +328,7 @@ function createWorkerPool({
         queueMicrotask(dispatch);
       }
     }
+    armIdleTimers();
   }
 
   function run(payload, { onResult } = {}) {
@@ -330,6 +366,7 @@ function createWorkerPool({
     const active = [...workers];
     for (const record of active) {
       record.dead = true;
+      clearIdleTimer(record);
       workers.delete(record);
       const job = record.job;
       record.job = null;

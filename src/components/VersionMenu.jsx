@@ -3,6 +3,7 @@ import { Check, ChevronDown, ExternalLink, History, Loader2 } from "lucide-react
 
 import { useI18n } from "../i18n/useI18n.js";
 import { useConsolidationStatus } from "../hooks/useConsolidationStatus.js";
+import { formatAmendmentSummary } from "../utils/formatAmendmentSummary.js";
 import { formatMetaDate } from "../utils/formatMetaDate.js";
 import { buildEurlexCelexUrl } from "../utils/url.js";
 
@@ -230,20 +231,4 @@ export function VersionMenu({
       ) : null}
     </div>
   );
-}
-
-/**
- * "Amended once, on 8 Jul 2026" and its variants. The catalog carries no
- * plural machinery, so the singular is its own key. A truncated amendment
- * count is a lower bound, never an exact number (see `truncated` in
- * fetchAmendments), so it gets its own "at least N" copy rather than risk a
- * precise-looking figure that is provably wrong.
- */
-export function formatAmendmentSummary(status, locale, t) {
-  const amendedOn = formatMetaDate(status.latestAmendmentDate, locale);
-  const once = status.amendmentCount === 1 && status.amendmentCountExact;
-  const key = status.amendmentCountExact
-    ? (once ? "consolidation.amendedOnce" : "consolidation.amended")
-    : "consolidation.amendedAtLeast";
-  return t(amendedOn ? `${key}WithDate` : key, { count: status.amendmentCount, date: amendedOn });
 }

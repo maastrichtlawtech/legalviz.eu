@@ -1,6 +1,6 @@
 import { useI18n } from "../../i18n/useI18n.js";
 import { useConsolidationStatus } from "../../hooks/useConsolidationStatus.js";
-import { formatAmendmentSummary } from "../VersionMenu.jsx";
+import { formatAmendmentSummary } from "../../utils/formatAmendmentSummary.js";
 
 /**
  * The overview's amendment fact, set as one more item in its metadata row

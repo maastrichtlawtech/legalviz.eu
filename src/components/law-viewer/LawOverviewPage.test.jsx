@@ -5,8 +5,8 @@ import { MemoryRouter } from "react-router-dom";
 
 vi.mock("../LawSummary.jsx", () => ({ LawSummary: () => null }));
 vi.mock("../MetadataPanel.jsx", () => ({ MetadataPanel: () => null }));
-vi.mock("../ConsolidationNotice.jsx", () => ({
-  ConsolidationNotice: ({ variant }) => createElement("div", { "data-variant": variant }),
+vi.mock("./AmendmentStatusMeta.jsx", () => ({
+  AmendmentStatusMeta: ({ celex }) => createElement("span", { "data-amendment-status": celex }),
 }));
 vi.mock("./ConsolidatedFallbackNotice.jsx", () => ({ ConsolidatedFallbackNotice: () => null }));
 vi.mock("../../hooks/useLawMetadata.js", () => ({
@@ -50,7 +50,7 @@ afterEach(() => {
 });
 
 describe("LawOverviewPage", () => {
-  it("uses the compact notice and keeps the overview action labels without Print", async () => {
+  it("puts the amendment status in the metadata row and keeps the overview action labels without Print", async () => {
     await act(async () => {
       root = createRoot(container);
       root.render(
@@ -77,7 +77,7 @@ describe("LawOverviewPage", () => {
       );
     });
 
-    expect(container.querySelector("[data-variant=compact]")).toBeTruthy();
+    expect(container.querySelector("[data-amendment-status='32020R0001']")).toBeTruthy();
     expect(container.textContent).toContain("Start reading");
     expect(container.textContent).toContain("CJEU Case Law");
     expect(container.textContent).toContain("Legislative history on EUR-Lex");

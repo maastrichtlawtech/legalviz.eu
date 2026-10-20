@@ -165,8 +165,7 @@
     "mcpClaudeSteps": "Impostazioni → Connettori → Aggiungi connettore personalizzato, poi incolla l'URL.",
     "mcpOthersName": "Cursor, VS Code e altri client MCP",
     "mcpOthersSteps": "Aggiungi l'URL alla configurazione MCP del client come server Streamable HTTP. Nessuna chiave API o account richiesti.",
-    "mcpDocs": "Guida completa e strumenti disponibili",
-    "mcpShortLabel": "IA"
+    "mcpDocs": "Guida completa e strumenti disponibili"
   },
   "resetFooter": {
     "title": "Qualcosa non funziona?",

@@ -165,8 +165,7 @@
     "mcpClaudeSteps": "Settings → Connectors → Add custom connector, imbagħad waħħal il-URL.",
     "mcpOthersName": "Cursor, VS Code u klijenti MCP oħra",
     "mcpOthersSteps": "Żid il-URL fil-konfigurazzjoni MCP tal-klijent bħala server Streamable HTTP. L-ebda ċavetta API jew kont meħtieġa.",
-    "mcpDocs": "Gwida sħiħa u għodod disponibbli",
-    "mcpShortLabel": "IA"
+    "mcpDocs": "Gwida sħiħa u għodod disponibbli"
   },
   "resetFooter": {
     "title": "Xi ħaġa ma taħdimx?",

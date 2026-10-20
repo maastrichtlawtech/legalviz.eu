@@ -165,8 +165,7 @@
     "mcpClaudeSteps": "Postavke → Konektori → Dodaj prilagođeni konektor, zatim zalijepite URL.",
     "mcpOthersName": "Cursor, VS Code i drugi MCP klijenti",
     "mcpOthersSteps": "Dodajte URL u MCP konfiguraciju klijenta kao Streamable HTTP poslužitelj. Nisu potrebni API ključ ni račun.",
-    "mcpDocs": "Potpuni vodič i dostupni alati",
-    "mcpShortLabel": "UI"
+    "mcpDocs": "Potpuni vodič i dostupni alati"
   },
   "resetFooter": {
     "title": "Nešto ne radi?",

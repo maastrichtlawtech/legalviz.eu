@@ -165,8 +165,7 @@
     "mcpClaudeSteps": "Asetukset → Liittimet → Lisää mukautettu liitin ja liitä sitten URL.",
     "mcpOthersName": "Cursor, VS Code ja muut MCP-asiakkaat",
     "mcpOthersSteps": "Lisää URL asiakasohjelman MCP-määritykseen Streamable HTTP -palvelimena. API-avainta tai tiliä ei tarvita.",
-    "mcpDocs": "Täydellinen ohje ja käytettävissä olevat työkalut",
-    "mcpShortLabel": "AI"
+    "mcpDocs": "Täydellinen ohje ja käytettävissä olevat työkalut"
   },
   "resetFooter": {
     "title": "Eikö jokin toimi?",

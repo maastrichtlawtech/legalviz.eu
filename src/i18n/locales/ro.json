@@ -165,8 +165,7 @@
     "mcpClaudeSteps": "Setări → Conectori → Adăugare conector personalizat, apoi lipiți URL-ul.",
     "mcpOthersName": "Cursor, VS Code și alți clienți MCP",
     "mcpOthersSteps": "Adăugați URL-ul în configurația MCP a clientului ca server Streamable HTTP. Nu este nevoie de cheie API sau cont.",
-    "mcpDocs": "Ghid complet și instrumente disponibile",
-    "mcpShortLabel": "IA"
+    "mcpDocs": "Ghid complet și instrumente disponibile"
   },
   "resetFooter": {
     "title": "Ceva nu funcționează?",

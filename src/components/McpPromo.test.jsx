@@ -4,10 +4,9 @@ import { createRoot } from "react-dom/client";
 import { createElement } from "react";
 import { MemoryRouter } from "react-router-dom";
 
-const { McpLandingTeaser, McpTopBarButton } = await import("./McpPromo.jsx");
+const { McpLandingTeaser } = await import("./McpPromo.jsx");
 const { I18nProvider } = await import("../i18n/I18nProvider.jsx");
 
-const MCP_PROMO_SEEN_KEY = "legalviz_mcp_promo_seen";
 const MCP_SERVER_URL = "https://api.legalviz.eu/mcp";
 
 let container;
@@ -122,30 +121,5 @@ describe("McpModal", () => {
 
     expect(execCommand).toHaveBeenCalledWith("copy");
     expect(copyButton.textContent).toContain("Copied");
-  });
-});
-
-describe("McpTopBarButton", () => {
-  it("shows a dismissal dot until first opened, and persists the dismissal", () => {
-    render(McpTopBarButton);
-
-    expect(container.querySelector(".bg-eu-gold-deep")).not.toBeNull();
-    expect(window.localStorage.getItem(MCP_PROMO_SEEN_KEY)).toBeNull();
-
-    act(() => {
-      container.querySelector("button").click();
-    });
-
-    expect(document.querySelector('[role="dialog"]')).not.toBeNull();
-    expect(container.querySelector(".bg-eu-gold-deep")).toBeNull();
-    expect(window.localStorage.getItem(MCP_PROMO_SEEN_KEY)).toBe("1");
-  });
-
-  it("renders without a dot on remount once the promo has been seen", () => {
-    window.localStorage.setItem(MCP_PROMO_SEEN_KEY, "1");
-
-    render(McpTopBarButton);
-
-    expect(container.querySelector(".bg-eu-gold-deep")).toBeNull();
   });
 });

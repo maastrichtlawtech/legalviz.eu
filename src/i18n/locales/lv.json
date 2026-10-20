@@ -165,8 +165,7 @@
     "mcpClaudeSteps": "Iestatījumi → Savienotāji → Pievienot pielāgotu savienotāju, pēc tam ielīmējiet URL.",
     "mcpOthersName": "Cursor, VS Code un citi MCP klienti",
     "mcpOthersSteps": "Pievienojiet URL klienta MCP konfigurācijā kā Streamable HTTP serveri. API atslēga vai konts nav nepieciešami.",
-    "mcpDocs": "Pilna pamācība un pieejamie rīki",
-    "mcpShortLabel": "MI"
+    "mcpDocs": "Pilna pamācība un pieejamie rīki"
   },
   "resetFooter": {
     "title": "Kaut kas nedarbojas?",

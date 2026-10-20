@@ -165,8 +165,7 @@
     "mcpClaudeSteps": "Inställningar → Anslutningar → Lägg till anpassad anslutning och klistra sedan in URL:en.",
     "mcpOthersName": "Cursor, VS Code och andra MCP-klienter",
     "mcpOthersSteps": "Lägg till URL:en i klientens MCP-konfiguration som en Streamable HTTP-server. Ingen API-nyckel eller konto krävs.",
-    "mcpDocs": "Fullständig guide och tillgängliga verktyg",
-    "mcpShortLabel": "AI"
+    "mcpDocs": "Fullständig guide och tillgängliga verktyg"
   },
   "resetFooter": {
     "title": "Är det något som inte fungerar?",

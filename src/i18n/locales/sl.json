@@ -165,8 +165,7 @@
     "mcpClaudeSteps": "Nastavitve → Povezovalniki → Dodaj povezovalnik po meri, nato prilepite URL.",
     "mcpOthersName": "Cursor, VS Code in drugi odjemalci MCP",
     "mcpOthersSteps": "Dodajte URL v konfiguracijo MCP odjemalca kot strežnik Streamable HTTP. Ključ API ali račun nista potrebna.",
-    "mcpDocs": "Celotna navodila in razpoložljiva orodja",
-    "mcpShortLabel": "UI"
+    "mcpDocs": "Celotna navodila in razpoložljiva orodja"
   },
   "resetFooter": {
     "title": "Nekaj ne deluje?",

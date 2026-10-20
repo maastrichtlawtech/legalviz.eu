@@ -17,7 +17,6 @@ import { useSearchNavigation } from "../hooks/useSearchNavigation.js";
 import { useNetworkedSearch } from "../hooks/search/useNetworkedSearch.js";
 import { useLocalSearchIndexes } from "../hooks/search/useLocalSearchIndexes.js";
 import { ToolsMenu } from "./ToolsMenu.jsx";
-import { McpTopBarButton } from "./McpPromo.jsx";
 import { SearchModal } from "./search/SearchModal.jsx";
 
 // Law search hits the network per query, so wait for a typing pause before
@@ -563,6 +562,7 @@ export function TopBar({
   onDecreaseFont,
   fontSize,
   formexLang,
+  versionControl = null,
   searchableLawCount = 0,
   onFormexLangChange,
   formexLangLocked = false,
@@ -657,6 +657,8 @@ export function TopBar({
 
         {/* Right: Navigation Controls */}
         <div className="flex-shrink-0 flex items-center gap-2 md:gap-3">
+          {versionControl}
+
           <LanguageSelector
             currentLang={formexLang}
             onChangeLang={onFormexLangChange}
@@ -664,8 +666,6 @@ export function TopBar({
             disabled={formexLangLocked}
             excludeLanguages={formexLanguageExclusions}
           />
-
-          <McpTopBarButton />
 
           <div className="relative flex items-center">
             <ToolsMenu

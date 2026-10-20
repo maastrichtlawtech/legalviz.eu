@@ -15,12 +15,11 @@ import { useI18n } from "../../i18n/useI18n.js";
  * also composes a `fmx-consolidated` payload, but for a reason the reader
  * chose rather than one EUR-Lex forced. `version` is what tells the two
  * apart: this notice only concerns the forced case (no `version` requested),
- * because a requested reading gets `ConsolidationNotice`'s own reverse-state
- * banner instead — showing both would say the same thing twice.
+ * because a requested reading is shown by `VersionMenu` in the top bar
+ * instead — showing both would say the same thing twice.
  *
- * `ConsolidationNotice` is the mirror image of this one and suppresses itself
- * for the same unrequested source, since "you are reading this law as
- * adopted" is false here.
+ * `VersionMenu` is the mirror image of this one and hides itself for the same
+ * unrequested source, since there is no as-adopted text to switch back to.
  */
 export function ConsolidatedFallbackNotice({ source, consolidatedVersion = null, version = null }) {
   const { t } = useI18n();

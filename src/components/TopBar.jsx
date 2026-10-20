@@ -17,7 +17,6 @@ import { useSearchNavigation } from "../hooks/useSearchNavigation.js";
 import { useNetworkedSearch } from "../hooks/search/useNetworkedSearch.js";
 import { useLocalSearchIndexes } from "../hooks/search/useLocalSearchIndexes.js";
 import { ToolsMenu } from "./ToolsMenu.jsx";
-import { McpTopBarButton } from "./McpPromo.jsx";
 import { SearchModal } from "./search/SearchModal.jsx";
 
 // Law search hits the network per query, so wait for a typing pause before
@@ -573,7 +572,6 @@ export function TopBar({
   isSideBySide = false,
   onResetApp,
   showSearch = true,
-  showMcpButton = true,
   searchModes = null,
   defaultSearchMode = null,
 }) {
@@ -668,8 +666,6 @@ export function TopBar({
             disabled={formexLangLocked}
             excludeLanguages={formexLanguageExclusions}
           />
-
-          {showMcpButton ? <McpTopBarButton /> : null}
 
           <div className="relative flex items-center">
             <ToolsMenu

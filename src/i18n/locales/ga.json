@@ -165,8 +165,7 @@
     "mcpClaudeSteps": "Socruithe → Nascóirí → Cuir nascóir saincheaptha leis, ansin greamaigh an URL.",
     "mcpOthersName": "Cursor, VS Code agus cliaint MCP eile",
     "mcpOthersSteps": "Cuir an URL le cumraíocht MCP an chliaint mar fhreastalaí Streamable HTTP. Ní gá eochair API ná cuntas.",
-    "mcpDocs": "Treoir iomlán agus uirlisí atá ar fáil",
-    "mcpShortLabel": "IS"
+    "mcpDocs": "Treoir iomlán agus uirlisí atá ar fáil"
   },
   "resetFooter": {
     "title": "Nach bhfuil rud éigin ag obair?",

@@ -165,8 +165,7 @@
     "mcpClaudeSteps": "Indstillinger → Connectors → Tilføj brugerdefineret connector, og indsæt derefter URL'en.",
     "mcpOthersName": "Cursor, VS Code og andre MCP-klienter",
     "mcpOthersSteps": "Tilføj URL'en i klientens MCP-konfiguration som en Streamable HTTP-server. Ingen API-nøgle eller konto påkrævet.",
-    "mcpDocs": "Fuld vejledning og tilgængelige værktøjer",
-    "mcpShortLabel": "AI"
+    "mcpDocs": "Fuld vejledning og tilgængelige værktøjer"
   },
   "resetFooter": {
     "title": "Virker noget ikke?",

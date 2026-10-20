@@ -165,8 +165,7 @@
     "mcpClaudeSteps": "Seaded → Konnektorid → Lisa kohandatud konnektor, seejärel kleepige URL.",
     "mcpOthersName": "Cursor, VS Code ja muud MCP-kliendid",
     "mcpOthersSteps": "Lisage URL kliendi MCP-konfiguratsiooni Streamable HTTP serverina. API-võtit ega kontot pole vaja.",
-    "mcpDocs": "Täielik juhend ja saadaolevad tööriistad",
-    "mcpShortLabel": "AI"
+    "mcpDocs": "Täielik juhend ja saadaolevad tööriistad"
   },
   "resetFooter": {
     "title": "Kas miski ei tööta?",

@@ -165,8 +165,7 @@
     "mcpClaudeSteps": "Nastavenia → Konektory → Pridať vlastný konektor a potom vložte URL.",
     "mcpOthersName": "Cursor, VS Code a ďalší MCP klienti",
     "mcpOthersSteps": "Pridajte URL do MCP konfigurácie klienta ako Streamable HTTP server. API kľúč ani účet nie sú potrebné.",
-    "mcpDocs": "Kompletný návod a dostupné nástroje",
-    "mcpShortLabel": "AI"
+    "mcpDocs": "Kompletný návod a dostupné nástroje"
   },
   "resetFooter": {
     "title": "Niečo nefunguje?",

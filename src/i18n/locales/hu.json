@@ -165,8 +165,7 @@
     "mcpClaudeSteps": "Beállítások → Csatlakozók → Egyéni csatlakozó hozzáadása, majd illessze be az URL-t.",
     "mcpOthersName": "Cursor, VS Code és más MCP-kliensek",
     "mcpOthersSteps": "Adja hozzá az URL-t a kliens MCP-konfigurációjához Streamable HTTP-szerverként. Nincs szükség API-kulcsra vagy fiókra.",
-    "mcpDocs": "Teljes útmutató és elérhető eszközök",
-    "mcpShortLabel": "MI"
+    "mcpDocs": "Teljes útmutató és elérhető eszközök"
   },
   "resetFooter": {
     "title": "Valami nem működik?",

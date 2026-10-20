@@ -390,9 +390,6 @@ export function LawViewer() {
               onSelectVersion={isOverview ? setVersionAndRead : setVersion}
             />
           ) : null}
-          // The AI-assistant promo belongs on the homepage, not in the
-          // reader's toolbar.
-          showMcpButton={false}
           formexLangLocked={derived.isLegacyHtmlFallback}
           formexLanguageExclusions={derived.isLegacyHtmlFallback
             ? Object.keys(EU_LANGUAGES).filter((code) => code !== "EN")

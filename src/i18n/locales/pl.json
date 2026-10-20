@@ -165,8 +165,7 @@
     "mcpClaudeSteps": "Ustawienia → Konektory → Dodaj niestandardowy konektor, a następnie wklej adres URL.",
     "mcpOthersName": "Cursor, VS Code i inne klienty MCP",
     "mcpOthersSteps": "Dodaj adres URL do konfiguracji MCP klienta jako serwer Streamable HTTP. Klucz API ani konto nie są wymagane.",
-    "mcpDocs": "Pełna instrukcja i dostępne narzędzia",
-    "mcpShortLabel": "AI"
+    "mcpDocs": "Pełna instrukcja i dostępne narzędzia"
   },
   "resetFooter": {
     "title": "Coś nie działa?",

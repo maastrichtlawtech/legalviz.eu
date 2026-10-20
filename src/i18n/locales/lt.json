@@ -165,8 +165,7 @@
     "mcpClaudeSteps": "Nustatymai → Jungtys → Pridėti pasirinktinę jungtį, tada įklijuokite URL.",
     "mcpOthersName": "Cursor, VS Code ir kiti MCP klientai",
     "mcpOthersSteps": "Įtraukite URL į kliento MCP konfigūraciją kaip „Streamable HTTP“ serverį. API rakto ar paskyros nereikia.",
-    "mcpDocs": "Išsamus vadovas ir galimi įrankiai",
-    "mcpShortLabel": "DI"
+    "mcpDocs": "Išsamus vadovas ir galimi įrankiai"
   },
   "resetFooter": {
     "title": "Kažkas neveikia?",

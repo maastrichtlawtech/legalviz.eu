@@ -563,6 +563,7 @@ export function TopBar({
   onDecreaseFont,
   fontSize,
   formexLang,
+  versionControl = null,
   searchableLawCount = 0,
   onFormexLangChange,
   formexLangLocked = false,
@@ -572,6 +573,7 @@ export function TopBar({
   isSideBySide = false,
   onResetApp,
   showSearch = true,
+  showMcpButton = true,
   searchModes = null,
   defaultSearchMode = null,
 }) {
@@ -657,6 +659,8 @@ export function TopBar({
 
         {/* Right: Navigation Controls */}
         <div className="flex-shrink-0 flex items-center gap-2 md:gap-3">
+          {versionControl}
+
           <LanguageSelector
             currentLang={formexLang}
             onChangeLang={onFormexLangChange}
@@ -665,7 +669,7 @@ export function TopBar({
             excludeLanguages={formexLanguageExclusions}
           />
 
-          <McpTopBarButton />
+          {showMcpButton ? <McpTopBarButton /> : null}
 
           <div className="relative flex items-center">
             <ToolsMenu

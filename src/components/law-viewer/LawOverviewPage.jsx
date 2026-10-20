@@ -3,7 +3,7 @@ import { ExternalLink, Loader2, Scale } from "lucide-react";
 import { LawSummary } from "../LawSummary.jsx";
 import { MetadataPanel } from "../MetadataPanel.jsx";
 import { CaseLawModal } from "../CaseLawModal.jsx";
-import { ConsolidationNotice } from "../ConsolidationNotice.jsx";
+import { AmendmentStatusMeta } from "./AmendmentStatusMeta.jsx";
 import { ConsolidatedFallbackNotice } from "./ConsolidatedFallbackNotice.jsx";
 import { formatMetaDate } from "../../utils/formatMetaDate.js";
 import { Pill } from "../ui/Pill.jsx";
@@ -95,9 +95,6 @@ export function LawOverviewPage({
   isExternalReferencePending,
   locale = "en",
   version = null,
-  versionUnavailable = false,
-  versionDate = null,
-  onToggleVersion,
   t,
 }) {
   const meta = useLawMetadata(effectiveCelex);
@@ -175,6 +172,7 @@ export function LawOverviewPage({
           <span>{t("lawOverview.appliesFrom")} <b className="font-semibold text-gray-800 dark:text-gray-200">{appliesFrom}</b></span>
         ) : null}
         {countParts.length ? <span>{countParts.join(" · ")}</span> : null}
+        <AmendmentStatusMeta celex={effectiveCelex} locale={locale} />
         {eliShort ? (
           <a
             href={metadata.eli}
@@ -186,18 +184,6 @@ export function LawOverviewPage({
           </a>
         ) : null}
       </div>
-
-      <ConsolidationNotice
-        celex={effectiveCelex}
-        currentLang={formexLang}
-        locale={locale}
-        variant="compact"
-        source={data?.source}
-        version={version}
-        versionUnavailable={versionUnavailable}
-        versionDate={versionDate}
-        onToggleVersion={onToggleVersion}
-      />
 
       <ConsolidatedFallbackNotice
         source={data?.source}

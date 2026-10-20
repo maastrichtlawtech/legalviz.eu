@@ -49,7 +49,7 @@ import { LawViewerContextRail } from "./law-viewer/LawViewerContextRail.jsx";
 import { LawOverviewPage } from "./law-viewer/LawOverviewPage.jsx";
 import { ConsolidatedFallbackNotice } from "./law-viewer/ConsolidatedFallbackNotice.jsx";
 import { DefinitionComparisonSheet } from "./law-viewer/DefinitionComparisonSheet.jsx";
-import { ConsolidationNotice } from "./ConsolidationNotice.jsx";
+import { VersionMenu } from "./VersionMenu.jsx";
 import { buildVersionReadTarget } from "../utils/law-viewer/versionNavigation.js";
 
 export function LawViewer() {
@@ -211,7 +211,7 @@ export function LawViewer() {
     setSearchParams(nextParams);
   }, [searchParams, setSearchParams]);
 
-  // The overview's version toggle: switch to the consolidated text *and*
+  // The version menu, when used from the overview: switch to the consolidated text *and*
   // start reading it. `buildVersionReadTarget` explains why one gesture, not
   // two, and returns null for the directions that are just a param change
   // (clearing the version, or a document with nothing readable) — those fall
@@ -378,6 +378,21 @@ export function LawViewer() {
           onDecreaseFont={() => preferences.setFontScale((scale) => Math.max(scale - 1, 1))}
           fontSize={getFontPercent(preferences.fontScale)}
           formexLang={displayedFormexLang}
+          versionControl={derived.hasCelex && derived.hasLoadedContent ? (
+            <VersionMenu
+              celex={source.effectiveCelex}
+              currentLang={displayedFormexLang}
+              locale={locale}
+              source={primaryDocument.data.source}
+              version={requestedVersion}
+              versionUnavailable={derived.versionUnavailable}
+              versionDate={derived.versionDate}
+              onSelectVersion={isOverview ? setVersionAndRead : setVersion}
+            />
+          ) : null}
+          // The AI-assistant promo belongs on the homepage, not in the
+          // reader's toolbar.
+          showMcpButton={false}
           formexLangLocked={derived.isLegacyHtmlFallback}
           formexLanguageExclusions={derived.isLegacyHtmlFallback
             ? Object.keys(EU_LANGUAGES).filter((code) => code !== "EN")
@@ -431,9 +446,6 @@ export function LawViewer() {
                   isExternalReferencePending={interactions.isExternalReferencePending}
                   locale={locale}
                   version={requestedVersion}
-                  versionUnavailable={derived.versionUnavailable}
-                  versionDate={derived.versionDate}
-                  onToggleVersion={setVersionAndRead}
                   t={t}
                 />
               ) : (
@@ -448,18 +460,6 @@ export function LawViewer() {
                       {getSelectionTitle(selection.selected, t)}
                     </h2>
                   </div>
-
-                  <ConsolidationNotice
-                    celex={source.effectiveCelex}
-                    currentLang={displayedFormexLang}
-                    locale={locale}
-                    variant="inline"
-                    source={primaryDocument.data.source}
-                    version={requestedVersion}
-                    versionUnavailable={derived.versionUnavailable}
-                    versionDate={derived.versionDate}
-                    onToggleVersion={setVersion}
-                  />
 
                   <ConsolidatedFallbackNotice
                     source={primaryDocument.data.source}

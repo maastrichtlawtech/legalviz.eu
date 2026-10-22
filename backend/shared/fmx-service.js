@@ -4,6 +4,7 @@ const { execFile, execFileSync } = require('child_process');
 const { promisify } = require('util');
 
 const { ClientError } = require('./api-utils');
+const { isUpstreamFailure } = require('./law-mirror');
 
 const execFileAsync = promisify(execFile);
 
@@ -18,6 +19,10 @@ const FMX_PATH_MEMO_TTL_MS = 6 * 60 * 60 * 1000;
 // Writers normally finish in seconds; an hour leaves ample room for a slow
 // download while still cleaning up temp files left by crashed processes.
 const FMX_TEMP_FILE_MAX_AGE_MS = 60 * 60 * 1000;
+// Suffix of a law served from the bundled corpus mirror rather than Cellar.
+// It ends in `.combined.xml` so the integrity probe checks the wrapper, and
+// `sendLawResponse` keys the `X-Law-Source` header off it.
+const MIRROR_FILE_SUFFIX = '.mirror.combined.xml';
 
 function writeFileAtomically(filePath, data, encoding) {
   const tempPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
@@ -49,6 +54,7 @@ function createFmxService({
   FMX_DIR,
   STORAGE_LIMIT_MB,
   TIMEOUT_MS,
+  mirror = null,
 }) {
   const cacheRoot = path.resolve(FMX_DIR);
   const servePathMemoPath = path.join(FMX_DIR, FMX_PATH_MEMO_FILE);
@@ -175,23 +181,28 @@ function createFmxService({
     return candidate;
   }
 
-  function getMemoizedPayload(celex, lang) {
+  /**
+   * The memoised serve path for `celex`/`lang`, or null. An entry past
+   * FMX_PATH_MEMO_TTL_MS is ignored but kept: when Cellar is unreachable,
+   * `allowStale` serves the file we already have instead of failing the
+   * request (#246). A successful re-probe overwrites it.
+   */
+  function getMemoizedPayload(celex, lang, { allowStale = false } = {}) {
     const key = memoKey(celex, lang);
     const entry = servePathMemo[key];
     const now = Date.now();
     const isMemoEntry = Boolean(entry) && typeof entry === 'object' && !Array.isArray(entry);
-    const hasFreshMetadata = isMemoEntry
+    const hasMetadata = isMemoEntry
       && typeof entry.fmx4Uri === 'string'
       && entry.fmx4Uri.length > 0
       && Number.isFinite(entry.writtenAt)
-      && entry.writtenAt <= now
-      && now - entry.writtenAt <= FMX_PATH_MEMO_TTL_MS;
+      && entry.writtenAt <= now;
     const relativePath = typeof entry === 'string' ? entry : entry?.path;
     const servePath = resolveMemoPath(relativePath);
     const hasWrongIdentity = isMemoEntry
       && (entry.celex !== celex || entry.lang !== lang);
     const edges = servePath && readFileEdges(servePath);
-    if (!hasFreshMetadata
+    if (!hasMetadata
       || hasWrongIdentity
       || !servePath
       || !edges
@@ -203,6 +214,8 @@ function createFmxService({
       }
       return null;
     }
+
+    if (!allowStale && now - entry.writtenAt > FMX_PATH_MEMO_TTL_MS) return null;
 
     return {
       type: entry?.type === 'zip' ? 'zip' : 'xml',
@@ -552,11 +565,70 @@ function createFmxService({
     return promise;
   }
 
+  /**
+   * Serve the English text from the bundled corpus mirror (#246), or null
+   * when there is no mirror, the language is not the mirror's, or the act is
+   * not in it. An act the mirror holds only as HTML has no Formex, so that is
+   * answered with the same 404 a live Cellar lookup would give, which sends
+   * `resolveParsedLaw` down its HTML path (and that path has its own mirror
+   * fallback).
+   */
+  async function prepareMirrorPayload(celex, lang) {
+    if (!mirror?.enabled || lang !== mirror.lang) return null;
+
+    const xml = await mirror.readFmx(celex);
+    if (!xml) {
+      if (mirror.hasHtml(celex)) {
+        throw new ClientError(`No Formex data available for this law in language ${lang}`, 404, 'fmx_not_found');
+      }
+      return null;
+    }
+
+    // Same wrapper the live path writes for multi-part acts, so the parser
+    // sees the corpus copy exactly as it would see a Cellar download.
+    const body = xml.replace(/<\?xml[\s\S]*?\?>/g, '').trim();
+    const combined = ['<?xml version="1.0" encoding="UTF-8"?>', '<COMBINED.FMX>', body, '</COMBINED.FMX>'].join('\n');
+    const safeCelex = String(celex).replace(/[^A-Za-z0-9()_-]/g, '_');
+    const servePath = path.join(FMX_DIR, `${safeCelex}.${lang}${MIRROR_FILE_SUFFIX}`);
+    evictOldestIfNeeded(Buffer.byteLength(combined) / (1024 * 1024));
+    writeFileAtomically(servePath, combined, 'utf8');
+    if (!isValidCachedFile(servePath)) {
+      throw new Error(`Mirror copy failed integrity check: ${path.basename(servePath)}`);
+    }
+
+    const size = fs.statSync(servePath).size;
+    return {
+      type: 'xml',
+      files: [{ filename: path.basename(servePath), path: servePath, cached: true, size }],
+      servePath,
+      source: 'mirror',
+    };
+  }
+
   async function prepareLawPayload(celex, lang) {
     const requestedLang = lang || 'ENG';
     const memoized = getMemoizedPayload(celex, requestedLang);
     if (memoized) return memoized;
 
+    try {
+      return await prepareLivePayload(celex, requestedLang);
+    } catch (err) {
+      if (!isUpstreamFailure(err)) throw err;
+      const stale = getMemoizedPayload(celex, requestedLang, { allowStale: true });
+      if (stale) {
+        console.warn(`[API] Cellar unavailable for ${celex} (${err.message}); serving stale cached copy`);
+        return stale;
+      }
+      const mirrored = await prepareMirrorPayload(celex, requestedLang);
+      if (mirrored) {
+        console.warn(`[API] Cellar unavailable for ${celex} (${err.message}); serving corpus mirror`);
+        return mirrored;
+      }
+      throw err;
+    }
+  }
+
+  async function prepareLivePayload(celex, requestedLang) {
     console.log(`[API] Fetching ${celex} (lang: ${requestedLang})...`);
     const { fmx4Uri, type, files } = await downloadFmx(celex, requestedLang);
 
@@ -603,6 +675,7 @@ function createFmxService({
     res.setHeader('Content-Type', 'application/xml');
     res.setHeader('Content-Length', stat.size);
     res.setHeader('X-Filename', path.basename(servePath));
+    if (servePath.endsWith(MIRROR_FILE_SUFFIX)) res.setHeader('X-Law-Source', 'mirror');
 
     const stream = fs.createReadStream(servePath);
     stream.on('error', (err) => {

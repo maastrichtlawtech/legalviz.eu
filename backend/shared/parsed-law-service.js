@@ -7,9 +7,11 @@ const { selectConsolidatedVersions } = require('./consolidated-versions.mjs');
 const PARSED_LAW_CACHE_MS = 10 * 60 * 1000; // 10 minutes
 
 // Each entry holds a full parsed law (including rendered article/annex HTML),
-// so cap the in-memory cache well below the generic DEFAULT_CACHE_MAX_ENTRIES
-// (10,000) to keep the memory ceiling reasonable.
-const MAX_PARSED_CACHE_ENTRIES = 200;
+// several MB of heap for a large act, so the cap is what bounds a burst of
+// distinct laws inside one TTL. The cache only has to serve repeat requests for
+// the same law (an MCP session reading several of its articles, a reload);
+// expired entries are swept by api-utils.
+const MAX_PARSED_CACHE_ENTRIES = 50;
 
 /**
  * Builds a resolver that turns a CELEX + language into the parsed "combined"

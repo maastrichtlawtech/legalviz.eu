@@ -28,7 +28,38 @@ function getPersistentStore(cache) {
   return store && typeof store.get === 'function' ? store : null;
 }
 
+// cacheGet drops an expired entry only when that same key is read again, so
+// without a sweep every distinct key a visitor or crawler touches stays resident
+// until the cache reaches its entry cap: measured at ~1.4 MB of heap per law
+// viewed, none of it released once its TTL had passed. Each cache gets a timer
+// the first time an entry is stored in it. The timer is unref'd and holds the
+// cache weakly, so it neither keeps the process alive nor outlives the cache.
+const CACHE_SWEEP_INTERVAL_MS = 60 * 1000;
+const sweptCaches = new WeakSet();
+
+function sweepExpiredEntries(cache, now = Date.now()) {
+  for (const [key, entry] of cache) {
+    if (now > entry.expiresAt) cache.delete(key);
+  }
+}
+
+function scheduleSweep(cache) {
+  if (sweptCaches.has(cache)) return;
+  sweptCaches.add(cache);
+  const cacheRef = new WeakRef(cache);
+  const timer = setInterval(() => {
+    const target = cacheRef.deref();
+    if (!target) {
+      clearInterval(timer);
+      return;
+    }
+    sweepExpiredEntries(target);
+  }, CACHE_SWEEP_INTERVAL_MS);
+  timer.unref?.();
+}
+
 function cacheRemember(cache, key, entry, maxEntries) {
+  scheduleSweep(cache);
   if (cache.size >= maxEntries && !cache.has(key)) {
     // Evict oldest entry (first inserted key in Map iteration order)
     const oldestKey = cache.keys().next().value;
@@ -102,6 +133,7 @@ function safeErrorResponse(res, err, fallbackMessage = 'Internal server error') 
 }
 
 module.exports = {
+  CACHE_SWEEP_INTERVAL_MS,
   ClientError,
   LANG_3_TO_2,
   VALID_LANGS,
@@ -109,6 +141,7 @@ module.exports = {
   cacheSet,
   requireCitationGraph,
   safeErrorResponse,
+  sweepExpiredEntries,
   toSearchLang,
   validateLang
 };

@@ -195,7 +195,7 @@ const lead = {
 
 const prLead = {
   corpus: "",
-  data: `Updates only \`DATA_RELEASE_TAG\` in \`backend/Dockerfile\` to the validated immutable \`${options.tag}\` release${options.corpusTag ? `, built from corpus \`${options.corpusTag}\`` : ""}. Merge this PR to deploy it.`,
+  data: `Updates only \`DATA_RELEASE_TAG\` in \`backend/Dockerfile\` to the validated immutable \`${options.tag}\` release${options.corpusTag ? `, built from corpus \`${options.corpusTag}\`, and pins \`CORPUS_RELEASE_TAG\` (the image's EUR-Lex outage mirror) to that corpus` : ""}. Merge this PR to deploy it.`,
   fulltext: `Updates only \`FULLTEXT_RELEASE_TAG\` in \`backend/Dockerfile\` to the validated \`${options.tag}\` release. Merge this PR to deploy the immutable full-text asset.`,
 }[options.kind];
 

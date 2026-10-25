@@ -492,6 +492,10 @@ jobs:
         run: |
           set -euo pipefail
           data_tag="${{ steps.tags.outputs.tag }}"
+          # The image also bakes in the raw corpus as an EUR-Lex outage mirror
+          # (#246); pin it to the corpus this data release was built from.
+          corpus_tag="${{ needs.build.outputs.corpus_tag }}"
+          .github/scripts/release-tags.sh validate corpus "$corpus_tag"
           branch="automation/$data_tag"
           remote_sha=$(git ls-remote origin "refs/heads/$branch" | awk 'NR==1 {print $1}')
           if [ -n "$remote_sha" ]; then
@@ -503,9 +507,9 @@ jobs:
             }
             changed_lines=$(git diff --unified=0 "origin/${{ github.event.repository.default_branch }}...origin/$branch" -- backend/Dockerfile \
               | awk '/^[+-]/ && !/^(---|\+\+\+)/ {print}')
-            unexpected_lines=$(grep -Ev '^[+-]ARG DATA_RELEASE_TAG=data-([0-9]{4}-[0-9]{2}-[0-9]{2}[.][0-9]{2}|v[0-9]+)$' <<< "$changed_lines" || true)
+            unexpected_lines=$(grep -Ev '^[+-]ARG (DATA_RELEASE_TAG=data|CORPUS_RELEASE_TAG=corpus)-([0-9]{4}-[0-9]{2}-[0-9]{2}[.][0-9]{2}|v[0-9]+)$' <<< "$changed_lines" || true)
             test -z "$unexpected_lines" || {
-              echo "Refusing to overwrite $branch: its Dockerfile diff changes more than DATA_RELEASE_TAG" >&2
+              echo "Refusing to overwrite $branch: its Dockerfile diff changes more than DATA_RELEASE_TAG and CORPUS_RELEASE_TAG" >&2
               exit 1
             }
             remote_data_tag=$(git show "origin/$branch:backend/Dockerfile" \
@@ -520,9 +524,13 @@ jobs:
             git switch --create "$branch"
             sed -i "s/^ARG DATA_RELEASE_TAG=.*/ARG DATA_RELEASE_TAG=$data_tag/" backend/Dockerfile
           fi
+          sed -i "s/^ARG CORPUS_RELEASE_TAG=.*/ARG CORPUS_RELEASE_TAG=$corpus_tag/" backend/Dockerfile
           final_data_tags=$(sed -n 's/^ARG DATA_RELEASE_TAG=//p' backend/Dockerfile)
           test "$(printf '%s\n' "$final_data_tags" | sed '/^$/d' | wc -l | tr -d ' ')" = 1
           test "$(printf '%s\n' "$final_data_tags" | sed -n '1p')" = "$data_tag"
+          final_corpus_tags=$(sed -n 's/^ARG CORPUS_RELEASE_TAG=//p' backend/Dockerfile)
+          test "$(printf '%s\n' "$final_corpus_tags" | sed '/^$/d' | wc -l | tr -d ' ')" = 1
+          test "$(printf '%s\n' "$final_corpus_tags" | sed -n '1p')" = "$corpus_tag"
           git add backend/Dockerfile
           changed_files=$(git diff --cached --name-only)
           test -z "$changed_files" || test "$changed_files" = "backend/Dockerfile" || {

@@ -489,3 +489,25 @@ test('as-adopted and requested-version "current" results are cached under distin
   assert.equal(prepareCalls, 3, 'cached calls must not re-fetch either version');
   assert.equal(fetchConsolidatedCalls, 1);
 });
+
+test('a law served from the corpus mirror is flagged as such', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'parsed-law-mirror-'));
+  try {
+    const servePath = path.join(dir, '32016R0679.ENG.mirror.combined.xml');
+    fs.writeFileSync(servePath, '<COMBINED.FMX/>');
+    const parsedLaw = { articles: [{ article_number: '1' }], recitals: [] };
+    const resolve = (source) => createParsedLawResolver({
+      prepareLawPayload: async () => ({ servePath, source }),
+      parseFmxXml: async () => parsedLaw,
+    });
+
+    const mirrored = await resolve('mirror')('32016R0679', 'ENG');
+    assert.equal(mirrored.mirror, true);
+    assert.equal(mirrored.source, 'fmx');
+
+    const live = await resolve(undefined)('32016R0679', 'ENG');
+    assert.equal(live.mirror, undefined);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});

@@ -56,6 +56,8 @@ jobs:
             // The corpus mirror (#246) must reach the image, or an EUR-Lex outage takes law pages down.
             if (!fs.existsSync("/app/corpus/laws/2016/32016R0679.xml.gz")) throw new Error("law mirror FMX missing");
             if (!fs.existsSync("/app/corpus/laws-html")) throw new Error("law mirror HTML missing");
+            // The server (PID 1) must run on jemalloc, or the LD_PRELOAD silently did nothing.
+            if (!fs.readFileSync("/proc/1/maps", "utf8").includes("libjemalloc")) throw new Error("server is not using jemalloc");
             if (fs.readdirSync("search/data").some((name) => name.endsWith(".json.gz"))) {
               throw new Error("source JSON assets leaked into final image");
             }

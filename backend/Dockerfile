@@ -60,7 +60,7 @@ COPY search/build-sqlite-data.js search/search-ranking.js search/title-index.js 
 # still valid pins for the releases that already carry them, but the refresh
 # workflows never mint another one — see .github/scripts/release-tags.sh.
 ARG DATA_RELEASE_REPO=maastrichtlawtech/legalviz.eu
-ARG DATA_RELEASE_TAG=data-2026-10-05.01
+ARG DATA_RELEASE_TAG=data-2026-11-05.01
 # The full-text index ships on its own release tag, decoupled from the data
 # train — see FULLTEXT_RELEASE_TAG in the root CLAUDE.md cache-invalidation
 # table.
@@ -111,7 +111,7 @@ RUN mkdir -p search/data \
 FROM runtime AS corpus-fetcher
 
 ARG DATA_RELEASE_REPO=maastrichtlawtech/legalviz.eu
-ARG CORPUS_RELEASE_TAG=corpus-2026-10-05.01
+ARG CORPUS_RELEASE_TAG=corpus-2026-11-05.01
 RUN mkdir -p /corpus \
     && for asset in laws.tar laws-html.tar; do \
          echo "Fetching corpus asset: $asset ($CORPUS_RELEASE_TAG)" \
